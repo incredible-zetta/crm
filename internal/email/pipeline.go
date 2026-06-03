@@ -5,6 +5,8 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"io"
+	"time"
 
 	"github.com/cipta/crm-for-aiagents/internal/template"
 )
@@ -47,6 +49,18 @@ type SendInput struct {
 	HTML       string
 	Text       string
 	Vars       map[string]any // template variables
+}
+
+func defaultOpenCode() string {
+	b := make([]byte, 6)
+	if _, err := io.ReadFull(rand.Reader, b); err != nil {
+		s := fmt.Sprintf("o%011x", time.Now().UnixNano())
+		if len(s) < 12 {
+			return (s + "000000000000")[:12]
+		}
+		return s[:12]
+	}
+	return hex.EncodeToString(b) // 12 chars
 }
 
 func (p *Pipeline) Send(ctx context.Context, in SendInput) error {
@@ -95,11 +109,7 @@ func (p *Pipeline) Send(ctx context.Context, in SendInput) error {
 
 	openCodeFn := p.OpenCode
 	if openCodeFn == nil {
-		openCodeFn = func() string {
-			b := make([]byte, 6)
-			_, _ = rand.Read(b)
-			return hex.EncodeToString(b)
-		}
+		openCodeFn = defaultOpenCode
 	}
 	openCode := openCodeFn()
 

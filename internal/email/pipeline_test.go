@@ -2,10 +2,17 @@ package email
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"strings"
 	"testing"
+)
+
+var (
+	errSendBoom = errors.New("send boom")
+	errLoadBoom = errors.New("load boom")
+	errLogBoom  = errors.New("log boom")
 )
 
 type fakeSender struct {
@@ -229,8 +236,7 @@ func TestSendTemplateLoaded(t *testing.T) {
 }
 
 func TestSendSenderErrorLogsFailed(t *testing.T) {
-	sendErr := errors.New("smtp connection failed")
-	sender := &fakeSender{err: sendErr}
+	sender := &fakeSender{err: errSendBoom}
 	store := &fakeTemplateStore{}
 	links := &fakeLinkMaker{}
 	events := &fakeEventLogger{}
@@ -252,8 +258,8 @@ func TestSendSenderErrorLogsFailed(t *testing.T) {
 
 	ctx := context.Background()
 	err := p.Send(ctx, in)
-	if !errors.Is(err, sendErr) && (err == nil || !strings.Contains(err.Error(), sendErr.Error())) {
-		t.Fatalf("expected wrapped sender error, got %v", err)
+	if !errors.Is(err, errSendBoom) {
+		t.Fatalf("expected wrapped errSendBoom, got %v", err)
 	}
 
 	// Verify failed event was logged
@@ -265,7 +271,7 @@ func TestSendSenderErrorLogsFailed(t *testing.T) {
 		t.Errorf("expected event type 'failed', got %q", evt.eventType)
 	}
 	errMsg, ok := evt.meta["error"].(string)
-	if !ok || !strings.Contains(errMsg, sendErr.Error()) {
+	if !ok || !strings.Contains(errMsg, errSendBoom.Error()) {
 		t.Errorf("expected meta error to contain sender error, got %v", evt.meta)
 	}
 }
@@ -302,8 +308,7 @@ func TestSendMissingTo(t *testing.T) {
 
 func TestSendTemplateLoadError(t *testing.T) {
 	sender := &fakeSender{}
-	loadErr := errors.New("db disconnect")
-	store := &fakeTemplateStore{err: loadErr}
+	store := &fakeTemplateStore{err: errLoadBoom}
 	links := &fakeLinkMaker{}
 	events := &fakeEventLogger{}
 
@@ -323,7 +328,7 @@ func TestSendTemplateLoadError(t *testing.T) {
 
 	ctx := context.Background()
 	err := p.Send(ctx, in)
-	if !errors.Is(err, loadErr) && (err == nil || !strings.Contains(err.Error(), loadErr.Error())) {
+	if !errors.Is(err, errLoadBoom) {
 		t.Fatalf("expected wrapped template load error, got %v", err)
 	}
 	if sender.calls > 0 {
@@ -425,16 +430,70 @@ func TestSendTextOnlyNoLinkRewrite(t *testing.T) {
 	if evt.eventType != "sent" {
 		t.Errorf("expected event type 'sent', got %q", evt.eventType)
 	}
-	// Since no HTML, no pixel, does it generate/log an openCode?
-	// The prompt states: "On success: log a 'sent' event via p.Events.LogEvent(ctx, in.ContactID, in.CampaignID, "sent", openCode, map[string]any{"open_code":openCode})."
-	// Wait, does a text-only email have an openCode? Let's check:
-	// "Then generate an open code via p.OpenCode(), create a tracking link record for the open pixel too? NO... SIMPLIFY the open-pixel handling: generate openCode := p.OpenCode(); call InjectPixel(html, baseURL, openCode); and log a 'sent' event whose Meta includes {"open_code": openCode}."
-	// Wait, if it's text-only, we can still generate an openCode and put it in the log event, even if no pixel is injected into the HTML (since HTML is empty). That keeps the code flow extremely uniform and simple! Let's verify that the test handles it cleanly or expects it.
 	openCode, ok := evt.meta["open_code"].(string)
 	if !ok || openCode == "" {
 		t.Errorf("expected openCode to be populated even for text-only email, got %v", evt.meta)
 	}
 	if evt.linkCode != openCode {
 		t.Errorf("expected linkCode == openCode, got linkCode=%q, openCode=%q", evt.linkCode, openCode)
+	}
+}
+
+func TestSendFailedEventLogErrorDoesNotMask(t *testing.T) {
+	sender := &fakeSender{err: errSendBoom}
+	store := &fakeTemplateStore{}
+	links := &fakeLinkMaker{}
+	events := &fakeEventLogger{err: errLogBoom}
+
+	p := &Pipeline{
+		Sender:  sender,
+		Tmpl:    store,
+		Links:   links,
+		Events:  events,
+		BaseURL: "http://test.com",
+	}
+
+	in := SendInput{
+		ContactID: 107,
+		To:        "test@test.com",
+		Subject:   "Fail test with log error",
+		HTML:      "<p>fail</p>",
+	}
+
+	ctx := context.Background()
+	err := p.Send(ctx, in)
+
+	if !errors.Is(err, errSendBoom) {
+		t.Errorf("expected wrapped send error %v, got %v", errSendBoom, err)
+	}
+	if errors.Is(err, errLogBoom) {
+		t.Errorf("expected log error %v to be swallowed/not wrapped, but it was found in %v", errLogBoom, err)
+	}
+}
+
+type errorReader struct{}
+
+func (errorReader) Read(b []byte) (int, error) {
+	return 0, errors.New("rand.Read failed")
+}
+
+func TestDefaultOpenCode(t *testing.T) {
+	// Standard path
+	code1 := defaultOpenCode()
+	if len(code1) != 12 {
+		t.Errorf("expected length 12 for default open code, got %d (%q)", len(code1), code1)
+	}
+
+	// Fallback path
+	oldReader := rand.Reader
+	defer func() { rand.Reader = oldReader }()
+	rand.Reader = errorReader{}
+
+	code2 := defaultOpenCode()
+	if len(code2) != 12 {
+		t.Errorf("expected length 12 for fallback open code, got %d (%q)", len(code2), code2)
+	}
+	if !strings.HasPrefix(code2, "o") {
+		t.Errorf("expected fallback code to start with 'o', got %q", code2)
 	}
 }
