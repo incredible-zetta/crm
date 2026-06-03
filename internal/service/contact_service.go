@@ -396,3 +396,14 @@ func (s *ContactService) EnsureUnsubCode(ctx context.Context, c domain.Contact) 
 	}
 	return code, nil
 }
+
+// GetExportFile resolves a previously-generated export by id, returning its
+// on-disk path and expiry. Used by the HTTP download handler. Returns
+// domain.ErrNotFound if the export does not exist.
+func (s *ContactService) GetExportFile(ctx context.Context, id string) (path string, expiresAt *time.Time, err error) {
+	exp, err := s.exports.Get(ctx, id)
+	if err != nil {
+		return "", nil, err
+	}
+	return exp.Path, exp.ExpiresAt, nil
+}
