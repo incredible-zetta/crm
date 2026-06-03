@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/cipta/crm-for-aiagents/internal/domain"
 	"github.com/cipta/crm-for-aiagents/internal/mcpserver"
@@ -108,6 +109,49 @@ type ContactExportOut struct {
 	URL      string `json:"url"`
 	Rows     int    `json:"rows"`
 	ExportID string `json:"export_id"`
+}
+
+// In & Out structs for contact_get
+type ContactGetIn struct {
+	ID    int64  `json:"id,omitempty" jsonschema:"ID of the contact to fetch"`
+	Email string `json:"email,omitempty" jsonschema:"Email address of the contact to fetch"`
+}
+
+type ContactGetOut struct {
+	ID           int64     `json:"id"`
+	Email        string    `json:"email"`
+	FirstName    string    `json:"first_name"`
+	LastName     string    `json:"last_name"`
+	Company      string    `json:"company"`
+	Phone        string    `json:"phone"`
+	Stage        string    `json:"stage"`
+	Tags         []string  `json:"tags"`
+	Notes        string    `json:"notes"`
+	Source       string    `json:"source"`
+	Unsubscribed bool      `json:"unsubscribed"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+// In & Out structs for contact_delete
+type ContactDeleteIn struct {
+	ID    int64 `json:"id" jsonschema:"ID of the contact to delete"`
+	Purge bool  `json:"purge,omitempty" jsonschema:"Whether to permanently purge from database"`
+}
+
+type ContactDeleteOut struct {
+	ID      int64 `json:"id"`
+	Deleted bool  `json:"deleted"`
+	Purged  bool  `json:"purged"`
+}
+
+// In & Out structs for contact_unsubscribe
+type ContactUnsubscribeIn struct {
+	ID int64 `json:"id" jsonschema:"ID of the contact to unsubscribe"`
+}
+
+type ContactUnsubscribeOut struct {
+	ID           int64 `json:"id"`
+	Unsubscribed bool  `json:"unsubscribed"`
 }
 
 func projectContact(c domain.Contact, fields []string) map[string]any {
@@ -336,5 +380,71 @@ func (d *Deps) ContactExport(ctx context.Context, req *mcp.CallToolRequest, in C
 		URL:      urlVal,
 		Rows:     rows,
 		ExportID: exportID,
+	}, nil
+}
+
+func (d *Deps) ContactGet(ctx context.Context, req *mcp.CallToolRequest, in ContactGetIn) (*mcp.CallToolResult, ContactGetOut, error) {
+	var c domain.Contact
+	var err error
+
+	if in.ID > 0 {
+		c, err = d.Svc.Contact.Get(ctx, in.ID)
+	} else if in.Email != "" {
+		c, err = d.Svc.Contact.GetByEmail(ctx, in.Email)
+	} else {
+		return mcpserver.Err("invalid_input", "id or email required"), ContactGetOut{}, nil
+	}
+
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return mcpserver.Err("not_found", "contact not found"), ContactGetOut{}, nil
+		}
+		return nil, ContactGetOut{}, fmt.Errorf("contact_get: %w", err)
+	}
+
+	return nil, ContactGetOut{
+		ID:           c.ID,
+		Email:        c.Email,
+		FirstName:    c.FirstName,
+		LastName:     c.LastName,
+		Company:      c.Company,
+		Phone:        c.Phone,
+		Stage:        string(c.Stage),
+		Tags:         c.Tags,
+		Notes:        c.Notes,
+		Source:       c.Source,
+		Unsubscribed: c.IsUnsubscribed(),
+		CreatedAt:    c.CreatedAt,
+	}, nil
+}
+
+func (d *Deps) ContactDelete(ctx context.Context, req *mcp.CallToolRequest, in ContactDeleteIn) (*mcp.CallToolResult, ContactDeleteOut, error) {
+	err := d.Svc.Contact.Delete(ctx, in.ID, in.Purge)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return mcpserver.Err("not_found", "contact not found"), ContactDeleteOut{}, nil
+		}
+		return nil, ContactDeleteOut{}, fmt.Errorf("contact_delete: %w", err)
+	}
+
+	return nil, ContactDeleteOut{
+		ID:      in.ID,
+		Deleted: true,
+		Purged:  in.Purge,
+	}, nil
+}
+
+func (d *Deps) ContactUnsubscribe(ctx context.Context, req *mcp.CallToolRequest, in ContactUnsubscribeIn) (*mcp.CallToolResult, ContactUnsubscribeOut, error) {
+	_, err := d.Svc.Contact.Unsubscribe(ctx, in.ID)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return mcpserver.Err("not_found", "contact not found"), ContactUnsubscribeOut{}, nil
+		}
+		return nil, ContactUnsubscribeOut{}, fmt.Errorf("contact_unsubscribe: %w", err)
+	}
+
+	return nil, ContactUnsubscribeOut{
+		ID:           in.ID,
+		Unsubscribed: true,
 	}, nil
 }

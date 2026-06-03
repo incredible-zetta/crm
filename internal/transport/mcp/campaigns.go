@@ -38,6 +38,51 @@ type CampaignSendOut struct {
 	Skipped    int   `json:"skipped,omitempty"`
 }
 
+type CampaignListIn struct{}
+
+type CampaignListOut struct {
+	Count int              `json:"count"`
+	Items []map[string]any `json:"items"`
+}
+
+type CampaignGetIn struct {
+	ID int64 `json:"id" jsonschema:"ID of the campaign to fetch"`
+}
+
+type CampaignGetOut struct {
+	ID          int64          `json:"id"`
+	Name        string         `json:"name"`
+	Status      string         `json:"status"`
+	TemplateID  int64          `json:"template_id"`
+	Provider    string         `json:"provider"`
+	Segment     map[string]any `json:"segment,omitempty"`
+	ScheduledAt *time.Time     `json:"scheduled_at,omitempty"`
+}
+
+type CampaignUpdateIn struct {
+	ID          int64          `json:"id" jsonschema:"ID of the campaign to update"`
+	Name        *string        `json:"name,omitempty" jsonschema:"New name of the campaign"`
+	TemplateID  *int64         `json:"template_id,omitempty" jsonschema:"New template ID"`
+	Provider    *string        `json:"provider,omitempty" jsonschema:"New email provider (smtp or mailgun)"`
+	Segment     map[string]any `json:"segment,omitempty" jsonschema:"New filter segment"`
+	ScheduledAt *string        `json:"scheduled_at,omitempty" jsonschema:"New scheduled time in RFC3339 format"`
+}
+
+type CampaignUpdateOut struct {
+	ID     int64  `json:"id"`
+	Name   string `json:"name"`
+	Status string `json:"status"`
+}
+
+type CampaignDeleteIn struct {
+	ID int64 `json:"id" jsonschema:"ID of the campaign to delete"`
+}
+
+type CampaignDeleteOut struct {
+	ID      int64 `json:"id"`
+	Deleted bool  `json:"deleted"`
+}
+
 func (d *Deps) CampaignCreate(ctx context.Context, req *mcp.CallToolRequest, in CampaignCreateIn) (*mcp.CallToolResult, CampaignCreateOut, error) {
 	var scheduledTime *time.Time
 	status := domain.CampaignDraft
@@ -89,5 +134,119 @@ func (d *Deps) CampaignSend(ctx context.Context, req *mcp.CallToolRequest, in Ca
 		Sent:       sent,
 		Failed:     failed,
 		Skipped:    skipped,
+	}, nil
+}
+
+func (d *Deps) CampaignList(ctx context.Context, req *mcp.CallToolRequest, in CampaignListIn) (*mcp.CallToolResult, CampaignListOut, error) {
+	list, err := d.Svc.Campaign.List(ctx)
+	if err != nil {
+		return nil, CampaignListOut{}, fmt.Errorf("campaign_list: %w", err)
+	}
+
+	var items []map[string]any
+	for _, c := range list {
+		item := map[string]any{
+			"id":          c.ID,
+			"name":        c.Name,
+			"status":      string(c.Status),
+			"template_id": c.TemplateID,
+			"provider":    string(c.Provider),
+		}
+		if c.ScheduledAt != nil {
+			item["scheduled_at"] = c.ScheduledAt.Format(time.RFC3339)
+		}
+		items = append(items, item)
+	}
+
+	return nil, CampaignListOut{
+		Count: len(items),
+		Items: items,
+	}, nil
+}
+
+func (d *Deps) CampaignGet(ctx context.Context, req *mcp.CallToolRequest, in CampaignGetIn) (*mcp.CallToolResult, CampaignGetOut, error) {
+	c, err := d.Svc.Campaign.Get(ctx, in.ID)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return mcpserver.Err("not_found", "campaign not found"), CampaignGetOut{}, nil
+		}
+		return nil, CampaignGetOut{}, fmt.Errorf("campaign_get: %w", err)
+	}
+
+	return nil, CampaignGetOut{
+		ID:          c.ID,
+		Name:        c.Name,
+		Status:      string(c.Status),
+		TemplateID:  c.TemplateID,
+		Provider:    string(c.Provider),
+		Segment:     c.Segment,
+		ScheduledAt: c.ScheduledAt,
+	}, nil
+}
+
+func (d *Deps) CampaignUpdate(ctx context.Context, req *mcp.CallToolRequest, in CampaignUpdateIn) (*mcp.CallToolResult, CampaignUpdateOut, error) {
+	existing, err := d.Svc.Campaign.Get(ctx, in.ID)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return mcpserver.Err("not_found", "campaign not found"), CampaignUpdateOut{}, nil
+		}
+		return nil, CampaignUpdateOut{}, fmt.Errorf("campaign_update get: %w", err)
+	}
+
+	campaign := existing
+	if in.Name != nil {
+		campaign.Name = *in.Name
+	}
+	if in.TemplateID != nil {
+		campaign.TemplateID = *in.TemplateID
+	}
+	if in.Provider != nil {
+		campaign.Provider = domain.Provider(*in.Provider)
+	}
+	if in.Segment != nil {
+		campaign.Segment = in.Segment
+	}
+	if in.ScheduledAt != nil {
+		if *in.ScheduledAt == "" {
+			campaign.ScheduledAt = nil
+		} else {
+			t, err := time.Parse(time.RFC3339, *in.ScheduledAt)
+			if err != nil {
+				return mcpserver.Err("invalid_input", "invalid scheduled_at format"), CampaignUpdateOut{}, nil
+			}
+			campaign.ScheduledAt = &t
+		}
+	}
+
+	updated, err := d.Svc.Campaign.Update(ctx, in.ID, campaign)
+	if err != nil {
+		if errors.Is(err, domain.ErrValidation) {
+			return mcpserver.Err("invalid_input", err.Error()), CampaignUpdateOut{}, nil
+		}
+		if errors.Is(err, domain.ErrNotFound) {
+			return mcpserver.Err("not_found", "campaign not found"), CampaignUpdateOut{}, nil
+		}
+		return nil, CampaignUpdateOut{}, fmt.Errorf("campaign_update: %w", err)
+	}
+
+	return nil, CampaignUpdateOut{
+		ID:     updated.ID,
+		Name:   updated.Name,
+		Status: string(updated.Status),
+	}, nil
+}
+
+func (d *Deps) CampaignDelete(ctx context.Context, req *mcp.CallToolRequest, in CampaignDeleteIn) (*mcp.CallToolResult, CampaignDeleteOut, error) {
+	err := d.Svc.Campaign.Delete(ctx, in.ID)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return mcpserver.Err("not_found", "campaign not found"), CampaignDeleteOut{}, nil
+		}
+		return nil, CampaignDeleteOut{}, fmt.Errorf("campaign_delete: %w", err)
+	}
+
+	return nil, CampaignDeleteOut{
+		ID:      in.ID,
+		Deleted: true,
 	}, nil
 }

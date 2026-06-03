@@ -46,6 +46,43 @@ type TemplateRenderOut struct {
 	HTML    string `json:"html,omitempty"`
 }
 
+type TemplateGetIn struct {
+	ID   int64  `json:"id,omitempty" jsonschema:"ID of the template"`
+	Name string `json:"name,omitempty" jsonschema:"Name of the template"`
+}
+
+type TemplateGetOut struct {
+	ID        int64    `json:"id"`
+	Name      string   `json:"name"`
+	Subject   string   `json:"subject"`
+	BodyHTML  string   `json:"body_html"`
+	BodyText  string   `json:"body_text"`
+	Variables []string `json:"variables"`
+}
+
+type TemplateUpdateIn struct {
+	ID        int64     `json:"id" jsonschema:"ID of the template to update"`
+	Name      *string   `json:"name,omitempty" jsonschema:"New name of the template"`
+	Subject   *string   `json:"subject,omitempty" jsonschema:"New subject template"`
+	BodyHTML  *string   `json:"body_html,omitempty" jsonschema:"New HTML body template"`
+	BodyText  *string   `json:"body_text,omitempty" jsonschema:"New plain text body template"`
+	Variables *[]string `json:"variables,omitempty" jsonschema:"New merge variables list"`
+}
+
+type TemplateUpdateOut struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+}
+
+type TemplateDeleteIn struct {
+	ID int64 `json:"id" jsonschema:"ID of the template to delete"`
+}
+
+type TemplateDeleteOut struct {
+	ID      int64 `json:"id"`
+	Deleted bool  `json:"deleted"`
+}
+
 func (d *Deps) TemplateCreate(ctx context.Context, req *mcp.CallToolRequest, in TemplateCreateIn) (*mcp.CallToolResult, TemplateCreateOut, error) {
 	t, err := d.Svc.Template.Create(ctx, domain.Template{
 		Name:      in.Name,
@@ -119,4 +156,91 @@ func (d *Deps) TemplateRender(ctx context.Context, req *mcp.CallToolRequest, in 
 	}
 
 	return nil, out, nil
+}
+
+func (d *Deps) TemplateGet(ctx context.Context, req *mcp.CallToolRequest, in TemplateGetIn) (*mcp.CallToolResult, TemplateGetOut, error) {
+	var t domain.Template
+	var err error
+
+	if in.ID > 0 {
+		t, err = d.Svc.Template.Get(ctx, in.ID)
+	} else if in.Name != "" {
+		t, err = d.Svc.Template.GetByName(ctx, in.Name)
+	} else {
+		return mcpserver.Err("invalid_input", "id or name required"), TemplateGetOut{}, nil
+	}
+
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return mcpserver.Err("not_found", "template not found"), TemplateGetOut{}, nil
+		}
+		return nil, TemplateGetOut{}, fmt.Errorf("template_get: %w", err)
+	}
+
+	return nil, TemplateGetOut{
+		ID:        t.ID,
+		Name:      t.Name,
+		Subject:   t.Subject,
+		BodyHTML:  t.BodyHTML,
+		BodyText:  t.BodyText,
+		Variables: t.Variables,
+	}, nil
+}
+
+func (d *Deps) TemplateUpdate(ctx context.Context, req *mcp.CallToolRequest, in TemplateUpdateIn) (*mcp.CallToolResult, TemplateUpdateOut, error) {
+	existing, err := d.Svc.Template.Get(ctx, in.ID)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return mcpserver.Err("not_found", "template not found"), TemplateUpdateOut{}, nil
+		}
+		return nil, TemplateUpdateOut{}, fmt.Errorf("template_update get: %w", err)
+	}
+
+	t := existing
+	if in.Name != nil {
+		t.Name = *in.Name
+	}
+	if in.Subject != nil {
+		t.Subject = *in.Subject
+	}
+	if in.BodyHTML != nil {
+		t.BodyHTML = *in.BodyHTML
+	}
+	if in.BodyText != nil {
+		t.BodyText = *in.BodyText
+	}
+	if in.Variables != nil {
+		t.Variables = *in.Variables
+	}
+
+	updated, err := d.Svc.Template.Update(ctx, in.ID, t)
+	if err != nil {
+		if errors.Is(err, domain.ErrValidation) {
+			return mcpserver.Err("invalid_input", err.Error()), TemplateUpdateOut{}, nil
+		}
+		if errors.Is(err, domain.ErrNotFound) {
+			return mcpserver.Err("not_found", "template not found"), TemplateUpdateOut{}, nil
+		}
+		return nil, TemplateUpdateOut{}, fmt.Errorf("template_update: %w", err)
+	}
+
+	return nil, TemplateUpdateOut{
+		ID:   updated.ID,
+		Name: updated.Name,
+	}, nil
+}
+
+func (d *Deps) TemplateDelete(ctx context.Context, req *mcp.CallToolRequest, in TemplateDeleteIn) (*mcp.CallToolResult, TemplateDeleteOut, error) {
+	err := d.Svc.Template.Delete(ctx, in.ID)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return mcpserver.Err("not_found", "template not found"), TemplateDeleteOut{}, nil
+		}
+		return nil, TemplateDeleteOut{}, fmt.Errorf("template_delete: %w", err)
+	}
+
+	return nil, TemplateDeleteOut{
+		ID:      in.ID,
+		Deleted: true,
+	}, nil
 }

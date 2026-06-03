@@ -42,6 +42,21 @@ func Register(srv *mcp.Server, d *Deps) {
 		Description: "Query contacts and export them to a temporary CSV download URL",
 	}, d.ContactExport)
 
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "contact_get",
+		Description: "Fetch a single contact by id or email",
+	}, d.ContactGet)
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "contact_delete",
+		Description: "Delete a contact (soft-delete or purge) by ID",
+	}, d.ContactDelete)
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "contact_unsubscribe",
+		Description: "Unsubscribe a contact by ID",
+	}, d.ContactUnsubscribe)
+
 	// Group 2: Templates (templates.go)
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "template_create",
@@ -57,6 +72,21 @@ func Register(srv *mcp.Server, d *Deps) {
 		Name:        "template_render",
 		Description: "Render an email template with merge variables without sending",
 	}, d.TemplateRender)
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "template_get",
+		Description: "Fetch a single email template by ID or name",
+	}, d.TemplateGet)
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "template_update",
+		Description: "Update fields on an existing email template by ID",
+	}, d.TemplateUpdate)
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "template_delete",
+		Description: "Soft-delete an email template by ID",
+	}, d.TemplateDelete)
 
 	// Group 3: Email (email.go)
 	mcp.AddTool(srv, &mcp.Tool{
@@ -75,11 +105,41 @@ func Register(srv *mcp.Server, d *Deps) {
 		Description: "Trigger immediate dispatch of an email campaign to all contacts matching its segment",
 	}, d.CampaignSend)
 
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "campaign_list",
+		Description: "List all created email campaigns",
+	}, d.CampaignList)
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "campaign_get",
+		Description: "Fetch a single email campaign by ID",
+	}, d.CampaignGet)
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "campaign_update",
+		Description: "Update fields on an existing email campaign by ID",
+	}, d.CampaignUpdate)
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "campaign_delete",
+		Description: "Soft-delete an email campaign by ID",
+	}, d.CampaignDelete)
+
 	// Group 5: Scheduler (scheduler.go)
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "schedule_task",
 		Description: "Schedule a task for delayed/future execution",
 	}, d.ScheduleTask)
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "task_list",
+		Description: "List background scheduled tasks filtered by status",
+	}, d.TaskList)
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "task_cancel",
+		Description: "Cancel a pending background scheduled task by ID",
+	}, d.TaskCancel)
 
 	// Group 6: Tracking (tracking.go)
 	mcp.AddTool(srv, &mcp.Tool{

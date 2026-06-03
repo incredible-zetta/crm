@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -34,7 +35,7 @@ func (r *fakeContactRepo) Upsert(ctx context.Context, c domain.Contact) (domain.
 
 func (r *fakeContactRepo) Get(ctx context.Context, id int64) (domain.Contact, error) {
 	c, ok := r.contacts[id]
-	if !ok {
+	if !ok || c.DeletedAt != nil {
 		return domain.Contact{}, domain.ErrNotFound
 	}
 	return c, nil
@@ -42,7 +43,7 @@ func (r *fakeContactRepo) Get(ctx context.Context, id int64) (domain.Contact, er
 
 func (r *fakeContactRepo) GetByEmail(ctx context.Context, email string) (domain.Contact, error) {
 	for _, c := range r.contacts {
-		if strings.EqualFold(c.Email, email) {
+		if strings.EqualFold(c.Email, email) && c.DeletedAt == nil {
 			return c, nil
 		}
 	}
@@ -55,7 +56,7 @@ func (r *fakeContactRepo) GetByUnsubCode(ctx context.Context, code string) (doma
 
 func (r *fakeContactRepo) Update(ctx context.Context, id int64, patch domain.ContactPatch) (domain.Contact, error) {
 	c, ok := r.contacts[id]
-	if !ok {
+	if !ok || c.DeletedAt != nil {
 		return domain.Contact{}, domain.ErrNotFound
 	}
 	if patch.Email != nil {
@@ -95,6 +96,9 @@ func (r *fakeContactRepo) Update(ctx context.Context, id int64, patch domain.Con
 func (r *fakeContactRepo) List(ctx context.Context, f domain.ContactFilter, p port.Paging) (port.ContactPage, error) {
 	var matched []domain.Contact
 	for _, c := range r.contacts {
+		if c.DeletedAt != nil {
+			continue
+		}
 		if f.Stage != "" && string(c.Stage) != f.Stage {
 			continue
 		}
@@ -112,7 +116,7 @@ func (r *fakeContactRepo) List(ctx context.Context, f domain.ContactFilter, p po
 
 func (r *fakeContactRepo) SetUnsubscribed(ctx context.Context, id int64, t time.Time) error {
 	c, ok := r.contacts[id]
-	if !ok {
+	if !ok || c.DeletedAt != nil {
 		return domain.ErrNotFound
 	}
 	c.UnsubscribedAt = &t
@@ -122,7 +126,7 @@ func (r *fakeContactRepo) SetUnsubscribed(ctx context.Context, id int64, t time.
 
 func (r *fakeContactRepo) SetUnsubCode(ctx context.Context, id int64, code string) error {
 	c, ok := r.contacts[id]
-	if !ok {
+	if !ok || c.DeletedAt != nil {
 		return domain.ErrNotFound
 	}
 	c.UnsubCode = code
@@ -131,16 +135,31 @@ func (r *fakeContactRepo) SetUnsubCode(ctx context.Context, id int64, code strin
 }
 
 func (r *fakeContactRepo) SoftDelete(ctx context.Context, id int64) error {
+	c, ok := r.contacts[id]
+	if !ok {
+		return domain.ErrNotFound
+	}
+	now := time.Now()
+	c.DeletedAt = &now
+	r.contacts[id] = c
 	return nil
 }
 
 func (r *fakeContactRepo) Purge(ctx context.Context, id int64) error {
+	_, ok := r.contacts[id]
+	if !ok {
+		return domain.ErrNotFound
+	}
+	delete(r.contacts, id)
 	return nil
 }
 
 func (r *fakeContactRepo) CountByStage(ctx context.Context) (map[string]int, error) {
 	stages := make(map[string]int)
 	for _, c := range r.contacts {
+		if c.DeletedAt != nil {
+			continue
+		}
 		stages[string(c.Stage)]++
 	}
 	return stages, nil
@@ -162,7 +181,7 @@ func (r *fakeCampaignRepo) Create(ctx context.Context, c domain.Campaign) (domai
 
 func (r *fakeCampaignRepo) Get(ctx context.Context, id int64) (domain.Campaign, error) {
 	c, ok := r.campaigns[id]
-	if !ok {
+	if !ok || c.DeletedAt != nil {
 		return domain.Campaign{}, domain.ErrNotFound
 	}
 	return c, nil
@@ -171,18 +190,26 @@ func (r *fakeCampaignRepo) Get(ctx context.Context, id int64) (domain.Campaign, 
 func (r *fakeCampaignRepo) List(ctx context.Context) ([]domain.Campaign, error) {
 	var list []domain.Campaign
 	for _, c := range r.campaigns {
+		if c.DeletedAt != nil {
+			continue
+		}
 		list = append(list, c)
 	}
 	return list, nil
 }
 
 func (r *fakeCampaignRepo) Update(ctx context.Context, id int64, c domain.Campaign) (domain.Campaign, error) {
+	existing, ok := r.campaigns[id]
+	if !ok || existing.DeletedAt != nil {
+		return domain.Campaign{}, domain.ErrNotFound
+	}
+	r.campaigns[id] = c
 	return c, nil
 }
 
 func (r *fakeCampaignRepo) UpdateStatus(ctx context.Context, id int64, s domain.CampaignStatus) error {
 	c, ok := r.campaigns[id]
-	if !ok {
+	if !ok || c.DeletedAt != nil {
 		return domain.ErrNotFound
 	}
 	c.Status = s
@@ -195,6 +222,13 @@ func (r *fakeCampaignRepo) SetStats(ctx context.Context, id int64, stats map[str
 }
 
 func (r *fakeCampaignRepo) SoftDelete(ctx context.Context, id int64) error {
+	c, ok := r.campaigns[id]
+	if !ok {
+		return domain.ErrNotFound
+	}
+	now := time.Now()
+	c.DeletedAt = &now
+	r.campaigns[id] = c
 	return nil
 }
 
@@ -214,7 +248,7 @@ func (r *fakeTemplateRepo) Create(ctx context.Context, t domain.Template) (domai
 
 func (r *fakeTemplateRepo) Get(ctx context.Context, id int64) (domain.Template, error) {
 	t, ok := r.templates[id]
-	if !ok {
+	if !ok || t.DeletedAt != nil {
 		return domain.Template{}, domain.ErrNotFound
 	}
 	return t, nil
@@ -222,7 +256,7 @@ func (r *fakeTemplateRepo) Get(ctx context.Context, id int64) (domain.Template, 
 
 func (r *fakeTemplateRepo) GetByName(ctx context.Context, name string) (domain.Template, error) {
 	for _, t := range r.templates {
-		if t.Name == name {
+		if t.Name == name && t.DeletedAt == nil {
 			return t, nil
 		}
 	}
@@ -232,16 +266,31 @@ func (r *fakeTemplateRepo) GetByName(ctx context.Context, name string) (domain.T
 func (r *fakeTemplateRepo) List(ctx context.Context) ([]domain.Template, error) {
 	var list []domain.Template
 	for _, t := range r.templates {
+		if t.DeletedAt != nil {
+			continue
+		}
 		list = append(list, t)
 	}
 	return list, nil
 }
 
 func (r *fakeTemplateRepo) Update(ctx context.Context, id int64, t domain.Template) (domain.Template, error) {
+	existing, ok := r.templates[id]
+	if !ok || existing.DeletedAt != nil {
+		return domain.Template{}, domain.ErrNotFound
+	}
+	r.templates[id] = t
 	return t, nil
 }
 
 func (r *fakeTemplateRepo) SoftDelete(ctx context.Context, id int64) error {
+	t, ok := r.templates[id]
+	if !ok {
+		return domain.ErrNotFound
+	}
+	now := time.Now()
+	t.DeletedAt = &now
+	r.templates[id] = t
 	return nil
 }
 
@@ -286,6 +335,15 @@ func (r *fakeTaskRepo) MarkFailed(ctx context.Context, id int64, errMsg string) 
 }
 
 func (r *fakeTaskRepo) Cancel(ctx context.Context, id int64) error {
+	t, ok := r.tasks[id]
+	if !ok {
+		return domain.ErrNotFound
+	}
+	if t.Status != domain.TaskPending {
+		return fmt.Errorf("task not pending: %w", domain.ErrConflict)
+	}
+	t.Status = domain.TaskCancelled
+	r.tasks[id] = t
 	return nil
 }
 
