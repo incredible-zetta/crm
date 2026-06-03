@@ -150,3 +150,81 @@ func TestAuthBearerCaseInsensitive(t *testing.T) {
 		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
 	}
 }
+
+func TestAuthWrongKeyBody(t *testing.T) {
+	innerCalled := false
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		innerCalled = true
+		w.WriteHeader(http.StatusOK)
+	})
+
+	handler := AuthHandler("secret", inner)
+
+	req := httptest.NewRequest(http.MethodGet, "/mcp", nil)
+	req.Header.Set("Authorization", "Bearer wrongsecret")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if innerCalled {
+		t.Error("expected inner handler not to be called")
+	}
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("expected status %d, got %d", http.StatusUnauthorized, rr.Code)
+	}
+	contentType := rr.Header().Get("Content-Type")
+	if contentType != "application/json" {
+		t.Errorf("expected Content-Type application/json, got %q", contentType)
+	}
+	expectedBody := `{"error":"unauthorized"}`
+	if rr.Body.String() != expectedBody {
+		t.Errorf("expected body %q, got %q", expectedBody, rr.Body.String())
+	}
+}
+
+func TestAuthBasicFallsBackToXAPIKey(t *testing.T) {
+	innerCalled := false
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		innerCalled = true
+		w.WriteHeader(http.StatusOK)
+	})
+
+	handler := AuthHandler("secret", inner)
+
+	req := httptest.NewRequest(http.MethodGet, "/mcp", nil)
+	req.Header.Set("Authorization", "Basic Zm9v")
+	req.Header.Set("X-API-Key", "secret")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if !innerCalled {
+		t.Error("expected inner handler to be called")
+	}
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+}
+
+func TestAuthMixedCasePrefix(t *testing.T) {
+	innerCalled := false
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		innerCalled = true
+		w.WriteHeader(http.StatusOK)
+	})
+
+	handler := AuthHandler("secret", inner)
+
+	req := httptest.NewRequest(http.MethodGet, "/mcp", nil)
+	req.Header.Set("Authorization", "bEaReR secret")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if !innerCalled {
+		t.Error("expected inner handler to be called")
+	}
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+}
