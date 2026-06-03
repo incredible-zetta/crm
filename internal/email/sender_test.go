@@ -81,3 +81,22 @@ func TestNewMailgun(t *testing.T) {
 		t.Error("expected error for missing MailgunAPIKey, got nil")
 	}
 }
+
+func TestMailgunDefaultURL(t *testing.T) {
+	cfg := Config{
+		Provider:      "mailgun",
+		MailgunDomain: "d",
+		MailgunAPIKey: "k",
+	}
+	s, err := New(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	ms, ok := s.(*MailgunSender)
+	if !ok {
+		t.Fatalf("expected *MailgunSender, got %T", s)
+	}
+	if ms.baseURL != "https://api.mailgun.net/v3" {
+		t.Errorf("expected baseURL 'https://api.mailgun.net/v3', got %q", ms.baseURL)
+	}
+}

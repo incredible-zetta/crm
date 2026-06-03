@@ -35,6 +35,10 @@ func (m *MailgunSender) Send(ctx context.Context, msg Message) error {
 		return errors.New("sender address (From) is required")
 	}
 
+	if hasHeaderInjection(msg.To) || hasHeaderInjection(from) || hasHeaderInjection(msg.Subject) {
+		return fmt.Errorf("invalid header value (contains newline)")
+	}
+
 	if msg.Text == "" && msg.HTML == "" {
 		return errors.New("at least one of HTML or Text body must be provided")
 	}
@@ -67,7 +71,7 @@ func (m *MailgunSender) Send(ctx context.Context, msg Message) error {
 	}
 
 	// Build HTTP request
-	url := fmt.Sprintf("%s/v3/%s/messages", m.baseURL, m.domain)
+	url := fmt.Sprintf("%s/%s/messages", m.baseURL, m.domain)
 	req, err := http.NewRequestWithContext(ctx, "POST", url, &body)
 	if err != nil {
 		return fmt.Errorf("failed to create http request: %w", err)
@@ -80,6 +84,10 @@ func (m *MailgunSender) Send(ctx context.Context, msg Message) error {
 	client := m.client
 	if client == nil {
 		client = http.DefaultClient
+	}
+
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	resp, err := client.Do(req)

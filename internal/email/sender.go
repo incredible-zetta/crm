@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/smtp"
+	"strings"
 )
 
 type Message struct {
@@ -29,6 +30,10 @@ type Config struct {
 	MailgunDomain string
 	MailgunAPIKey string
 	DefaultFrom   string
+}
+
+func hasHeaderInjection(s string) bool {
+	return strings.ContainsAny(s, "\r\n")
 }
 
 func New(cfg Config) (Sender, error) {
@@ -56,6 +61,9 @@ func New(cfg Config) (Sender, error) {
 			return nil, errors.New("mailgun domain and apiKey are required")
 		}
 		from := cfg.DefaultFrom
+		if from == "" {
+			from = cfg.SMTPFrom
+		}
 		return &MailgunSender{
 			domain:  cfg.MailgunDomain,
 			apiKey:  cfg.MailgunAPIKey,

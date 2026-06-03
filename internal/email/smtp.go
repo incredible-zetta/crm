@@ -36,6 +36,10 @@ func (s *SMTPSender) Send(ctx context.Context, msg Message) error {
 		return errors.New("sender address (From) is required")
 	}
 
+	if hasHeaderInjection(msg.To) || hasHeaderInjection(from) || hasHeaderInjection(msg.Subject) {
+		return fmt.Errorf("invalid header value (contains newline)")
+	}
+
 	if msg.Text == "" && msg.HTML == "" {
 		return errors.New("at least one of HTML or Text body must be provided")
 	}
@@ -104,5 +108,8 @@ func (s *SMTPSender) Send(ctx context.Context, msg Message) error {
 	}
 
 	to := []string{msg.To}
-	return sendFn(s.addr, s.auth, from, to, buf.Bytes())
+	if err := sendFn(s.addr, s.auth, from, to, buf.Bytes()); err != nil {
+		return fmt.Errorf("smtp send: %w", err)
+	}
+	return nil
 }

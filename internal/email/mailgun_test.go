@@ -20,7 +20,7 @@ func TestMailgunPostsCorrectRequest(t *testing.T) {
 		if r.Method != "POST" {
 			t.Errorf("expected Method POST, got %q", r.Method)
 		}
-		expectedPath := "/v3/" + domain + "/messages"
+		expectedPath := "/" + domain + "/messages"
 		if r.URL.Path != expectedPath {
 			t.Errorf("expected path %q, got %q", expectedPath, r.URL.Path)
 		}
@@ -223,5 +223,62 @@ func TestMailgunCanceledContext(t *testing.T) {
 	err := sender.Send(ctx, msg)
 	if err == nil {
 		t.Error("expected error for canceled context, got nil")
+	}
+}
+
+func TestMailgunHeaderInjection(t *testing.T) {
+	serverCalled := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		serverCalled = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	sender := &MailgunSender{
+		domain:  "test.domain",
+		apiKey:  "key",
+		from:    "default@test.com",
+		baseURL: server.URL,
+		client:  server.Client(),
+	}
+
+	// Test To with newline
+	msg := Message{
+		To:      "recipient@example.com\r\nBcc: evil@x",
+		Subject: "Subject",
+		Text:    "Hello",
+	}
+	err := sender.Send(context.Background(), msg)
+	if err == nil {
+		t.Error("expected error for header injection in To, got nil")
+	} else if !strings.Contains(err.Error(), "invalid header value") {
+		t.Errorf("expected error to mention 'invalid header value', got: %v", err)
+	}
+
+	// Test Subject with newline
+	msg2 := Message{
+		To:      "recipient@example.com",
+		Subject: "Subject\nBcc: evil@x",
+		Text:    "Hello",
+	}
+	err = sender.Send(context.Background(), msg2)
+	if err == nil {
+		t.Error("expected error for header injection in Subject, got nil")
+	}
+
+	// Test From with newline
+	msg3 := Message{
+		To:      "recipient@example.com",
+		From:    "sender@example.com\r",
+		Subject: "Subject",
+		Text:    "Hello",
+	}
+	err = sender.Send(context.Background(), msg3)
+	if err == nil {
+		t.Error("expected error for header injection in From, got nil")
+	}
+
+	if serverCalled {
+		t.Error("expected server NOT to be called in case of header injection, but it was")
 	}
 }

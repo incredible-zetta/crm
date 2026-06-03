@@ -1,7 +1,12 @@
 package email
 
 import (
+	"bytes"
 	"context"
+	"io"
+	"mime"
+	"mime/multipart"
+	"net/mail"
 	"net/smtp"
 	"strings"
 	"testing"
@@ -80,6 +85,71 @@ func TestSMTPBuildsMessage(t *testing.T) {
 		if !strings.Contains(msgStr, header) {
 			t.Errorf("expected message to contain %q, but it didn't.\nFull message:\n%s", header, msgStr)
 		}
+	}
+
+	// Fix 6: Deepen SMTP MIME tests
+	// 1. Assert CRLF line endings
+	if !bytes.Contains(capturedMsg, []byte("\r\n")) {
+		t.Error("expected message to contain CRLF line endings, but it doesn't")
+	}
+
+	// 2. Parse headers with net/mail
+	parsed, err := mail.ReadMessage(bytes.NewReader(capturedMsg))
+	if err != nil {
+		t.Fatalf("failed to parse captured message with net/mail: %v", err)
+	}
+	if parsed.Header.Get("From") != "sender@example.com" {
+		t.Errorf("expected parsed From header %q, got %q", "sender@example.com", parsed.Header.Get("From"))
+	}
+	if parsed.Header.Get("To") != "recipient@example.com" {
+		t.Errorf("expected parsed To header %q, got %q", "recipient@example.com", parsed.Header.Get("To"))
+	}
+	if parsed.Header.Get("Subject") != "Test Multipart Message" {
+		t.Errorf("expected parsed Subject header %q, got %q", "Test Multipart Message", parsed.Header.Get("Subject"))
+	}
+
+	// 3. Parse MediaType
+	contentType := parsed.Header.Get("Content-Type")
+	mediaType, params, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		t.Fatalf("failed to parse Content-Type: %v", err)
+	}
+	if mediaType != "multipart/alternative" {
+		t.Errorf("expected mediaType 'multipart/alternative', got %s", mediaType)
+	}
+	boundary, ok := params["boundary"]
+	if !ok {
+		t.Fatal("missing boundary in Content-Type")
+	}
+
+	// 4. Assert 2 parts (text/plain and text/html)
+	mr := multipart.NewReader(parsed.Body, boundary)
+	partCount := 0
+	for {
+		part, err := mr.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("failed to read next part: %v", err)
+		}
+		partCount++
+		partContentType, _, err := mime.ParseMediaType(part.Header.Get("Content-Type"))
+		if err != nil {
+			t.Fatalf("failed to parse part Content-Type: %v", err)
+		}
+		if partCount == 1 {
+			if partContentType != "text/plain" {
+				t.Errorf("expected first part to be text/plain, got %q", partContentType)
+			}
+		} else if partCount == 2 {
+			if partContentType != "text/html" {
+				t.Errorf("expected second part to be text/html, got %q", partContentType)
+			}
+		}
+	}
+	if partCount != 2 {
+		t.Errorf("expected exactly 2 parts, got %d", partCount)
 	}
 }
 
@@ -256,5 +326,45 @@ func TestSMTPContextCanceled(t *testing.T) {
 	err := sender.Send(ctx, msg)
 	if err == nil {
 		t.Error("expected context canceled error, got nil")
+	}
+}
+
+func TestSMTPHeaderInjection(t *testing.T) {
+	callCount := 0
+	sender := &SMTPSender{
+		addr: "smtp.test.com:587",
+		from: "default@test.com",
+		sendFunc: func(addr string, a smtp.Auth, from string, to []string, msg []byte) error {
+			callCount++
+			return nil
+		},
+	}
+
+	// Subject with CRLF
+	msg := Message{
+		To:      "recipient@example.com",
+		Subject: "ok\r\nBcc: evil@x",
+		Text:    "Hello",
+	}
+	err := sender.Send(context.Background(), msg)
+	if err == nil {
+		t.Error("expected error for subject header injection, got nil")
+	} else if !strings.Contains(err.Error(), "invalid header value") {
+		t.Errorf("expected 'invalid header value' error, got %v", err)
+	}
+
+	// To with newline
+	msgTo := Message{
+		To:      "recipient@example.com\nBcc: evil@x",
+		Subject: "Subject",
+		Text:    "Hello",
+	}
+	err = sender.Send(context.Background(), msgTo)
+	if err == nil {
+		t.Error("expected error for To header injection, got nil")
+	}
+
+	if callCount > 0 {
+		t.Error("expected sendFunc NOT to be called in case of header injection")
 	}
 }
