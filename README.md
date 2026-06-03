@@ -150,12 +150,27 @@ MCP_URL=http://localhost:8080/mcp MCP_API_KEY=<your-key> ./scripts/test-mcp.sh
 
 The script runs `initialize → notifications/initialized → tools/list → tools/call health_check` and prints the responses.
 
-## Test
+## Test & quality checks
 
 ```bash
-# Unit tests run without a database. Integration tests need DB_DSN (else they skip):
+make fmt        # rewrite Go files with gofmt
+make check-fmt  # fail when gofmt would change files
+make lint       # go vet + staticcheck when installed
+make test       # go test ./...
+make check      # check-fmt + lint + test + build
+```
+
+Staticcheck is optional locally but required in CI. Install it with:
+
+```bash
+make staticcheck
+```
+
+Integration tests need `DB_DSN` (else they skip):
+
+```bash
 export DB_DSN='user:pass@tcp(localhost:3306)/crmagents?parseTime=true&multiStatements=true'
-go test ./internal/...
+go test ./...
 ```
 
 ## Build the image

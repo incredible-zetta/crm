@@ -28,10 +28,6 @@ func toNullString(s string) sql.NullString {
 	return sql.NullString{String: s, Valid: true}
 }
 
-func fromNullString(ns sql.NullString) string {
-	return ns.String
-}
-
 func toNullInt64(i int64) sql.NullInt64 {
 	if i == 0 {
 		return sql.NullInt64{}
