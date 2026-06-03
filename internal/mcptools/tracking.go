@@ -2,6 +2,7 @@ package mcptools
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"strings"
 
@@ -28,7 +29,7 @@ func (d *Deps) TrackingLinkCreate(ctx context.Context, req *mcp.CallToolRequest,
 
 	code, err := d.Repo.CreateLink(ctx, in.TargetURL, in.CampaignID, in.ContactID)
 	if err != nil {
-		return mcpserver.Err("create_link_failed", err.Error()), TrackingLinkCreateOut{}, nil
+		return nil, TrackingLinkCreateOut{}, fmt.Errorf("tracking_link_create db: %w", err)
 	}
 
 	shortURL := strings.TrimSuffix(d.BaseURL, "/") + "/t/" + code

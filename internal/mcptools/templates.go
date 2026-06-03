@@ -2,6 +2,8 @@ package mcptools
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"github.com/cipta/crm-for-aiagents/internal/db"
 	"github.com/cipta/crm-for-aiagents/internal/mcpserver"
@@ -53,7 +55,7 @@ func (d *Deps) TemplateCreate(ctx context.Context, req *mcp.CallToolRequest, in 
 		Variables: in.Variables,
 	})
 	if err != nil {
-		return mcpserver.Err("template_create_failed", err.Error()), TemplateCreateOut{}, nil
+		return nil, TemplateCreateOut{}, fmt.Errorf("template_create db: %w", err)
 	}
 
 	return nil, TemplateCreateOut{
@@ -65,7 +67,7 @@ func (d *Deps) TemplateCreate(ctx context.Context, req *mcp.CallToolRequest, in 
 func (d *Deps) TemplateList(ctx context.Context, req *mcp.CallToolRequest, in TemplateListIn) (*mcp.CallToolResult, TemplateListOut, error) {
 	list, err := d.Repo.ListTemplates(ctx)
 	if err != nil {
-		return mcpserver.Err("template_list_failed", err.Error()), TemplateListOut{}, nil
+		return nil, TemplateListOut{}, fmt.Errorf("template_list db: %w", err)
 	}
 
 	var items []map[string]any
@@ -89,7 +91,10 @@ func (d *Deps) TemplateRender(ctx context.Context, req *mcp.CallToolRequest, in 
 	if in.TemplateID > 0 {
 		t, err := d.Repo.GetTemplate(ctx, in.TemplateID)
 		if err != nil {
-			return mcpserver.Err("template_not_found", err.Error()), TemplateRenderOut{}, nil
+			if errors.Is(err, db.ErrNotFound) {
+				return mcpserver.Err("not_found", "template not found"), TemplateRenderOut{}, nil
+			}
+			return nil, TemplateRenderOut{}, fmt.Errorf("template_render get: %w", err)
 		}
 		rawSubject = t.Subject
 		rawHTML = t.BodyHTML
@@ -102,7 +107,7 @@ func (d *Deps) TemplateRender(ctx context.Context, req *mcp.CallToolRequest, in 
 
 	rendered, err := template.RenderEmail(rawSubject, rawHTML, rawText, in.Vars)
 	if err != nil {
-		return mcpserver.Err("render_failed", err.Error()), TemplateRenderOut{}, nil
+		return mcpserver.Err("render_failed", "template rendering failed"), TemplateRenderOut{}, nil
 	}
 
 	out := TemplateRenderOut{

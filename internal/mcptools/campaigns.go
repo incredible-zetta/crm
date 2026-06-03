@@ -2,6 +2,8 @@ package mcptools
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/cipta/crm-for-aiagents/internal/db"
@@ -41,7 +43,7 @@ func (d *Deps) CampaignCreate(ctx context.Context, req *mcp.CallToolRequest, in 
 	if in.ScheduledAt != "" {
 		t, err := time.Parse(time.RFC3339, in.ScheduledAt)
 		if err != nil {
-			return mcpserver.Err("invalid_scheduled_at", err.Error()), CampaignCreateOut{}, nil
+			return mcpserver.Err("invalid_scheduled_at", "invalid RFC3339 format"), CampaignCreateOut{}, nil
 		}
 		scheduledTime = &t
 		status = "scheduled"
@@ -58,7 +60,7 @@ func (d *Deps) CampaignCreate(ctx context.Context, req *mcp.CallToolRequest, in 
 
 	created, err := d.Repo.CreateCampaign(ctx, camp)
 	if err != nil {
-		return mcpserver.Err("campaign_create_failed", err.Error()), CampaignCreateOut{}, nil
+		return nil, CampaignCreateOut{}, fmt.Errorf("campaign_create db: %w", err)
 	}
 
 	return nil, CampaignCreateOut{
@@ -71,7 +73,10 @@ func (d *Deps) CampaignCreate(ctx context.Context, req *mcp.CallToolRequest, in 
 func (d *Deps) CampaignSend(ctx context.Context, req *mcp.CallToolRequest, in CampaignSendIn) (*mcp.CallToolResult, CampaignSendOut, error) {
 	campaign, err := d.Repo.GetCampaign(ctx, in.CampaignID)
 	if err != nil {
-		return mcpserver.Err("campaign_not_found", err.Error()), CampaignSendOut{}, nil
+		if errors.Is(err, db.ErrNotFound) {
+			return mcpserver.Err("not_found", "campaign not found"), CampaignSendOut{}, nil
+		}
+		return nil, CampaignSendOut{}, fmt.Errorf("campaign_send get campaign: %w", err)
 	}
 
 	var filter db.ContactFilter
@@ -95,7 +100,7 @@ func (d *Deps) CampaignSend(ctx context.Context, req *mcp.CallToolRequest, in Ca
 	for {
 		items, _, nextCursor, err := d.Repo.ListContacts(ctx, filter, 100, cursor)
 		if err != nil {
-			return mcpserver.Err("list_contacts_failed", err.Error()), CampaignSendOut{}, nil
+			return nil, CampaignSendOut{}, fmt.Errorf("campaign_send list contacts: %w", err)
 		}
 		if len(items) == 0 {
 			break
@@ -129,7 +134,7 @@ func (d *Deps) CampaignSend(ctx context.Context, req *mcp.CallToolRequest, in Ca
 	}
 
 	if err := d.Repo.UpdateCampaignStatus(ctx, campaign.ID, "sent"); err != nil {
-		return mcpserver.Err("update_campaign_status_failed", err.Error()), CampaignSendOut{}, nil
+		return nil, CampaignSendOut{}, fmt.Errorf("campaign_send update status: %w", err)
 	}
 
 	return nil, CampaignSendOut{

@@ -2,8 +2,8 @@ package mcptools
 
 import (
 	"context"
+	"fmt"
 
-	"github.com/cipta/crm-for-aiagents/internal/mcpserver"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -39,7 +39,7 @@ type CampaignStatsOut struct {
 func (d *Deps) AnalyticsOverview(ctx context.Context, req *mcp.CallToolRequest, in AnalyticsOverviewIn) (*mcp.CallToolResult, AnalyticsOverviewOut, error) {
 	stages, err := d.Repo.CountByStage(ctx)
 	if err != nil {
-		return mcpserver.Err("count_by_stage_failed", err.Error()), AnalyticsOverviewOut{}, nil
+		return nil, AnalyticsOverviewOut{}, fmt.Errorf("analytics_overview stage count: %w", err)
 	}
 
 	totalContacts := 0
@@ -49,7 +49,7 @@ func (d *Deps) AnalyticsOverview(ctx context.Context, req *mcp.CallToolRequest, 
 
 	counts, err := d.Repo.OverviewCounts(ctx)
 	if err != nil {
-		return mcpserver.Err("overview_counts_failed", err.Error()), AnalyticsOverviewOut{}, nil
+		return nil, AnalyticsOverviewOut{}, fmt.Errorf("analytics_overview counts: %w", err)
 	}
 
 	sent := counts["sent"]
@@ -65,7 +65,7 @@ func (d *Deps) AnalyticsOverview(ctx context.Context, req *mcp.CallToolRequest, 
 	var pendingTasks int
 	err = d.Repo.DB().QueryRowContext(ctx, "SELECT COUNT(*) FROM scheduled_tasks WHERE status='pending'").Scan(&pendingTasks)
 	if err != nil {
-		pendingTasks = 0
+		return nil, AnalyticsOverviewOut{}, fmt.Errorf("analytics_overview pending tasks: %w", err)
 	}
 
 	return nil, AnalyticsOverviewOut{
@@ -83,7 +83,7 @@ func (d *Deps) AnalyticsOverview(ctx context.Context, req *mcp.CallToolRequest, 
 func (d *Deps) CampaignStats(ctx context.Context, req *mcp.CallToolRequest, in CampaignStatsIn) (*mcp.CallToolResult, CampaignStatsOut, error) {
 	counts, err := d.Repo.CampaignCounts(ctx, in.CampaignID)
 	if err != nil {
-		return mcpserver.Err("campaign_counts_failed", err.Error()), CampaignStatsOut{}, nil
+		return nil, CampaignStatsOut{}, fmt.Errorf("campaign_stats counts: %w", err)
 	}
 
 	sent := counts["sent"]
@@ -100,7 +100,7 @@ func (d *Deps) CampaignStats(ctx context.Context, req *mcp.CallToolRequest, in C
 
 	topLinks, err := d.Repo.TopLinks(ctx, in.CampaignID, 10)
 	if err != nil {
-		return mcpserver.Err("top_links_failed", err.Error()), CampaignStatsOut{}, nil
+		return nil, CampaignStatsOut{}, fmt.Errorf("campaign_stats top links: %w", err)
 	}
 
 	var links []map[string]any

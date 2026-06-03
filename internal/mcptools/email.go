@@ -2,8 +2,11 @@ package mcptools
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 
+	"github.com/cipta/crm-for-aiagents/internal/db"
 	"github.com/cipta/crm-for-aiagents/internal/email"
 	"github.com/cipta/crm-for-aiagents/internal/mcpserver"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -26,26 +29,31 @@ type EmailSendOut struct {
 }
 
 func (d *Deps) EmailSend(ctx context.Context, req *mcp.CallToolRequest, in EmailSendIn) (*mcp.CallToolResult, EmailSendOut, error) {
-	var resolvedTo = in.To
-	var resolvedContactID = in.ContactID
+	var resolvedTo string
+	var resolvedContactID int64
 
-	if resolvedTo == "" && resolvedContactID > 0 {
-		contact, err := d.Repo.GetContact(ctx, resolvedContactID)
+	if in.ContactID > 0 {
+		contact, err := d.Repo.GetContact(ctx, in.ContactID)
 		if err != nil {
-			return mcpserver.Err("recipient_not_found", fmt.Sprintf("contact %d not found", resolvedContactID)), EmailSendOut{}, nil
+			if errors.Is(err, db.ErrNotFound) {
+				return mcpserver.Err("not_found", "contact not found"), EmailSendOut{}, nil
+			}
+			return nil, EmailSendOut{}, fmt.Errorf("email_send load contact: %w", err)
 		}
 		resolvedTo = contact.Email
-	}
+		resolvedContactID = in.ContactID
 
-	if resolvedTo == "" {
-		return mcpserver.Err("missing_recipient", "either to or contact_id is required"), EmailSendOut{}, nil
-	}
-
-	if resolvedContactID == 0 {
-		contact, err := d.Repo.GetContactByEmail(ctx, resolvedTo)
-		if err == nil {
-			resolvedContactID = contact.ID
+		if in.To != "" {
+			if !strings.EqualFold(in.To, contact.Email) {
+				return mcpserver.Err("recipient_mismatch", "to does not match contact email"), EmailSendOut{}, nil
+			}
 		}
+	} else {
+		if in.To == "" {
+			return mcpserver.Err("missing_recipient", "either to or contact_id is required"), EmailSendOut{}, nil
+		}
+		resolvedTo = in.To
+		resolvedContactID = 0
 	}
 
 	sendInput := email.SendInput{
@@ -60,7 +68,7 @@ func (d *Deps) EmailSend(ctx context.Context, req *mcp.CallToolRequest, in Email
 	}
 
 	if err := d.Pipeline.Send(ctx, sendInput); err != nil {
-		return mcpserver.Err("send_failed", err.Error()), EmailSendOut{}, nil
+		return mcpserver.Err("send_failed", "email send failed"), EmailSendOut{}, nil
 	}
 
 	return nil, EmailSendOut{

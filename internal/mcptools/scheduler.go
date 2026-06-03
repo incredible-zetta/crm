@@ -2,6 +2,7 @@ package mcptools
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cipta/crm-for-aiagents/internal/db"
@@ -36,7 +37,7 @@ func (d *Deps) ScheduleTask(ctx context.Context, req *mcp.CallToolRequest, in Sc
 
 	parsedTime, err := time.Parse(time.RFC3339, in.RunAt)
 	if err != nil {
-		return mcpserver.Err("invalid_run_at", err.Error()), ScheduleTaskOut{}, nil
+		return mcpserver.Err("invalid_run_at", "invalid RFC3339 format"), ScheduleTaskOut{}, nil
 	}
 
 	taskID, err := d.Repo.InsertTask(ctx, db.ScheduledTask{
@@ -46,7 +47,7 @@ func (d *Deps) ScheduleTask(ctx context.Context, req *mcp.CallToolRequest, in Sc
 		Status:  "pending",
 	})
 	if err != nil {
-		return mcpserver.Err("insert_task_failed", err.Error()), ScheduleTaskOut{}, nil
+		return nil, ScheduleTaskOut{}, fmt.Errorf("schedule_task db: %w", err)
 	}
 
 	return nil, ScheduleTaskOut{

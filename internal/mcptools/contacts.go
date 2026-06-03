@@ -5,7 +5,9 @@ import (
 	"crypto/rand"
 	"encoding/csv"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -124,10 +126,12 @@ func isValidStage(stage string) bool {
 	return false
 }
 
-func rand16Hex() string {
+func rand16Hex() (string, error) {
 	b := make([]byte, 8)
-	_, _ = rand.Read(b)
-	return hex.EncodeToString(b)
+	if _, err := io.ReadFull(rand.Reader, b); err != nil {
+		return "", fmt.Errorf("read random bytes: %w", err)
+	}
+	return hex.EncodeToString(b), nil
 }
 
 func projectContact(c db.Contact, fields []string) map[string]any {
@@ -186,7 +190,7 @@ func (d *Deps) ContactCreate(ctx context.Context, req *mcp.CallToolRequest, in C
 		Source:    in.Source,
 	})
 	if err != nil {
-		return mcpserver.Err("upsert_failed", err.Error()), ContactCreateOut{}, nil
+		return nil, ContactCreateOut{}, fmt.Errorf("contact_create upsert: %w", err)
 	}
 
 	return nil, ContactCreateOut{
@@ -198,13 +202,17 @@ func (d *Deps) ContactCreate(ctx context.Context, req *mcp.CallToolRequest, in C
 
 func (d *Deps) ContactUpdate(ctx context.Context, req *mcp.CallToolRequest, in ContactUpdateIn) (*mcp.CallToolResult, ContactUpdateOut, error) {
 	var targetID int64 = in.ID
+
 	if targetID == 0 {
 		if in.Email == "" {
 			return mcpserver.Err("missing_identifier", "either id or email must be provided"), ContactUpdateOut{}, nil
 		}
 		contact, err := d.Repo.GetContactByEmail(ctx, in.Email)
 		if err != nil {
-			return mcpserver.Err("not_found", "contact not found"), ContactUpdateOut{}, nil
+			if errors.Is(err, db.ErrNotFound) {
+				return mcpserver.Err("not_found", "contact not found"), ContactUpdateOut{}, nil
+			}
+			return nil, ContactUpdateOut{}, fmt.Errorf("contact_update get contact: %w", err)
 		}
 		targetID = contact.ID
 	}
@@ -231,7 +239,10 @@ func (d *Deps) ContactUpdate(ctx context.Context, req *mcp.CallToolRequest, in C
 
 	c, err := d.Repo.UpdateContact(ctx, targetID, patch)
 	if err != nil {
-		return mcpserver.Err("update_failed", err.Error()), ContactUpdateOut{}, nil
+		if errors.Is(err, db.ErrNotFound) {
+			return mcpserver.Err("not_found", "contact not found"), ContactUpdateOut{}, nil
+		}
+		return nil, ContactUpdateOut{}, fmt.Errorf("contact_update update: %w", err)
 	}
 
 	return nil, ContactUpdateOut{
@@ -259,7 +270,7 @@ func (d *Deps) ContactList(ctx context.Context, req *mcp.CallToolRequest, in Con
 
 	items, total, nextCursor, err := d.Repo.ListContacts(ctx, f, limit, in.Cursor)
 	if err != nil {
-		return mcpserver.Err("list_failed", err.Error()), ContactListOut{}, nil
+		return nil, ContactListOut{}, fmt.Errorf("contact_list list contacts: %w", err)
 	}
 
 	var projected []map[string]any
@@ -280,71 +291,19 @@ func (d *Deps) ContactImport(ctx context.Context, req *mcp.CallToolRequest, in C
 		return mcpserver.Err("empty_import", "either contacts array or csv must be provided"), ContactImportOut{}, nil
 	}
 
-	var contactsToImport []ContactInput
-	contactsToImport = append(contactsToImport, in.Contacts...)
-
-	if in.CSV != "" {
-		r := csv.NewReader(strings.NewReader(in.CSV))
-		records, err := r.ReadAll()
-		if err != nil {
-			return mcpserver.Err("invalid_csv", err.Error()), ContactImportOut{}, nil
-		}
-		if len(records) > 0 {
-			header := records[0]
-			colIdx := make(map[string]int)
-			for i, h := range header {
-				colIdx[strings.ToLower(strings.TrimSpace(h))] = i
-			}
-			for i := 1; i < len(records); i++ {
-				row := records[i]
-				getVal := func(key string) string {
-					idx, ok := colIdx[key]
-					if !ok || idx >= len(row) {
-						return ""
-					}
-					return strings.TrimSpace(row[idx])
-				}
-				emailVal := getVal("email")
-				if emailVal == "" {
-					continue
-				}
-				tagsStr := getVal("tags")
-				var tags []string
-				if tagsStr != "" {
-					for _, t := range strings.Split(tagsStr, ";") {
-						tTrimmed := strings.TrimSpace(t)
-						if tTrimmed != "" {
-							tags = append(tags, tTrimmed)
-						}
-					}
-				}
-				ci := ContactInput{
-					Email:     emailVal,
-					FirstName: getVal("first_name"),
-					LastName:  getVal("last_name"),
-					Company:   getVal("company"),
-					Phone:     getVal("phone"),
-					Stage:     getVal("stage"),
-					Tags:      tags,
-					Source:    getVal("source"),
-				}
-				contactsToImport = append(contactsToImport, ci)
-			}
-		}
-	}
-
 	var inserted, updated, skipped int
-	var errors []string
+	var errorsList []string
 
-	for _, c := range contactsToImport {
+	// 1. Process array contacts
+	for idx, c := range in.Contacts {
 		if c.Email == "" {
 			skipped++
-			errors = append(errors, "missing email field")
+			errorsList = append(errorsList, fmt.Sprintf("contact %d: missing email", idx))
 			continue
 		}
 		if c.Stage != "" && !isValidStage(c.Stage) {
 			skipped++
-			errors = append(errors, fmt.Sprintf("invalid stage %q for email %s", c.Stage, c.Email))
+			errorsList = append(errorsList, fmt.Sprintf("contact %d: invalid stage %q", idx, c.Stage))
 			continue
 		}
 
@@ -365,7 +324,7 @@ func (d *Deps) ContactImport(ctx context.Context, req *mcp.CallToolRequest, in C
 		})
 		if err != nil {
 			skipped++
-			errors = append(errors, fmt.Sprintf("failed to import %s: %s", c.Email, err.Error()))
+			errorsList = append(errorsList, fmt.Sprintf("contact %d: failed to import %s: %v", idx, c.Email, err))
 		} else {
 			if isUpdate {
 				updated++
@@ -375,11 +334,96 @@ func (d *Deps) ContactImport(ctx context.Context, req *mcp.CallToolRequest, in C
 		}
 	}
 
+	// 2. Process streaming CSV
+	if in.CSV != "" {
+		r := csv.NewReader(strings.NewReader(in.CSV))
+		header, err := r.Read()
+		if err != nil {
+			return mcpserver.Err("invalid_csv", "could not parse csv header"), ContactImportOut{}, nil
+		}
+
+		colIdx := make(map[string]int)
+		for i, h := range header {
+			colIdx[strings.ToLower(strings.TrimSpace(h))] = i
+		}
+
+		rowNum := 1
+		for {
+			rowNum++
+			row, err := r.Read()
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					break
+				}
+				skipped++
+				errorsList = append(errorsList, fmt.Sprintf("row %d: parse error: %v", rowNum, err))
+				continue
+			}
+
+			getVal := func(key string) string {
+				idx, ok := colIdx[key]
+				if !ok || idx >= len(row) {
+					return ""
+				}
+				return strings.TrimSpace(row[idx])
+			}
+
+			emailVal := getVal("email")
+			if emailVal == "" {
+				skipped++
+				errorsList = append(errorsList, fmt.Sprintf("row %d: missing email", rowNum))
+				continue
+			}
+
+			stageVal := getVal("stage")
+			if stageVal != "" && !isValidStage(stageVal) {
+				skipped++
+				errorsList = append(errorsList, fmt.Sprintf("row %d: bad stage %q", rowNum, stageVal))
+				continue
+			}
+
+			tagsStr := getVal("tags")
+			var tags []string
+			if tagsStr != "" {
+				for _, t := range strings.Split(tagsStr, ";") {
+					tTrimmed := strings.TrimSpace(t)
+					if tTrimmed != "" {
+						tags = append(tags, tTrimmed)
+					}
+				}
+			}
+
+			_, getErr := d.Repo.GetContactByEmail(ctx, emailVal)
+			isUpdate := getErr == nil
+
+			_, err = d.Repo.UpsertContact(ctx, db.Contact{
+				Email:     emailVal,
+				FirstName: getVal("first_name"),
+				LastName:  getVal("last_name"),
+				Company:   getVal("company"),
+				Phone:     getVal("phone"),
+				Stage:     stageVal,
+				Tags:      tags,
+				Source:    getVal("source"),
+			})
+			if err != nil {
+				skipped++
+				errorsList = append(errorsList, fmt.Sprintf("row %d: failed to import %s: %v", rowNum, emailVal, err))
+			} else {
+				if isUpdate {
+					updated++
+				} else {
+					inserted++
+				}
+			}
+		}
+	}
+
 	return nil, ContactImportOut{
 		Inserted: inserted,
 		Updated:  updated,
 		Skipped:  skipped,
-		Errors:   errors,
+		Errors:   errorsList,
 	}, nil
 }
 
@@ -395,9 +439,10 @@ func (d *Deps) ContactExport(ctx context.Context, req *mcp.CallToolRequest, in C
 	for {
 		items, _, nextCursor, err := d.Repo.ListContacts(ctx, filter, 100, cursor)
 		if err != nil {
-			return mcpserver.Err("export_query_failed", err.Error()), ContactExportOut{}, nil
+			return nil, ContactExportOut{}, fmt.Errorf("contact_export list contacts: %w", err)
 		}
 		allContacts = append(allContacts, items...)
+
 		if nextCursor == 0 || len(items) == 0 {
 			break
 		}
@@ -405,33 +450,36 @@ func (d *Deps) ContactExport(ctx context.Context, req *mcp.CallToolRequest, in C
 	}
 
 	if err := os.MkdirAll(d.ExportDir, 0755); err != nil {
-		return mcpserver.Err("io_error", err.Error()), ContactExportOut{}, nil
+		return nil, ContactExportOut{}, fmt.Errorf("contact_export mkdir: %w", err)
 	}
 
-	id := rand16Hex()
+	id, err := rand16Hex()
+	if err != nil {
+		return nil, ContactExportOut{}, fmt.Errorf("contact_export generate id: %w", err)
+	}
 	filename := id + ".csv"
 	fullPath := filepath.Join(d.ExportDir, filename)
 	f, err := os.Create(fullPath)
 	if err != nil {
-		return mcpserver.Err("io_error", err.Error()), ContactExportOut{}, nil
+		return nil, ContactExportOut{}, fmt.Errorf("contact_export create file: %w", err)
 	}
 	defer f.Close()
 
 	w := csv.NewWriter(f)
 	if err := w.Write([]string{"email", "first_name", "last_name", "company", "phone", "stage", "tags", "source"}); err != nil {
-		return mcpserver.Err("io_error", err.Error()), ContactExportOut{}, nil
+		return nil, ContactExportOut{}, fmt.Errorf("contact_export write header: %w", err)
 	}
 
 	for _, c := range allContacts {
 		tagsStr := strings.Join(c.Tags, ";")
 		row := []string{c.Email, c.FirstName, c.LastName, c.Company, c.Phone, c.Stage, tagsStr, c.Source}
 		if err := w.Write(row); err != nil {
-			return mcpserver.Err("io_error", err.Error()), ContactExportOut{}, nil
+			return nil, ContactExportOut{}, fmt.Errorf("contact_export write row: %w", err)
 		}
 	}
 	w.Flush()
 	if err := w.Error(); err != nil {
-		return mcpserver.Err("io_error", err.Error()), ContactExportOut{}, nil
+		return nil, ContactExportOut{}, fmt.Errorf("contact_export flush: %w", err)
 	}
 
 	expires := time.Now().Add(24 * time.Hour)
@@ -442,7 +490,7 @@ func (d *Deps) ContactExport(ctx context.Context, req *mcp.CallToolRequest, in C
 		ExpiresAt: &expires,
 	}
 	if err := d.Repo.CreateExport(ctx, exp); err != nil {
-		return mcpserver.Err("export_db_failed", err.Error()), ContactExportOut{}, nil
+		return nil, ContactExportOut{}, fmt.Errorf("contact_export db create: %w", err)
 	}
 
 	urlVal := strings.TrimSuffix(d.BaseURL, "/") + "/export/" + id + ".csv"

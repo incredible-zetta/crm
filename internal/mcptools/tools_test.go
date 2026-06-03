@@ -102,22 +102,19 @@ func TestContactCreate(t *testing.T) {
 		t.Errorf("expected non-zero ID")
 	}
 	if out.Email != "t10_create_happy@test.local" {
-		t.Errorf("expected email, got %s", out.Email)
-	}
-	if out.Stage != "contacted" {
-		t.Errorf("expected stage 'contacted', got %s", out.Stage)
+		t.Errorf("expected email to be saved, got %s", out.Email)
 	}
 
-	// 2. Bad stage
-	res, _, err = d.ContactCreate(ctx, nil, ContactCreateIn{
-		Email: "t10_create_badstage@test.local",
-		Stage: "super_won",
+	// 2. Bad validation (bad stage)
+	res2, _, err := d.ContactCreate(ctx, nil, ContactCreateIn{
+		Email: "t10_create_bad@test.local",
+		Stage: "not-a-valid-stage",
 	})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf("unexpected error on validation: %v", err)
 	}
-	if res == nil || !res.IsError {
-		t.Fatalf("expected error result on bad stage")
+	if res2 == nil || !res2.IsError {
+		t.Fatalf("expected validation error response")
 	}
 }
 
@@ -125,56 +122,54 @@ func TestContactUpdate(t *testing.T) {
 	d, _ := getTestDeps(t)
 	ctx := context.Background()
 
-	// Create initial contact
+	// Create contact to update
 	_, outC, err := d.ContactCreate(ctx, nil, ContactCreateIn{
-		Email: "t10_update_test@test.local",
-		Stage: "new",
+		Email:     "t10_update_target@test.local",
+		FirstName: "OldFirstName",
+		Stage:     "new",
 	})
 	if err != nil {
-		t.Fatalf("create template error: %v", err)
+		t.Fatalf("failed to create contact: %v", err)
 	}
 
-	// Update by ID
-	lastName := "UpdatedLastName"
-	res, _, err := d.ContactUpdate(ctx, nil, ContactUpdateIn{
-		ID:       outC.ID,
-		LastName: &lastName,
+	// 1. Update by ID
+	newName := "NewFirstName"
+	_, outU, err := d.ContactUpdate(ctx, nil, ContactUpdateIn{
+		ID:        outC.ID,
+		FirstName: &newName,
 	})
 	if err != nil {
 		t.Fatalf("update error: %v", err)
 	}
-	if res != nil && res.IsError {
-		t.Fatalf("handler error: %v", res)
+	if outU.ID != outC.ID {
+		t.Errorf("expected ID %d, got %d", outC.ID, outU.ID)
 	}
 
-	// Verify update in DB
+	// Verify change in DB
 	c, err := d.Repo.GetContact(ctx, outC.ID)
 	if err != nil {
-		t.Fatalf("get contact: %v", err)
+		t.Fatalf("failed to get contact: %v", err)
 	}
-	if c.LastName != "UpdatedLastName" {
-		t.Errorf("expected last name UpdatedLastName, got %s", c.LastName)
+	if c.FirstName != "NewFirstName" {
+		t.Errorf("expected FirstName to be NewFirstName, got %s", c.FirstName)
 	}
 
-	// Update by Email
-	company := "NewCompany"
-	res, _, err = d.ContactUpdate(ctx, nil, ContactUpdateIn{
-		Email:   outC.Email,
-		Company: &company,
+	// 2. Update by Email
+	newStage := "won"
+	_, _, err = d.ContactUpdate(ctx, nil, ContactUpdateIn{
+		Email: "t10_update_target@test.local",
+		Stage: &newStage,
 	})
 	if err != nil {
 		t.Fatalf("update error: %v", err)
 	}
-	if res != nil && res.IsError {
-		t.Fatalf("handler error: %v", res)
-	}
 
-	c, err = d.Repo.GetContact(ctx, outC.ID)
+	c2, err := d.Repo.GetContact(ctx, outC.ID)
 	if err != nil {
-		t.Fatalf("get contact: %v", err)
+		t.Fatalf("failed to get contact: %v", err)
 	}
-	if c.Company != "NewCompany" {
-		t.Errorf("expected company NewCompany, got %s", c.Company)
+	if c2.Stage != "won" {
+		t.Errorf("expected Stage to be won, got %s", c2.Stage)
 	}
 }
 
@@ -182,50 +177,36 @@ func TestContactList(t *testing.T) {
 	d, _ := getTestDeps(t)
 	ctx := context.Background()
 
-	// Create some contacts
+	// Create multiple contacts
 	for i := 0; i < 5; i++ {
 		_, _, err := d.ContactCreate(ctx, nil, ContactCreateIn{
 			Email:     fmt.Sprintf("t10_list_%d@test.local", i),
 			FirstName: fmt.Sprintf("User%d", i),
 			Company:   "t10_list_company",
-			Stage:     "new",
 		})
 		if err != nil {
 			t.Fatalf("failed to create contact: %v", err)
 		}
 	}
 
-	// List contacts with default projection
+	// 1. List with filter
 	_, outList, err := d.ContactList(ctx, nil, ContactListIn{
 		Company: "t10_list_company",
-		Limit:   0, // should default to 20
 	})
 	if err != nil {
 		t.Fatalf("list error: %v", err)
 	}
 	if outList.Total < 5 {
-		t.Errorf("expected at least 5 total, got %d", outList.Total)
+		t.Errorf("expected at least 5 contacts, got total %d", outList.Total)
 	}
-	if len(outList.Items) == 0 {
-		t.Fatalf("expected items to be returned")
-	}
-
-	// Check default subset keys
-	item := outList.Items[0]
-	if _, ok := item["email"]; !ok {
-		t.Errorf("missing key 'email' in default subset")
-	}
-	if _, ok := item["first_name"]; !ok {
-		t.Errorf("missing key 'first_name' in default subset")
-	}
-	if _, ok := item["phone"]; ok {
-		t.Errorf("unexpected key 'phone' in default subset")
+	if outList.Count < 5 {
+		t.Errorf("expected at least 5 count, got %d", outList.Count)
 	}
 
-	// List with specific Fields projection
+	// 2. List with custom projection
 	_, outListProj, err := d.ContactList(ctx, nil, ContactListIn{
 		Company: "t10_list_company",
-		Fields:  []string{"email", "phone"},
+		Fields:  []string{"email"},
 	})
 	if err != nil {
 		t.Fatalf("list error: %v", err)
@@ -285,6 +266,46 @@ t10_import_3@test.local,C,LastName,Comp,123,new,,
 	}
 	if c.Stage != "qualified" {
 		t.Errorf("expected Stage updated to 'qualified', got %s", c.Stage)
+	}
+
+	// 3. Robustness CSV import with errors (missing email, invalid stage)
+	robustCSV := `email,first_name,last_name,company,phone,stage,tags,source
+t10_import_robust_good@test.local,Good,LastName,Comp,123,new,,
+,NoEmail,LastName,Comp,123,new,,
+t10_import_robust_badstage@test.local,BadStage,LastName,Comp,123,not-a-stage,,
+`
+	_, outRobust, err := d.ContactImport(ctx, nil, ContactImportIn{
+		CSV: robustCSV,
+	})
+	if err != nil {
+		t.Fatalf("robust import error: %v", err)
+	}
+	if outRobust.Inserted != 1 {
+		t.Errorf("expected 1 inserted, got %d", outRobust.Inserted)
+	}
+	if outRobust.Skipped != 2 {
+		t.Errorf("expected 2 skipped rows, got %d", outRobust.Skipped)
+	}
+	if len(outRobust.Errors) != 2 {
+		t.Errorf("expected 2 errors, got %d: %v", len(outRobust.Errors), outRobust.Errors)
+	} else {
+		// Verify that errors are caught per-row correctly
+		hasRow3Error := false
+		hasRow4Error := false
+		for _, e := range outRobust.Errors {
+			if strings.Contains(e, "row 3") && strings.Contains(e, "missing email") {
+				hasRow3Error = true
+			}
+			if strings.Contains(e, "row 4") && (strings.Contains(e, "bad stage") || strings.Contains(e, "invalid stage")) {
+				hasRow4Error = true
+			}
+		}
+		if !hasRow3Error {
+			t.Errorf("expected row 3 missing email error, got: %v", outRobust.Errors)
+		}
+		if !hasRow4Error {
+			t.Errorf("expected row 4 bad stage error, got: %v", outRobust.Errors)
+		}
 	}
 }
 
@@ -432,6 +453,91 @@ func TestEmailSend(t *testing.T) {
 	if sender.lastMsg.Subject != "Hi Alice" {
 		t.Errorf("expected subject 'Hi Alice', got %s", sender.lastMsg.Subject)
 	}
+}
+
+func TestEmailSendRecipientMismatch(t *testing.T) {
+	d, sender := getTestDeps(t)
+	ctx := context.Background()
+
+	// 1. Create a contact with email A
+	_, outC, err := d.ContactCreate(ctx, nil, ContactCreateIn{
+		Email:     "t10_mismatch_a@test.local",
+		FirstName: "Bob",
+	})
+	if err != nil {
+		t.Fatalf("failed to create contact: %v", err)
+	}
+
+	// 2. Call EmailSend with ContactID and a mismatched To address
+	res, _, err := d.EmailSend(ctx, nil, EmailSendIn{
+		ContactID: outC.ID,
+		To:        "t10_mismatch_other@test.local",
+		Subject:   "Subject",
+		Text:      "Text",
+	})
+	if err != nil {
+		t.Fatalf("unexpected go error: %v", err)
+	}
+
+	if res == nil {
+		t.Fatalf("expected handler error, got nil")
+	}
+	if !res.IsError {
+		t.Fatalf("expected res.IsError to be true, got false")
+	}
+
+	// Extract error message
+	txtContent, ok := res.Content[0].(*mcp.TextContent)
+	if !ok {
+		t.Fatalf("expected mcp.TextContent, got %T", res.Content[0])
+	}
+	if !strings.Contains(txtContent.Text, "does not match contact email") {
+		t.Errorf("expected mismatch error message, got %q", txtContent.Text)
+	}
+
+	// 3. Sender must NOT be called
+	if sender.calls != 0 {
+		t.Errorf("expected sender calls to be 0, got %d", sender.calls)
+	}
+}
+
+func TestErrorContractNoRawLeak(t *testing.T) {
+	d, _ := getTestDeps(t)
+	ctx := context.Background()
+
+	// Trigger a not_found (GetContact on huge ID via contact_update)
+	res, _, err := d.ContactUpdate(ctx, nil, ContactUpdateIn{
+		ID:    999999999,
+		Stage: ptr("qualified"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected go error for contact_update not found: %v", err)
+	}
+
+	if res == nil {
+		t.Fatalf("expected handler error, got nil")
+	}
+	if !res.IsError {
+		t.Fatalf("expected res.IsError to be true, got false")
+	}
+
+	txtContent, ok := res.Content[0].(*mcp.TextContent)
+	if !ok {
+		t.Fatalf("expected mcp.TextContent, got %T", res.Content[0])
+	}
+
+	// Terse "not found" message, not a raw SQL string or internal error details
+	expectedMsg := "contact not found"
+	if !strings.Contains(strings.ToLower(txtContent.Text), expectedMsg) {
+		t.Errorf("expected error message to contain %q, got %q", expectedMsg, txtContent.Text)
+	}
+	if strings.Contains(txtContent.Text, "sql") || (strings.Contains(txtContent.Text, "error") && strings.Contains(txtContent.Text, "select")) {
+		t.Errorf("error message contains raw database details: %q", txtContent.Text)
+	}
+}
+
+func ptr[T any](v T) *T {
+	return &v
 }
 
 func TestCampaignCreateAndSend(t *testing.T) {

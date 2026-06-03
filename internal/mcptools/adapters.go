@@ -2,6 +2,7 @@ package mcptools
 
 import (
 	"context"
+	"errors"
 
 	"github.com/cipta/crm-for-aiagents/internal/db"
 	"github.com/cipta/crm-for-aiagents/internal/email"
@@ -12,6 +13,9 @@ type RepoTemplateStore struct {
 }
 
 func (r RepoTemplateStore) GetTemplate(ctx context.Context, id int64) (email.TemplateData, error) {
+	if r.Repo == nil {
+		return email.TemplateData{}, errors.New("nil repo")
+	}
 	t, err := r.Repo.GetTemplate(ctx, id)
 	if err != nil {
 		return email.TemplateData{}, err
@@ -29,6 +33,9 @@ type RepoLinkMaker struct {
 }
 
 func (r RepoLinkMaker) CreateLink(ctx context.Context, targetURL string, campaignID, contactID *int64) (string, error) {
+	if r.Repo == nil {
+		return "", errors.New("nil repo")
+	}
 	return r.Repo.CreateLink(ctx, targetURL, campaignID, contactID)
 }
 
@@ -37,6 +44,9 @@ type RepoEventLogger struct {
 }
 
 func (r RepoEventLogger) LogEvent(ctx context.Context, contactID int64, campaignID *int64, eventType, linkCode string, meta map[string]any) error {
+	if r.Repo == nil {
+		return errors.New("nil repo")
+	}
 	return r.Repo.InsertEvent(ctx, db.EmailEvent{
 		ContactID:  contactID,
 		CampaignID: campaignID,
