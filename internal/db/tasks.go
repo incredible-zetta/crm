@@ -138,7 +138,10 @@ FOR UPDATE SKIP LOCKED`
 		tasks = append(tasks, t)
 		ids = append(ids, t.ID)
 	}
-	rows.Close()
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("claim due rows: %w", err)
+	}
 
 	if len(ids) == 0 {
 		return nil, nil

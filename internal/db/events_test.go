@@ -29,14 +29,32 @@ func TestEventsRepo(t *testing.T) {
 		t.Fatalf("failed to get insert ID: %v", err)
 	}
 
-	// Cleanup events and contact
+	// Create two real throwaway campaigns
+	uniqueCampaignName1 := fmt.Sprintf("t4ev_cmp_%d_1", time.Now().UnixNano())
+	uniqueCampaignName2 := fmt.Sprintf("t4ev_cmp_%d_2", time.Now().UnixNano())
+
+	c1, err := repo.CreateCampaign(ctx, Campaign{
+		Name: uniqueCampaignName1,
+	})
+	if err != nil {
+		t.Fatalf("failed to create campaign 1: %v", err)
+	}
+	campaignID1 := c1.ID
+
+	c2, err := repo.CreateCampaign(ctx, Campaign{
+		Name: uniqueCampaignName2,
+	})
+	if err != nil {
+		t.Fatalf("failed to create campaign 2: %v", err)
+	}
+	campaignID2 := c2.ID
+
+	// Cleanup events, campaigns, and contact
 	t.Cleanup(func() {
 		_, _ = repo.db.ExecContext(ctx, "DELETE FROM email_events WHERE link_code LIKE 't4ev_%'")
+		_, _ = repo.db.ExecContext(ctx, "DELETE FROM campaigns WHERE name LIKE 't4ev_cmp_%'")
 		_, _ = repo.db.ExecContext(ctx, "DELETE FROM contacts WHERE id = ?", contactID)
 	})
-
-	campaignID1 := int64(101)
-	campaignID2 := int64(102)
 
 	// 2. Validate Invalid Event Type
 	err = repo.InsertEvent(ctx, EmailEvent{

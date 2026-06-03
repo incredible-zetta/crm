@@ -2,7 +2,6 @@ package db
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -23,14 +22,16 @@ func TestTasksRepo(t *testing.T) {
 	t.Cleanup(func() {
 		if len(insertedIDs) > 0 {
 			query := "DELETE FROM scheduled_tasks WHERE id IN ("
+			args := make([]any, len(insertedIDs))
 			for i, id := range insertedIDs {
 				if i > 0 {
 					query += ","
 				}
-				query += fmt.Sprintf("%d", id)
+				query += "?"
+				args[i] = id
 			}
 			query += ")"
-			_, _ = repo.db.ExecContext(ctx, query)
+			_, _ = repo.db.ExecContext(ctx, query, args...)
 		}
 	})
 
