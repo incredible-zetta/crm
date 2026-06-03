@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cipta/crm-for-aiagents/internal/domain"
-	"github.com/cipta/crm-for-aiagents/internal/port"
+	"github.com/incredible-zetta/crm/internal/domain"
+	"github.com/incredible-zetta/crm/internal/port"
 )
 
 // aggFakeRepo is a no-op repo satisfying every repo port via embedding, used to

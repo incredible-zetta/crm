@@ -1,7 +1,7 @@
 package service
 
 import (
-	"github.com/cipta/crm-for-aiagents/internal/port"
+	"github.com/incredible-zetta/crm/internal/port"
 )
 
 // Config holds the runtime values the service layer needs that are not ports.

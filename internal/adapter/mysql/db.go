@@ -10,8 +10,8 @@ import (
 	mysqlmigrate "github.com/golang-migrate/migrate/v4/database/mysql"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 
-	"github.com/cipta/crm-for-aiagents/internal/port"
-	"github.com/cipta/crm-for-aiagents/migrations"
+	"github.com/incredible-zetta/crm/internal/port"
+	"github.com/incredible-zetta/crm/migrations"
 )
 
 // Open opens a database connection, sets pool limits, and pings the database.

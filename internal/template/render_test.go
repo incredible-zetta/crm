@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cipta/crm-for-aiagents/internal/template"
+	"github.com/incredible-zetta/crm/internal/template"
 )
 
 func TestRenderSubstitutes(t *testing.T) {

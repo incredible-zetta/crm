@@ -31,7 +31,7 @@
 
 ```bash
 cd /home/nst/WebstormProjects/crm-for-aiagents
-go mod init github.com/cipta/crm-for-aiagents
+go mod init github.com/incredible-zetta/crm
 ```
 
 **Step 2: Add deps**

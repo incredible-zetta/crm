@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cipta/crm-for-aiagents/internal/domain"
-	"github.com/cipta/crm-for-aiagents/internal/mcpserver"
-	"github.com/cipta/crm-for-aiagents/internal/port"
-	"github.com/cipta/crm-for-aiagents/internal/service"
-	"github.com/cipta/crm-for-aiagents/internal/transport/mcp"
+	"github.com/incredible-zetta/crm/internal/domain"
+	"github.com/incredible-zetta/crm/internal/mcpserver"
+	"github.com/incredible-zetta/crm/internal/port"
+	"github.com/incredible-zetta/crm/internal/service"
+	"github.com/incredible-zetta/crm/internal/transport/mcp"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

@@ -2,7 +2,7 @@
 
 Date: 2026-06-03
 Status: APPROVED (architecture B, soft-delete+purge, unsubscribe column)
-Module: `github.com/cipta/crm-for-aiagents`
+Module: `github.com/incredible-zetta/crm`
 Branch: `master`
 
 ## Goal

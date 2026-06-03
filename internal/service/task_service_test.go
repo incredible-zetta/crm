@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cipta/crm-for-aiagents/internal/domain"
-	"github.com/cipta/crm-for-aiagents/internal/port"
+	"github.com/incredible-zetta/crm/internal/domain"
+	"github.com/incredible-zetta/crm/internal/port"
 )
 
 // fakeTaskRepo records task operations for assertions.

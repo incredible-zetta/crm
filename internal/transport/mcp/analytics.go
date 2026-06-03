@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/cipta/crm-for-aiagents/internal/domain"
-	"github.com/cipta/crm-for-aiagents/internal/mcpserver"
+	"github.com/incredible-zetta/crm/internal/domain"
+	"github.com/incredible-zetta/crm/internal/mcpserver"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

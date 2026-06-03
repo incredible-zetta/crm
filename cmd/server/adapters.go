@@ -5,10 +5,10 @@ import (
 	"errors"
 	"time"
 
-	"github.com/cipta/crm-for-aiagents/internal/domain"
-	"github.com/cipta/crm-for-aiagents/internal/port"
-	"github.com/cipta/crm-for-aiagents/internal/scheduler"
-	"github.com/cipta/crm-for-aiagents/internal/service"
+	"github.com/incredible-zetta/crm/internal/domain"
+	"github.com/incredible-zetta/crm/internal/port"
+	"github.com/incredible-zetta/crm/internal/scheduler"
+	"github.com/incredible-zetta/crm/internal/service"
 )
 
 // disabledSender is used when no email provider is configured. It satisfies

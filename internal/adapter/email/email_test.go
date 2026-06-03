@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cipta/crm-for-aiagents/internal/port"
+	"github.com/incredible-zetta/crm/internal/port"
 )
 
 func TestNewSMTP(t *testing.T) {

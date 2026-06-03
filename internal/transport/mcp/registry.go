@@ -3,7 +3,7 @@ package mcptransport
 import (
 	"context"
 
-	"github.com/cipta/crm-for-aiagents/internal/service"
+	"github.com/incredible-zetta/crm/internal/service"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

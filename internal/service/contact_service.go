@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cipta/crm-for-aiagents/internal/domain"
-	"github.com/cipta/crm-for-aiagents/internal/port"
+	"github.com/incredible-zetta/crm/internal/domain"
+	"github.com/incredible-zetta/crm/internal/port"
 )
 
 // ContactService implements business logic for managing contacts.

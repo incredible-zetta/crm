@@ -1,4 +1,4 @@
-module github.com/cipta/crm-for-aiagents
+module github.com/incredible-zetta/crm
 
 go 1.25.0
 
