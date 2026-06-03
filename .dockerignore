@@ -1,0 +1,11 @@
+.git
+.gitignore
+*_credentials_*.txt
+.env
+.env.*
+!.env.example
+docs
+exports
+*.md
+scripts
+.idea
