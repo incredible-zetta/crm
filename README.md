@@ -1,3 +1,182 @@
-# CRM-for-AI-Agents MCP
+<div align="center">
 
-Go MCP server for AI agents to manage CRM: contacts, email campaigns, tracking, scheduling; deployed via Dockerfile on EasyPanel.
+<img src="assets/brand/zetta-logo.png" alt="Zetta CRM" height="96" />
+
+# Zetta CRM
+
+**Self-hosted CRM for AI operators.**
+
+A Go [Model Context Protocol](https://modelcontextprotocol.io) server that gives any AI agent a full CRM: contacts, email (SMTP or Mailgun), marketing campaigns, click/open tracking, an in-process scheduler, templates, and analytics. Single binary, single MySQL database, single Docker image. Built for one-port deployment on EasyPanel.
+
+<sub>A partnership between <b>Incredible Zetta</b> and <a href="https://github.com/cds-id">Ciptadusa (CDS)</a></sub>
+
+<br/>
+<img src="assets/brand/cds-logo.png" alt="Ciptadusa" height="40" />
+
+</div>
+
+---
+
+## Transport
+
+Streamable HTTP (MCP SDK [`github.com/modelcontextprotocol/go-sdk`](https://github.com/modelcontextprotocol/go-sdk)). The MCP endpoint is `POST /mcp`, gated by an API key. Public, unauthenticated routes serve link tracking, the open pixel, CSV export downloads, and health.
+
+| Route | Auth | Purpose |
+|-------|------|---------|
+| `POST /mcp` | API key | MCP JSON-RPC (Streamable HTTP) |
+| `GET /t/{code}` | public | Click tracking → 302 redirect to target |
+| `GET /o/{code}.png` | public | Open-tracking 1×1 pixel |
+| `GET /export/{id}.csv` | public | Download a generated contact export (expires ~24h) |
+| `GET /healthz` | public | Liveness probe (200 OK) |
+
+Authenticate `/mcp` with **either** header:
+
+```
+Authorization: Bearer <MCP_API_KEY>
+X-API-Key: <MCP_API_KEY>
+```
+
+The key check is constant-time and fail-closed. Tracking and export routes are intentionally public because email recipients open them without credentials.
+
+## Tools (16)
+
+| Tool | Description |
+|------|-------------|
+| `contact_create` | Create a contact (only `email` required) |
+| `contact_update` | Update a contact by `id` or `email` |
+| `contact_list` | List contacts — paginated (limit default 20, cap 100), cursor, field projection |
+| `contact_import` | Bulk import via array or CSV string; per-row error capture |
+| `contact_export` | Export filtered contacts to a CSV download URL (not inline rows) |
+| `email_send` | Send one email to a contact or address (template or raw fields) |
+| `campaign_create` | Create a campaign for a filtered contact segment |
+| `campaign_send` | Dispatch a campaign to its matching segment |
+| `campaign_stats` | Delivery / open / click stats + top links for a campaign |
+| `template_create` | Create a reusable email template with merge variables |
+| `template_list` | List templates and their variables |
+| `template_render` | Render a template with vars without sending (text by default, HTML opt-in) |
+| `tracking_link_create` | Wrap a URL in a click-tracked redirect |
+| `schedule_task` | Schedule an `email` or `campaign` task for future execution (RFC3339) |
+| `health_check` | Self-test DB and email connectivity |
+| `analytics_overview` | High-level CRM + communication metrics |
+
+### Token optimization
+
+Responses are kept small for agent context budgets:
+
+- `contact_list` paginates, projects requested `fields`, and returns a compact envelope `{total, count, items, next_cursor}`.
+- `contact_export` returns a download URL + row count, never inline rows.
+- `template_render` returns subject + text by default; HTML only when `html: true`.
+- Errors are terse: `{error, msg}`. Raw infrastructure errors are not leaked to clients.
+
+## Pipeline stages
+
+Fixed enum: `new → contacted → qualified → proposal → won → lost`. Invalid stages are rejected.
+
+## Configuration
+
+All config comes from environment variables (EasyPanel injects them). See `.env.example`.
+
+| Variable | Required | Default | Notes |
+|----------|----------|---------|-------|
+| `MCP_API_KEY` | yes | — | Bearer / X-API-Key value agents must send |
+| `DB_DSN` | yes | — | MySQL DSN, e.g. `user:pass@tcp(host:3306)/crmagents?parseTime=true&multiStatements=true` |
+| `BASE_URL` | yes | — | Public base URL, used to build tracking + export links |
+| `PORT` | no | `8080` | Listen port |
+| `SCHEDULER_INTERVAL_SEC` | no | `15` | Scheduler tick interval (seconds) |
+| `EXPORT_DIR` | no | `/data/exports` | Directory for generated CSV files |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | no | — | SMTP sender config |
+| `MAILGUN_DOMAIN` / `MAILGUN_API_KEY` | no | — | Mailgun sender config (preferred when both set) |
+
+Provider selection: Mailgun is used when both `MAILGUN_DOMAIN` and `MAILGUN_API_KEY` are set, otherwise SMTP. If neither is configured the server still boots — email sending is disabled and `email_send`/`campaign_send` fail at runtime.
+
+> If the DSN password contains shell metacharacters (e.g. `!`), single-quote the value.
+
+## Database
+
+MySQL 8. Migrations are embedded in the binary and applied automatically on startup (`golang-migrate`). Tables: `contacts`, `email_templates`, `campaigns`, `tracking_links`, `email_events`, `scheduled_tasks`, `exports` (+ `schema_migrations`).
+
+## Run locally
+
+```bash
+cp .env.example .env   # fill in values
+export $(grep -v '^#' .env | xargs)   # or use a dotenv loader
+go run ./cmd/server
+```
+
+Then smoke-test:
+
+```bash
+MCP_URL=http://localhost:8080/mcp MCP_API_KEY=<your-key> ./scripts/test-mcp.sh
+```
+
+The script runs `initialize → notifications/initialized → tools/list → tools/call health_check` and prints the responses.
+
+## Test
+
+```bash
+# Unit tests run without a database. Integration tests need DB_DSN (else they skip):
+export DB_DSN='user:pass@tcp(localhost:3306)/crmagents?parseTime=true&multiStatements=true'
+go test ./internal/...
+```
+
+## Build the image
+
+```bash
+docker build -t crm-mcp .
+docker run --rm -p 8080:8080 \
+  -e MCP_API_KEY=... -e DB_DSN=... -e BASE_URL=https://crm.example.com \
+  -v crm-exports:/data/exports \
+  crm-mcp
+```
+
+Multi-stage build: `golang:1.25` → `distroless/static` (~14MB, runs as non-root).
+
+## Deploy on EasyPanel
+
+1. Create an app from this repo's `Dockerfile` (no compose needed).
+2. Provision/point to a MySQL 8 database and set `DB_DSN`.
+3. Set env vars: `MCP_API_KEY` (long random), `BASE_URL` (the app's public URL), `DB_DSN`, and email provider vars (SMTP or Mailgun).
+4. Expose the container port (`8080`) on your domain. One domain serves both `/mcp` and the public tracking/export routes — so `BASE_URL` must equal that public URL for tracking links to resolve.
+5. Mount a persistent volume at `EXPORT_DIR` (`/data/exports`) if you want export downloads to survive restarts.
+6. Health check path: `/healthz`.
+
+Migrations run on boot, so the first start initializes the schema automatically.
+
+### Connecting an agent
+
+Point any MCP client at `https://<your-domain>/mcp` using Streamable HTTP transport and send the API key header. Example client config:
+
+```json
+{
+  "mcpServers": {
+    "zettacrm": {
+      "type": "streamable-http",
+      "url": "https://crm.your-domain.com/mcp",
+      "headers": { "Authorization": "Bearer <MCP_API_KEY>" }
+    }
+  }
+}
+```
+
+## License & credits
+
+### Project layout
+
+```
+cmd/server/        main wiring, graceful shutdown, adapters
+internal/config    env config loader
+internal/db        connection, embedded migrations, repositories
+internal/email     SMTP + Mailgun senders, send pipeline
+internal/template  render + link rewrite + open pixel
+internal/httpx     public HTTP handlers (tracking, export, health)
+internal/mcpserver MCP server scaffold + auth + response helpers
+internal/mcptools  the 16 tools + Deps + adapters
+internal/scheduler in-process worker (claim → execute → mark)
+migrations/        0001_init schema (embedded)
+scripts/           test-mcp.sh smoke test
+docs/plans/        design + implementation plan
+```
+
+## Credits
+
+Zetta CRM is built and maintained by [Incredible Zetta](https://github.com/incredible-zetta) in partnership with [Ciptadusa (CDS)](https://github.com/cds-id).
