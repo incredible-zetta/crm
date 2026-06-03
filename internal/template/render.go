@@ -168,3 +168,26 @@ func InjectPixel(html, baseURL, code string) string {
 	}
 	return html + pixel
 }
+
+// InjectUnsubscribeFooter appends a compliance unsubscribe footer that links to
+// {baseURL}/u/{code}. It is inserted before </body> when present, else
+// appended. The code is a per-contact opt-out token. If code is empty the html
+// is returned unchanged (no footer can be built).
+func InjectUnsubscribeFooter(html, baseURL, code string) string {
+	if code == "" {
+		return html
+	}
+	urlStr := strings.TrimSuffix(baseURL, "/") + "/u/" + code
+	footer := fmt.Sprintf(
+		`<div style="margin-top:24px;padding-top:12px;border-top:1px solid #e5e5e5;`+
+			`font-size:12px;color:#888;text-align:center">`+
+			`<a href="%s" style="color:#888">Unsubscribe</a> from these emails.</div>`,
+		urlStr)
+
+	lower := strings.ToLower(html)
+	idx := strings.Index(lower, "</body>")
+	if idx != -1 {
+		return html[:idx] + footer + html[idx:]
+	}
+	return html + footer
+}

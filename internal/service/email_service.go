@@ -147,6 +147,15 @@ func (s *EmailService) Send(ctx context.Context, in SendInput) (status string, t
 			return "", resolvedTo, fmt.Errorf("failed to rewrite links: %w", err)
 		}
 		rewrittenHTML = template.InjectPixel(rewrittenHTML, s.baseURL, openCode)
+
+		// Compliance: append a per-contact unsubscribe footer for contact-addressed
+		// sends. Best-effort — a failure to mint the code must not block the send,
+		// it just omits the footer.
+		if in.ContactID > 0 {
+			if code, codeErr := s.ensureUnsubCode(ctx, in.ContactID); codeErr == nil && code != "" {
+				rewrittenHTML = template.InjectUnsubscribeFooter(rewrittenHTML, s.baseURL, code)
+			}
+		}
 	}
 
 	sendErr := s.sender.Send(ctx, port.OutboundMessage{
@@ -201,3 +210,23 @@ func (s *EmailService) SendToContact(ctx context.Context, c domain.Contact, temp
 }
 
 var _ CampaignMailer = (*EmailService)(nil) // compile-time assert
+
+// ensureUnsubCode returns the contact's existing unsubscribe code or mints and
+// persists a new one. Used to build the unsubscribe footer link.
+func (s *EmailService) ensureUnsubCode(ctx context.Context, contactID int64) (string, error) {
+	c, err := s.contacts.Get(ctx, contactID)
+	if err != nil {
+		return "", err
+	}
+	if c.UnsubCode != "" {
+		return c.UnsubCode, nil
+	}
+	code, err := s.idgen.UnsubCode()
+	if err != nil {
+		return "", err
+	}
+	if err := s.contacts.SetUnsubCode(ctx, contactID, code); err != nil {
+		return "", err
+	}
+	return code, nil
+}

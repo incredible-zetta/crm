@@ -37,6 +37,16 @@ func (f *fakeContactRepo) Get(ctx context.Context, id int64) (domain.Contact, er
 	return c, nil
 }
 
+func (f *fakeContactRepo) SetUnsubCode(ctx context.Context, id int64, code string) error {
+	c, ok := f.contacts[id]
+	if !ok {
+		return domain.ErrNotFound
+	}
+	c.UnsubCode = code
+	f.contacts[id] = c
+	return nil
+}
+
 type fakeTemplateRepo struct {
 	port.TemplateRepo
 	templates map[int64]domain.Template
@@ -340,6 +350,9 @@ func TestSendRewritesLinksAndPixel(t *testing.T) {
 	}
 	if !strings.Contains(html, `src="http://crm.local/o/pxl123.png"`) {
 		t.Errorf("expected pixel img tag injected with crm.local/o/pxl123.png, got %q", html)
+	}
+	if !strings.Contains(html, "http://crm.local/u/unsub123") {
+		t.Errorf("expected unsubscribe footer link with crm.local/u/unsub123, got %q", html)
 	}
 
 	if len(tracking.createdLinks) != 1 {

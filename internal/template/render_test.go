@@ -145,6 +145,24 @@ func TestInjectPixelURL(t *testing.T) {
 	}
 }
 
+func TestInjectUnsubscribeFooterBeforeBody(t *testing.T) {
+	html := "<html><body>hi</body></html>"
+	got := template.InjectUnsubscribeFooter(html, "https://crm.test", "uns999")
+	if !strings.Contains(got, `href="https://crm.test/u/uns999"`) {
+		t.Errorf("expected unsubscribe link, got %q", got)
+	}
+	if !strings.Contains(got, "</body></html>") || strings.Index(got, "crm.test/u/uns999") > strings.Index(got, "</body>") {
+		t.Errorf("footer must be injected before </body>, got %q", got)
+	}
+}
+
+func TestInjectUnsubscribeFooterEmptyCode(t *testing.T) {
+	html := "<html><body>hi</body></html>"
+	if got := template.InjectUnsubscribeFooter(html, "https://crm.test", ""); got != html {
+		t.Errorf("empty code must leave html unchanged, got %q", got)
+	}
+}
+
 func TestRewriteLinksPreservesScriptAndStyle(t *testing.T) {
 	html := `<html><head><style>body { color: red; }</style><script>if (a && b) { console.log("<test>"); }</script></head><body><a href="https://google.com">Google</a></body></html>`
 	makeCode := func(target string) (string, error) {
