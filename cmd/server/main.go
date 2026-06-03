@@ -9,48 +9,47 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cipta/crm-for-aiagents/internal/adapter/email"
+	"github.com/cipta/crm-for-aiagents/internal/adapter/mysql"
+	"github.com/cipta/crm-for-aiagents/internal/adapter/system"
 	"github.com/cipta/crm-for-aiagents/internal/config"
-	"github.com/cipta/crm-for-aiagents/internal/db"
-	"github.com/cipta/crm-for-aiagents/internal/email"
-	"github.com/cipta/crm-for-aiagents/internal/httpx"
 	"github.com/cipta/crm-for-aiagents/internal/mcpserver"
-	"github.com/cipta/crm-for-aiagents/internal/mcptools"
+	"github.com/cipta/crm-for-aiagents/internal/port"
 	"github.com/cipta/crm-for-aiagents/internal/scheduler"
+	"github.com/cipta/crm-for-aiagents/internal/service"
+	httptransport "github.com/cipta/crm-for-aiagents/internal/transport/http"
+	mcptransport "github.com/cipta/crm-for-aiagents/internal/transport/mcp"
 )
 
+const version = "2.0.0"
+
 func main() {
-	// 1. Load config
+	// 1. Config
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	// 2. Open DB + migrate
-	database, err := db.Open(cfg.DBDSN)
+	// 2. Database + migrations
+	database, err := mysql.Open(cfg.DBDSN)
 	if err != nil {
 		log.Fatalf("failed to open database: %v", err)
 	}
 	defer database.Close()
-
-	if err := db.Migrate(database); err != nil {
+	if err := mysql.Migrate(database); err != nil {
 		log.Fatalf("failed to run database migrations: %v", err)
 	}
+	store := mysql.New(database)
 
-	// 3. New Repo
-	repo := db.NewRepo(database)
-
-	// 4. Build email sender
-	var sender email.Sender
+	// 3. Email sender (driven adapter). Falls back to a disabled sender that
+	//    fails explicitly when no provider is configured.
+	var sender port.EmailSender = disabledSender{}
 	provider := "smtp"
 	if cfg.MailgunAPIKey != "" && cfg.MailgunDomain != "" {
 		provider = "mailgun"
 	}
-
-	if provider == "smtp" && cfg.SMTPHost == "" {
-		log.Println("WARNING: neither SMTP nor Mailgun is configured; email sending is disabled")
-	} else {
-		var senderErr error
-		sender, senderErr = email.New(email.Config{
+	if provider == "mailgun" || cfg.SMTPHost != "" {
+		s, senderErr := email.New(email.Config{
 			Provider:      provider,
 			SMTPHost:      cfg.SMTPHost,
 			SMTPPort:      cfg.SMTPPort,
@@ -64,75 +63,72 @@ func main() {
 		if senderErr != nil {
 			log.Fatalf("failed to configure email sender: %v", senderErr)
 		}
+		sender = s
+	} else {
+		log.Println("WARNING: neither SMTP nor Mailgun is configured; email sending is disabled")
 	}
 
-	// 5. Build email pipeline
-	pipe := &email.Pipeline{
-		Sender:  sender,
-		Tmpl:    mcptools.RepoTemplateStore{Repo: repo},
-		Links:   mcptools.RepoLinkMaker{Repo: repo},
-		Events:  mcptools.RepoEventLogger{Repo: repo},
-		BaseURL: cfg.BaseURL,
-	}
-
-	// 6. Build mcptools.Deps
-	version := "1.0.0"
+	// 4. Export directory
 	exportDir := os.Getenv("EXPORT_DIR")
 	if exportDir == "" {
 		exportDir = "./exports"
 	}
-	if err := os.MkdirAll(exportDir, 0755); err != nil {
+	if err := os.MkdirAll(exportDir, 0o755); err != nil {
 		log.Fatalf("failed to create export directory %q: %v", exportDir, err)
 	}
 
-	deps := &mcptools.Deps{
-		Repo:      repo,
-		Pipeline:  pipe,
-		BaseURL:   cfg.BaseURL,
-		ExportDir: exportDir,
-		Version:   version,
-		PingDB: func(ctx context.Context) error {
-			return database.PingContext(ctx)
+	// 5. Wire the service (use-case) layer from ports.
+	svc := service.New(
+		service.Repos{
+			Contacts:  store.Contacts(),
+			Campaigns: store.Campaigns(),
+			Templates: store.Templates(),
+			Tasks:     store.Tasks(),
+			Events:    store.Events(),
+			Tracking:  store.Tracking(),
+			Exports:   store.Exports(),
 		},
-	}
+		sender,
+		system.RealClock{},
+		system.CryptoIDGen{},
+		service.Config{BaseURL: cfg.BaseURL, ExportDir: exportDir},
+	)
 
-	// 7. MCP Server
-	srv := mcpserver.NewMCPServer("crm-for-aiagents", version)
-	mcptools.Register(srv, deps)
-	mcpHandler := mcpserver.Handler(cfg.MCPAPIKey, srv)
+	// 6. MCP transport (auth-gated /mcp)
+	mcpSrv := mcpserver.NewMCPServer("zettacrm", version)
+	mcptransport.Register(mcpSrv, &mcptransport.Deps{
+		Svc:     svc,
+		Version: version,
+		PingDB:  database.PingContext,
+	})
+	mcpHandler := mcpserver.Handler(cfg.MCPAPIKey, mcpSrv)
 
-	// 8. HTTP handlers (tracking/export/health) + Adapters
-	h := &httpx.Handlers{
-		Links:   linkResolver{repo},
-		Events:  eventRecorder{repo},
-		Exports: exportResolver{repo},
+	// 7. Public HTTP transport (tracking, open pixel, export, unsubscribe, health)
+	pub := &httptransport.Handlers{
+		Tracking: svc.Tracking,
+		Opens:    svc.Tracking,
+		Exports:  svc.Contact,
+		Unsub:    unsubscriberAdapter{svc.Contact},
 	}
 
 	mux := http.NewServeMux()
-	h.Register(mux)                 // /t /o /export /healthz
-	mux.Handle("/mcp", mcpHandler)  // POST /mcp (auth-gated)
-	mux.Handle("/mcp/", mcpHandler) // in case streamable uses subpaths
+	pub.Register(mux)
+	mux.Handle("/mcp", mcpHandler)
+	mux.Handle("/mcp/", mcpHandler)
 
-	// 9. Scheduler worker
+	// 8. Scheduler worker -> TaskService.Execute
 	worker := &scheduler.Worker{
-		Claimer: taskClaimer{repo},
-		Exec:    taskExecutor{repo, pipe, deps},
+		Claimer: taskClaimer{store.Tasks()},
+		Exec:    taskExecutor{svc.Task},
 	}
 
-	// 10. Start everything with graceful shutdown
+	// 9. Run with graceful shutdown
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	// Start scheduler background loop
-	interval := time.Duration(cfg.SchedulerIntervalSec) * time.Second
-	go worker.Start(ctx, interval)
+	go worker.Start(ctx, time.Duration(cfg.SchedulerIntervalSec)*time.Second)
 
-	// Build and start HTTP server
-	httpSrv := &http.Server{
-		Addr:    ":" + cfg.Port,
-		Handler: mux,
-	}
-
+	httpSrv := &http.Server{Addr: ":" + cfg.Port, Handler: mux}
 	go func() {
 		<-ctx.Done()
 		log.Println("Shutting down HTTP server...")
@@ -147,4 +143,14 @@ func main() {
 	if listenErr := httpSrv.ListenAndServe(); listenErr != nil && listenErr != http.ErrServerClosed {
 		log.Fatalf("HTTP server listen and serve error: %v", listenErr)
 	}
+}
+
+// unsubscriberAdapter narrows ContactService to the httptransport.Unsubscriber
+// interface (the HTTP route only needs the by-code unsubscribe, discarding the
+// returned contact).
+type unsubscriberAdapter struct{ svc *service.ContactService }
+
+func (u unsubscriberAdapter) UnsubscribeByCode(ctx context.Context, code string) error {
+	_, err := u.svc.UnsubscribeByCode(ctx, code)
+	return err
 }
