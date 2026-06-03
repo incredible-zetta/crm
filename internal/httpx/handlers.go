@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -33,11 +34,24 @@ func (h *Handlers) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /healthz", h.handleHealth)
 }
 
+func isSafeRedirect(target string) bool {
+	u, err := url.Parse(target)
+	if err != nil {
+		return false
+	}
+	return (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
+}
+
 func (h *Handlers) handleClick(w http.ResponseWriter, r *http.Request) {
 	code := r.PathValue("code")
 
 	target, campaignID, contactID, err := h.Links.GetLink(r.Context(), code)
 	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	if !isSafeRedirect(target) {
 		http.NotFound(w, r)
 		return
 	}
@@ -51,7 +65,9 @@ func (h *Handlers) handleClick(w http.ResponseWriter, r *http.Request) {
 		"ua": r.UserAgent(),
 	}
 
-	_ = h.Events.LogEvent(r.Context(), cID, campaignID, "click", code, meta)
+	if h.Events != nil {
+		_ = h.Events.LogEvent(r.Context(), cID, campaignID, "click", code, meta)
+	}
 
 	http.Redirect(w, r, target, http.StatusFound)
 }
@@ -70,7 +86,9 @@ func (h *Handlers) handleOpen(w http.ResponseWriter, r *http.Request) {
 		"ua": r.UserAgent(),
 	}
 
-	_ = h.Events.LogEvent(r.Context(), 0, nil, "open", code, meta)
+	if h.Events != nil {
+		_ = h.Events.LogEvent(r.Context(), 0, nil, "open", code, meta)
+	}
 
 	w.Header().Set("Content-Type", "image/gif")
 	w.Header().Set("Cache-Control", "no-store")
@@ -92,7 +110,7 @@ func (h *Handlers) handleExport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s.csv", id))
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename=%q`, id+".csv"))
 	http.ServeFile(w, r, path)
 }
 

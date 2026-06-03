@@ -419,3 +419,70 @@ func TestHealth(t *testing.T) {
 		t.Errorf("expected Content-Type containing 'text/plain', got '%s'", contentType)
 	}
 }
+
+func TestClickRejectsUnsafeScheme(t *testing.T) {
+	fakeLinks := &FakeLinks{
+		GetLinkFn: func(ctx context.Context, code string) (string, *int64, *int64, error) {
+			return "javascript:alert(1)", nil, nil, nil
+		},
+	}
+	fakeEvents := &FakeEvents{}
+	fakeExports := &FakeExports{}
+
+	h := &Handlers{
+		Links:   fakeLinks,
+		Events:  fakeEvents,
+		Exports: fakeExports,
+	}
+
+	mux := http.NewServeMux()
+	h.Register(mux)
+
+	req := httptest.NewRequest("GET", "/t/unsafe", nil)
+	rec := httptest.NewRecorder()
+
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("expected status 404, got %d", rec.Code)
+	}
+	loc := rec.Header().Get("Location")
+	if loc != "" {
+		t.Errorf("expected empty Location header, got '%s'", loc)
+	}
+}
+
+func TestHandlersWithNilEvents(t *testing.T) {
+	fakeLinks := &FakeLinks{
+		GetLinkFn: func(ctx context.Context, code string) (string, *int64, *int64, error) {
+			return "https://dest.example/x", nil, nil, nil
+		},
+	}
+
+	h := &Handlers{
+		Links:   fakeLinks,
+		Events:  nil, // explicitly nil to ensure nil check works
+		Exports: &FakeExports{},
+	}
+
+	mux := http.NewServeMux()
+	h.Register(mux)
+
+	// Test click redirects successfully with nil Events
+	reqClick := httptest.NewRequest("GET", "/t/abc", nil)
+	recClick := httptest.NewRecorder()
+	mux.ServeHTTP(recClick, reqClick)
+
+	if recClick.Code != http.StatusFound {
+		t.Errorf("expected click status 302, got %d", recClick.Code)
+	}
+
+	// Test open succeeds with nil Events
+	reqOpen := httptest.NewRequest("GET", "/o/xyz.png", nil)
+	recOpen := httptest.NewRecorder()
+	mux.ServeHTTP(recOpen, reqOpen)
+
+	if recOpen.Code != http.StatusOK {
+		t.Errorf("expected open status 200, got %d", recOpen.Code)
+	}
+}
