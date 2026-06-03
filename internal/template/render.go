@@ -15,6 +15,8 @@ type Rendered struct {
 	Subject, HTML, Text string
 }
 
+// Render parses the template and executes it with the provided variables.
+// Supports flat top-level variables ({{.Key}}). Missing top-level keys render as empty.
 func Render(tmpl string, vars map[string]any) (string, error) {
 	t, err := texttemplate.New("tmpl").Option("missingkey=zero").Parse(tmpl)
 	if err != nil {
@@ -33,9 +35,7 @@ func Render(tmpl string, vars map[string]any) (string, error) {
 		return "", fmt.Errorf("failed to execute template: %w", err)
 	}
 
-	res := buf.String()
-	res = strings.ReplaceAll(res, "<no value>", "")
-	return res, nil
+	return buf.String(), nil
 }
 
 func prePopulateMissingKeys(node parse.Node, vars map[string]any) {
@@ -58,7 +58,7 @@ func prePopulateMissingKeys(node parse.Node, vars map[string]any) {
 			prePopulateMissingKeys(arg, vars)
 		}
 	case *parse.FieldNode:
-		if len(n.Ident) > 0 {
+		if len(n.Ident) == 1 {
 			key := n.Ident[0]
 			if _, exists := vars[key]; !exists {
 				vars[key] = ""
@@ -104,14 +104,11 @@ func RenderEmail(subject, html, text string, vars map[string]any) (Rendered, err
 }
 
 func isAbsoluteHTTP(s string) bool {
-	if !strings.HasPrefix(s, "http://") && !strings.HasPrefix(s, "https://") {
-		return false
-	}
-	u, err := url.Parse(s)
+	u, err := url.Parse(strings.TrimSpace(s))
 	if err != nil {
 		return false
 	}
-	return u.Host != ""
+	return u.Host != "" && (strings.EqualFold(u.Scheme, "http") || strings.EqualFold(u.Scheme, "https"))
 }
 
 func RewriteLinks(htmlStr, baseURL string, makeCode func(target string) (string, error)) (string, error) {
@@ -125,7 +122,7 @@ func RewriteLinks(htmlStr, baseURL string, makeCode func(target string) (string,
 			if err == io.EOF {
 				break
 			}
-			return "", err
+			return "", fmt.Errorf("tokenize html: %w", err)
 		}
 
 		t := z.Token()
@@ -135,9 +132,10 @@ func RewriteLinks(htmlStr, baseURL string, makeCode func(target string) (string,
 				for i, attr := range t.Attr {
 					if attr.Key == "href" {
 						if isAbsoluteHTTP(attr.Val) {
-							code, err := makeCode(attr.Val)
+							href := attr.Val
+							code, err := makeCode(href)
 							if err != nil {
-								return "", err
+								return "", fmt.Errorf("create tracking code for %q: %w", href, err)
 							}
 							base := strings.TrimSuffix(baseURL, "/")
 							t.Attr[i].Val = base + "/t/" + code

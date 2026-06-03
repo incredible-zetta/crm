@@ -183,3 +183,62 @@ func TestRewriteLinksCaseInsensitiveAndWhitespace(t *testing.T) {
 		t.Errorf("failed to preserve other attributes: %s", got)
 	}
 }
+
+func TestRenderLiteralNoValuePreserved(t *testing.T) {
+	got, err := template.Render("status: <no value> done", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := "status: <no value> done"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestRenderTopLevelMissingEmpty(t *testing.T) {
+	got, err := template.Render("Hi {{.Name}}!", map[string]any{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := "Hi !"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestRewriteLinksUppercaseScheme(t *testing.T) {
+	html := `<a href="HTTPS://example.com/x">go</a>`
+	makeCode := func(target string) (string, error) {
+		if target != "HTTPS://example.com/x" {
+			return "", errors.New("unexpected target")
+		}
+		return "abc123def456", nil
+	}
+	got, err := template.RewriteLinks(html, "https://crm.test", makeCode)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := `<a href="https://crm.test/t/abc123def456">go</a>`
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestRewriteLinksErrorWrapping(t *testing.T) {
+	sentinelErr := errors.New("sentinel database error")
+	html := `<a href="https://example.com/y">go</a>`
+	makeCode := func(target string) (string, error) {
+		return "", sentinelErr
+	}
+	_, err := template.RewriteLinks(html, "https://crm.test", makeCode)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, sentinelErr) {
+		t.Errorf("expected wrapped error to contain sentinelErr, got: %v", err)
+	}
+	expectedSub := `create tracking code for "https://example.com/y":`
+	if !strings.Contains(err.Error(), expectedSub) {
+		t.Errorf("expected error message to contain %q, got: %v", expectedSub, err)
+	}
+}
