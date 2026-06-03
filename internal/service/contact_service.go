@@ -241,6 +241,11 @@ func (s *ContactService) Export(ctx context.Context, f domain.ContactFilter) (ex
 	if err != nil {
 		return "", "", 0, fmt.Errorf("generate export ID: %w", err)
 	}
+	// Defence-in-depth: the id comes from idgen (hex), but never allow it to
+	// escape exportDir even if a future generator misbehaves.
+	if id != filepath.Base(id) || strings.ContainsAny(id, `/\`) {
+		return "", "", 0, fmt.Errorf("%w: invalid export id", domain.ErrValidation)
+	}
 
 	filename := id + ".csv"
 	filePath := filepath.Join(s.exportDir, filename)
@@ -337,6 +342,10 @@ func (s *ContactService) Unsubscribe(ctx context.Context, id int64) (domain.Cont
 
 	c, err := s.repo.Get(ctx, id)
 	if err != nil {
+		// The unsubscribe itself already succeeded (SetUnsubscribed returns
+		// ErrNotFound on 0 rows). Get filters soft-deleted rows, so a
+		// soft-deleted-but-now-unsubscribed contact yields ErrNotFound here;
+		// that is not a failure of the operation, so return an empty contact.
 		if errors.Is(err, domain.ErrNotFound) {
 			return domain.Contact{}, nil
 		}

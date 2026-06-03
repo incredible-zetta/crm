@@ -209,8 +209,12 @@ func TestExecuteCampaignMissingID(t *testing.T) {
 func TestExecuteUnknownKind(t *testing.T) {
 	svc := NewTaskService(&fakeTaskRepo{}, stubClock{}, nil, nil)
 	task := domain.ScheduledTask{Kind: domain.TaskKind("weird"), Payload: map[string]any{}}
-	if err := svc.Execute(context.Background(), task); err == nil {
+	err := svc.Execute(context.Background(), task)
+	if err == nil {
 		t.Fatal("expected error for unknown task kind")
+	}
+	if !errors.Is(err, domain.ErrValidation) {
+		t.Errorf("expected ErrValidation for unknown kind, got %v", err)
 	}
 }
 

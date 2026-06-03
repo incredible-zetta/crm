@@ -111,7 +111,7 @@ func (s *TaskService) Execute(ctx context.Context, t domain.ScheduledTask) error
 		return err
 
 	default:
-		return fmt.Errorf("unknown task kind %q", t.Kind)
+		return fmt.Errorf("%w: unknown task kind %q", domain.ErrValidation, t.Kind)
 	}
 }
 
