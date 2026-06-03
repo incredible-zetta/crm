@@ -35,7 +35,8 @@ CREATE TABLE IF NOT EXISTS campaigns (
   status ENUM('draft','scheduled','sending','sent','failed') NOT NULL DEFAULT 'draft',
   scheduled_at TIMESTAMP NULL,
   stats JSON,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_campaigns_template (template_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS tracking_links (
@@ -44,7 +45,9 @@ CREATE TABLE IF NOT EXISTS tracking_links (
   target_url TEXT NOT NULL,
   campaign_id BIGINT NULL,
   contact_id BIGINT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_links_campaign (campaign_id),
+  INDEX idx_links_contact (contact_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS email_events (

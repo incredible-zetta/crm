@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"fmt"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -16,7 +17,7 @@ import (
 func Open(dsn string) (*sql.DB, error) {
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("open mysql: %w", err)
 	}
 
 	db.SetMaxOpenConns(20)
@@ -25,7 +26,7 @@ func Open(dsn string) (*sql.DB, error) {
 
 	if err := db.Ping(); err != nil {
 		db.Close()
-		return nil, err
+		return nil, fmt.Errorf("ping database: %w", err)
 	}
 
 	return db, nil
@@ -35,21 +36,21 @@ func Open(dsn string) (*sql.DB, error) {
 func Migrate(db *sql.DB) error {
 	srcDriver, err := iofs.New(migrations.FS, ".")
 	if err != nil {
-		return err
+		return fmt.Errorf("migrate iofs source: %w", err)
 	}
 
 	dbDriver, err := mysqlmigrate.WithInstance(db, &mysqlmigrate.Config{})
 	if err != nil {
-		return err
+		return fmt.Errorf("migrate mysql driver: %w", err)
 	}
 
 	m, err := migrate.NewWithInstance("iofs", srcDriver, "mysql", dbDriver)
 	if err != nil {
-		return err
+		return fmt.Errorf("migrate init: %w", err)
 	}
 
 	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
-		return err
+		return fmt.Errorf("migrate up: %w", err)
 	}
 
 	return nil
