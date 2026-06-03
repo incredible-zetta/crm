@@ -15,9 +15,9 @@ import (
 type CampaignCreateIn struct {
 	Name        string         `json:"name" jsonschema:"Name of the campaign"`
 	TemplateID  int64          `json:"template_id" jsonschema:"Template ID to use for the campaign"`
-	Provider    string         `json:"provider" jsonschema:"Email provider to use (smtp or mailgun)"`
-	Segment     map[string]any `json:"segment" jsonschema:"Filter segment for contacts (keys: stage, company, tag, q)"`
-	ScheduledAt string         `json:"scheduled_at" jsonschema:"Optional scheduled time in RFC3339 format"`
+	Provider    string         `json:"provider,omitempty" jsonschema:"Email provider to use (smtp or mailgun)"`
+	Segment     map[string]any `json:"segment,omitempty" jsonschema:"Filter segment for contacts (keys: stage, company, tag, q)"`
+	ScheduledAt string         `json:"scheduled_at,omitempty" jsonschema:"Optional scheduled time in RFC3339 format"`
 }
 
 type CampaignCreateOut struct {
