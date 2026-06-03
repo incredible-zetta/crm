@@ -10,10 +10,14 @@ CREATE TABLE IF NOT EXISTS contacts (
   notes TEXT,
   custom JSON,
   source VARCHAR(80),
+  unsub_code CHAR(16) NULL UNIQUE,
+  unsubscribed_at TIMESTAMP NULL,
+  deleted_at TIMESTAMP NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_contacts_stage (stage),
-  INDEX idx_contacts_company (company)
+  INDEX idx_contacts_company (company),
+  INDEX idx_contacts_deleted (deleted_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS email_templates (
@@ -23,7 +27,10 @@ CREATE TABLE IF NOT EXISTS email_templates (
   body_html MEDIUMTEXT,
   body_text MEDIUMTEXT,
   variables JSON,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  deleted_at TIMESTAMP NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_templates_deleted (deleted_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS campaigns (
@@ -35,8 +42,10 @@ CREATE TABLE IF NOT EXISTS campaigns (
   status ENUM('draft','scheduled','sending','sent','failed') NOT NULL DEFAULT 'draft',
   scheduled_at TIMESTAMP NULL,
   stats JSON,
+  deleted_at TIMESTAMP NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  INDEX idx_campaigns_template (template_id)
+  INDEX idx_campaigns_template (template_id),
+  INDEX idx_campaigns_deleted (deleted_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS tracking_links (
@@ -54,7 +63,7 @@ CREATE TABLE IF NOT EXISTS email_events (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   contact_id BIGINT,
   campaign_id BIGINT NULL,
-  type ENUM('sent','delivered','open','click','bounce','failed') NOT NULL,
+  type ENUM('sent','delivered','open','click','bounce','failed','unsubscribe') NOT NULL,
   link_code CHAR(12) NULL,
   meta JSON,
   ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -67,7 +76,7 @@ CREATE TABLE IF NOT EXISTS scheduled_tasks (
   kind ENUM('email','campaign') NOT NULL,
   payload JSON,
   run_at TIMESTAMP NOT NULL,
-  status ENUM('pending','running','done','failed') NOT NULL DEFAULT 'pending',
+  status ENUM('pending','running','done','failed','cancelled') NOT NULL DEFAULT 'pending',
   attempts INT NOT NULL DEFAULT 0,
   last_error TEXT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
