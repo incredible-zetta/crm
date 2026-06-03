@@ -38,24 +38,53 @@ X-API-Key: <MCP_API_KEY>
 
 The key check is constant-time and fail-closed. Tracking and export routes are intentionally public because email recipients open them without credentials.
 
-## Tools (16)
+## Tools (28)
 
+### Contacts
 | Tool | Description |
 |------|-------------|
 | `contact_create` | Create a contact (only `email` required) |
+| `contact_get` | Fetch a single contact by `id` or `email` |
 | `contact_update` | Update a contact by `id` or `email` |
 | `contact_list` | List contacts — paginated (limit default 20, cap 100), cursor, field projection |
 | `contact_import` | Bulk import via array or CSV string; per-row error capture |
 | `contact_export` | Export filtered contacts to a CSV download URL (not inline rows) |
+| `contact_delete` | Soft-delete a contact; `purge: true` for a hard GDPR delete |
+| `contact_unsubscribe` | Mark a contact unsubscribed (suppresses future email) |
+
+### Email & templates
+| Tool | Description |
+|------|-------------|
 | `email_send` | Send one email to a contact or address (template or raw fields) |
-| `campaign_create` | Create a campaign for a filtered contact segment |
-| `campaign_send` | Dispatch a campaign to its matching segment |
-| `campaign_stats` | Delivery / open / click stats + top links for a campaign |
 | `template_create` | Create a reusable email template with merge variables |
+| `template_get` | Fetch a template by `id` or `name` |
 | `template_list` | List templates and their variables |
+| `template_update` | Update a template |
+| `template_delete` | Soft-delete a template |
 | `template_render` | Render a template with vars without sending (text by default, HTML opt-in) |
-| `tracking_link_create` | Wrap a URL in a click-tracked redirect |
+
+### Campaigns
+| Tool | Description |
+|------|-------------|
+| `campaign_create` | Create a campaign for a filtered contact segment |
+| `campaign_get` | Fetch a campaign by id |
+| `campaign_list` | List campaigns |
+| `campaign_update` | Update a campaign (name, template, provider, segment, schedule) |
+| `campaign_delete` | Soft-delete a campaign |
+| `campaign_send` | Dispatch a campaign to its segment (skips unsubscribed) |
+| `campaign_stats` | Delivery / open / click stats + top links for a campaign |
+
+### Scheduling & tracking
+| Tool | Description |
+|------|-------------|
 | `schedule_task` | Schedule an `email` or `campaign` task for future execution (RFC3339) |
+| `task_list` | List scheduled tasks (filter by status) |
+| `task_cancel` | Cancel a pending scheduled task |
+| `tracking_link_create` | Wrap a URL in a click-tracked redirect |
+
+### Ops & analytics
+| Tool | Description |
+|------|-------------|
 | `health_check` | Self-test DB and email connectivity |
 | `analytics_overview` | High-level CRM + communication metrics |
 
@@ -72,6 +101,16 @@ Responses are kept small for agent context budgets:
 
 Fixed enum: `new → contacted → qualified → proposal → won → lost`. Invalid stages are rejected.
 
+## Compliance & data lifecycle
+
+- **Unsubscribe.** Every contact has a public opt-out token. Campaign emails carry an unsubscribe footer linking to `GET /u/{code}`. Visiting it sets `unsubscribed_at` and logs an `unsubscribe` event. `email_send` and `campaign_send` refuse to send to unsubscribed contacts (campaigns count them as `skipped`).
+- **Soft delete.** `contact_delete`, `campaign_delete`, and `template_delete` set `deleted_at`; deleted rows are hidden from all lists, sends, and stats but remain recoverable.
+- **Hard delete (GDPR).** `contact_delete` with `purge: true` removes the row permanently.
+
+## Architecture
+
+Zetta CRM uses a hexagonal (ports & adapters) layout — `domain → port → service`, with `adapter/*` (MySQL, email, system) and `transport/*` (MCP, HTTP) on the edges. The service layer holds all business logic and is tested without a database. See [ARCHITECTURE.md](ARCHITECTURE.md) for the dependency rule, package map, and how to add a tool or swap an adapter.
+
 ## Configuration
 
 All config comes from environment variables (EasyPanel injects them). See `.env.example`.
@@ -87,13 +126,13 @@ All config comes from environment variables (EasyPanel injects them). See `.env.
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | no | — | SMTP sender config |
 | `MAILGUN_DOMAIN` / `MAILGUN_API_KEY` | no | — | Mailgun sender config (preferred when both set) |
 
-Provider selection: Mailgun is used when both `MAILGUN_DOMAIN` and `MAILGUN_API_KEY` are set, otherwise SMTP. If neither is configured the server still boots — email sending is disabled and `email_send`/`campaign_send` fail at runtime.
+Provider selection: Mailgun is used when both `MAILGUN_DOMAIN` and `MAILGUN_API_KEY` are set, otherwise SMTP. If neither is configured the server still boots with a disabled sender that fails explicitly at send time (`email_send`/`campaign_send` return a terse error).
 
 > If the DSN password contains shell metacharacters (e.g. `!`), single-quote the value.
 
 ## Database
 
-MySQL 8. Migrations are embedded in the binary and applied automatically on startup (`golang-migrate`). Tables: `contacts`, `email_templates`, `campaigns`, `tracking_links`, `email_events`, `scheduled_tasks`, `exports` (+ `schema_migrations`).
+MySQL 8. Migrations are embedded in the binary and applied automatically on startup (`golang-migrate`). Tables: `contacts`, `email_templates`, `campaigns`, `tracking_links`, `email_events`, `scheduled_tasks`, `exports` (+ `schema_migrations`). Contacts, campaigns, and templates carry a `deleted_at` for soft delete; contacts also carry `unsubscribed_at` + a public `unsub_code`.
 
 ## Run locally
 
@@ -163,18 +202,23 @@ Point any MCP client at `https://<your-domain>/mcp` using Streamable HTTP transp
 ### Project layout
 
 ```
-cmd/server/        main wiring, graceful shutdown, adapters
-internal/config    env config loader
-internal/db        connection, embedded migrations, repositories
-internal/email     SMTP + Mailgun senders, send pipeline
-internal/template  render + link rewrite + open pixel
-internal/httpx     public HTTP handlers (tracking, export, health)
-internal/mcpserver MCP server scaffold + auth + response helpers
-internal/mcptools  the 16 tools + Deps + adapters
-internal/scheduler in-process worker (claim → execute → mark)
-migrations/        0001_init schema (embedded)
-scripts/           test-mcp.sh smoke test
-docs/plans/        design + implementation plan
+cmd/server/                 composition root: wire adapters -> services -> transports
+internal/domain/            entities, enums, sentinel errors (pure, no internal deps)
+internal/port/              repository / sender / clock / idgen interfaces
+internal/service/           use-case layer: all business logic (tested without a DB)
+internal/adapter/mysql/     repositories implementing the ports against MySQL
+internal/adapter/email/     SMTP + Mailgun senders
+internal/adapter/system/    real clock + crypto id generator
+internal/template/          render + link rewrite + open pixel + unsubscribe footer
+internal/scheduler/         in-process worker (claim -> execute -> mark)
+internal/mcpserver/         MCP server scaffold + auth + terse response helpers
+internal/transport/mcp/     28 thin MCP tool handlers
+internal/transport/http/    public routes (click, open pixel, export, unsubscribe, health)
+internal/config/            env config loader
+migrations/                 0001_init schema (embedded)
+scripts/                    test-mcp.sh smoke test
+docs/plans/                 design + implementation plans
+ARCHITECTURE.md             the hexagon, dependency rule, how to extend
 ```
 
 ## Credits
