@@ -1,0 +1,18 @@
+# secrets
+.env
+.env.*
+!.env.example
+*_credentials_*.txt
+
+# go
+/bin/
+/tmp/
+*.exe
+*.test
+*.out
+vendor/
+
+# os/editor
+.DS_Store
+.idea/
+*.log
