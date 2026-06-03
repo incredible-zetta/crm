@@ -20,16 +20,16 @@ import (
 
 // In & Out structs for contact_create
 type ContactCreateIn struct {
-	Email     string         `json:"email" jsonschema:"required,description=Email address of the contact"`
-	FirstName string         `json:"first_name" jsonschema:"description=First name of the contact"`
-	LastName  string         `json:"last_name" jsonschema:"description=Last name of the contact"`
-	Company   string         `json:"company" jsonschema:"description=Company of the contact"`
-	Phone     string         `json:"phone" jsonschema:"description=Phone number of the contact"`
-	Stage     string         `json:"stage" jsonschema:"description=Lifecycle stage (new, contacted, qualified, proposal, won, lost)"`
-	Tags      []string       `json:"tags" jsonschema:"description=Tags associated with the contact"`
-	Notes     string         `json:"notes" jsonschema:"description=Notes or descriptions"`
-	Custom    map[string]any `json:"custom" jsonschema:"description=Custom metadata key-value pairs"`
-	Source    string         `json:"source" jsonschema:"description=Source channel of the contact"`
+	Email     string         `json:"email" jsonschema:"Email address of the contact"`
+	FirstName string         `json:"first_name" jsonschema:"First name of the contact"`
+	LastName  string         `json:"last_name" jsonschema:"Last name of the contact"`
+	Company   string         `json:"company" jsonschema:"Company of the contact"`
+	Phone     string         `json:"phone" jsonschema:"Phone number of the contact"`
+	Stage     string         `json:"stage" jsonschema:"Lifecycle stage (new, contacted, qualified, proposal, won, lost)"`
+	Tags      []string       `json:"tags" jsonschema:"Tags associated with the contact"`
+	Notes     string         `json:"notes" jsonschema:"Notes or descriptions"`
+	Custom    map[string]any `json:"custom" jsonschema:"Custom metadata key-value pairs"`
+	Source    string         `json:"source" jsonschema:"Source channel of the contact"`
 }
 
 type ContactCreateOut struct {
@@ -40,17 +40,17 @@ type ContactCreateOut struct {
 
 // In & Out structs for contact_update
 type ContactUpdateIn struct {
-	ID        int64           `json:"id" jsonschema:"description=ID of the contact to update. Either ID or Email must be provided."`
-	Email     string          `json:"email" jsonschema:"description=Email of the contact to update (used if ID is 0/omitted)."`
-	FirstName *string         `json:"first_name" jsonschema:"description=Updated first name"`
-	LastName  *string         `json:"last_name" jsonschema:"description=Updated last name"`
-	Company   *string         `json:"company" jsonschema:"description=Updated company"`
-	Phone     *string         `json:"phone" jsonschema:"description=Updated phone"`
-	Stage     *string         `json:"stage" jsonschema:"description=Updated stage"`
-	Tags      *[]string       `json:"tags" jsonschema:"description=Updated tags"`
-	Notes     *string         `json:"notes" jsonschema:"description=Updated notes"`
-	Custom    *map[string]any `json:"custom" jsonschema:"description=Updated custom properties"`
-	Source    *string         `json:"source" jsonschema:"description=Updated source"`
+	ID        int64           `json:"id" jsonschema:"ID of the contact to update. Either ID or Email must be provided."`
+	Email     string          `json:"email" jsonschema:"Email of the contact to update (used if ID is 0/omitted)."`
+	FirstName *string         `json:"first_name" jsonschema:"Updated first name"`
+	LastName  *string         `json:"last_name" jsonschema:"Updated last name"`
+	Company   *string         `json:"company" jsonschema:"Updated company"`
+	Phone     *string         `json:"phone" jsonschema:"Updated phone"`
+	Stage     *string         `json:"stage" jsonschema:"Updated stage"`
+	Tags      *[]string       `json:"tags" jsonschema:"Updated tags"`
+	Notes     *string         `json:"notes" jsonschema:"Updated notes"`
+	Custom    *map[string]any `json:"custom" jsonschema:"Updated custom properties"`
+	Source    *string         `json:"source" jsonschema:"Updated source"`
 }
 
 type ContactUpdateOut struct {
@@ -61,13 +61,13 @@ type ContactUpdateOut struct {
 
 // In & Out structs for contact_list
 type ContactListIn struct {
-	Stage   string   `json:"stage" jsonschema:"description=Filter by stage"`
-	Company string   `json:"company" jsonschema:"description=Filter by company"`
-	Tag     string   `json:"tag" jsonschema:"description=Filter by tag"`
-	Q       string   `json:"q" jsonschema:"description=Filter by search query (name, email, company)"`
-	Limit   int      `json:"limit" jsonschema:"description=Max results to return (default 20, cap 100)"`
-	Cursor  int64    `json:"cursor" jsonschema:"description=Pagination cursor"`
-	Fields  []string `json:"fields" jsonschema:"description=Optional projection fields to return. If empty, a compact default is returned."`
+	Stage   string   `json:"stage" jsonschema:"Filter by stage"`
+	Company string   `json:"company" jsonschema:"Filter by company"`
+	Tag     string   `json:"tag" jsonschema:"Filter by tag"`
+	Q       string   `json:"q" jsonschema:"Filter by search query (name, email, company)"`
+	Limit   int      `json:"limit" jsonschema:"Max results to return (default 20, cap 100)"`
+	Cursor  int64    `json:"cursor" jsonschema:"Pagination cursor"`
+	Fields  []string `json:"fields" jsonschema:"Optional projection fields to return. If empty, a compact default is returned."`
 }
 
 type ContactListOut struct {
@@ -79,7 +79,7 @@ type ContactListOut struct {
 
 // In & Out structs for contact_import
 type ContactInput struct {
-	Email     string         `json:"email" jsonschema:"required"`
+	Email     string         `json:"email"`
 	FirstName string         `json:"first_name"`
 	LastName  string         `json:"last_name"`
 	Company   string         `json:"company"`
@@ -92,8 +92,8 @@ type ContactInput struct {
 }
 
 type ContactImportIn struct {
-	Contacts []ContactInput `json:"contacts" jsonschema:"description=Array of contact input objects to import"`
-	CSV      string         `json:"csv" jsonschema:"description=CSV data to import. Header must be email,first_name,last_name,company,phone,stage,tags,source"`
+	Contacts []ContactInput `json:"contacts" jsonschema:"Array of contact input objects to import"`
+	CSV      string         `json:"csv" jsonschema:"CSV data to import. Header must be email,first_name,last_name,company,phone,stage,tags,source"`
 }
 
 type ContactImportOut struct {
@@ -105,10 +105,10 @@ type ContactImportOut struct {
 
 // In & Out structs for contact_export
 type ContactExportIn struct {
-	Stage   string `json:"stage" jsonschema:"description=Filter by stage"`
-	Company string `json:"company" jsonschema:"description=Filter by company"`
-	Tag     string `json:"tag" jsonschema:"description=Filter by tag"`
-	Q       string `json:"q" jsonschema:"description=Filter by search query"`
+	Stage   string `json:"stage" jsonschema:"Filter by stage"`
+	Company string `json:"company" jsonschema:"Filter by company"`
+	Tag     string `json:"tag" jsonschema:"Filter by tag"`
+	Q       string `json:"q" jsonschema:"Filter by search query"`
 }
 
 type ContactExportOut struct {

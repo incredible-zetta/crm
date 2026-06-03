@@ -11,9 +11,9 @@ import (
 )
 
 type TrackingLinkCreateIn struct {
-	TargetURL  string `json:"target_url" jsonschema:"required,description=The absolute target URL"`
-	CampaignID *int64 `json:"campaign_id" jsonschema:"description=Optional campaign ID"`
-	ContactID  *int64 `json:"contact_id" jsonschema:"description=Optional contact ID"`
+	TargetURL  string `json:"target_url" jsonschema:"The absolute target URL"`
+	CampaignID *int64 `json:"campaign_id" jsonschema:"Optional campaign ID"`
+	ContactID  *int64 `json:"contact_id" jsonschema:"Optional contact ID"`
 }
 
 type TrackingLinkCreateOut struct {

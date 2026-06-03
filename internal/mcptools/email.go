@@ -13,14 +13,14 @@ import (
 )
 
 type EmailSendIn struct {
-	ContactID  int64          `json:"contact_id" jsonschema:"description=ID of the contact. Required if To is empty."`
-	To         string         `json:"to" jsonschema:"description=Recipient email address. Required if ContactID is 0."`
-	CampaignID *int64         `json:"campaign_id" jsonschema:"description=Optional campaign ID association"`
-	TemplateID int64          `json:"template_id" jsonschema:"description=ID of email template to use"`
-	Subject    string         `json:"subject" jsonschema:"description=Subject of the email (used if TemplateID is 0)"`
-	HTML       string         `json:"html" jsonschema:"description=HTML body (used if TemplateID is 0)"`
-	Text       string         `json:"text" jsonschema:"description=Plain text body (used if TemplateID is 0)"`
-	Vars       map[string]any `json:"vars" jsonschema:"description=Template variables to merge"`
+	ContactID  int64          `json:"contact_id" jsonschema:"ID of the contact. Required if To is empty."`
+	To         string         `json:"to" jsonschema:"Recipient email address. Required if ContactID is 0."`
+	CampaignID *int64         `json:"campaign_id" jsonschema:"Optional campaign ID association"`
+	TemplateID int64          `json:"template_id" jsonschema:"ID of email template to use"`
+	Subject    string         `json:"subject" jsonschema:"Subject of the email (used if TemplateID is 0)"`
+	HTML       string         `json:"html" jsonschema:"HTML body (used if TemplateID is 0)"`
+	Text       string         `json:"text" jsonschema:"Plain text body (used if TemplateID is 0)"`
+	Vars       map[string]any `json:"vars" jsonschema:"Template variables to merge"`
 }
 
 type EmailSendOut struct {

@@ -12,11 +12,11 @@ import (
 )
 
 type TemplateCreateIn struct {
-	Name      string   `json:"name" jsonschema:"required,description=Unique template name"`
-	Subject   string   `json:"subject" jsonschema:"description=Subject template with optional merge fields"`
-	BodyHTML  string   `json:"body_html" jsonschema:"description=HTML body template with optional merge fields"`
-	BodyText  string   `json:"body_text" jsonschema:"description=Plain text body template with optional merge fields"`
-	Variables []string `json:"variables" jsonschema:"description=List of variables used in the template"`
+	Name      string   `json:"name" jsonschema:"Unique template name"`
+	Subject   string   `json:"subject" jsonschema:"Subject template with optional merge fields"`
+	BodyHTML  string   `json:"body_html" jsonschema:"HTML body template with optional merge fields"`
+	BodyText  string   `json:"body_text" jsonschema:"Plain text body template with optional merge fields"`
+	Variables []string `json:"variables" jsonschema:"List of variables used in the template"`
 }
 
 type TemplateCreateOut struct {
@@ -32,12 +32,12 @@ type TemplateListOut struct {
 }
 
 type TemplateRenderIn struct {
-	TemplateID int64          `json:"template_id" jsonschema:"description=ID of the email template to load and render"`
-	Subject    string         `json:"subject" jsonschema:"description=Raw subject template (used if TemplateID is 0)"`
-	BodyHTML   string         `json:"body_html" jsonschema:"description=Raw HTML body template (used if TemplateID is 0)"`
-	BodyText   string         `json:"body_text" jsonschema:"description=Raw Plain text body template (used if TemplateID is 0)"`
-	Vars       map[string]any `json:"vars" jsonschema:"description=Variable values to merge into the template"`
-	HTML       bool           `json:"html" jsonschema:"description=If true, also include the rendered HTML in the output"`
+	TemplateID int64          `json:"template_id" jsonschema:"ID of the email template to load and render"`
+	Subject    string         `json:"subject" jsonschema:"Raw subject template (used if TemplateID is 0)"`
+	BodyHTML   string         `json:"body_html" jsonschema:"Raw HTML body template (used if TemplateID is 0)"`
+	BodyText   string         `json:"body_text" jsonschema:"Raw Plain text body template (used if TemplateID is 0)"`
+	Vars       map[string]any `json:"vars" jsonschema:"Variable values to merge into the template"`
+	HTML       bool           `json:"html" jsonschema:"If true, also include the rendered HTML in the output"`
 }
 
 type TemplateRenderOut struct {

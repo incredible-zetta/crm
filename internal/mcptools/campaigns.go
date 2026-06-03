@@ -13,11 +13,11 @@ import (
 )
 
 type CampaignCreateIn struct {
-	Name        string         `json:"name" jsonschema:"required,description=Name of the campaign"`
-	TemplateID  int64          `json:"template_id" jsonschema:"required,description=Template ID to use for the campaign"`
-	Provider    string         `json:"provider" jsonschema:"description=Email provider to use (smtp or mailgun)"`
-	Segment     map[string]any `json:"segment" jsonschema:"description=Filter segment for contacts (keys: stage, company, tag, q)"`
-	ScheduledAt string         `json:"scheduled_at" jsonschema:"description=Optional scheduled time in RFC3339 format"`
+	Name        string         `json:"name" jsonschema:"Name of the campaign"`
+	TemplateID  int64          `json:"template_id" jsonschema:"Template ID to use for the campaign"`
+	Provider    string         `json:"provider" jsonschema:"Email provider to use (smtp or mailgun)"`
+	Segment     map[string]any `json:"segment" jsonschema:"Filter segment for contacts (keys: stage, company, tag, q)"`
+	ScheduledAt string         `json:"scheduled_at" jsonschema:"Optional scheduled time in RFC3339 format"`
 }
 
 type CampaignCreateOut struct {
@@ -27,7 +27,7 @@ type CampaignCreateOut struct {
 }
 
 type CampaignSendIn struct {
-	CampaignID int64 `json:"campaign_id" jsonschema:"required,description=ID of the campaign to send"`
+	CampaignID int64 `json:"campaign_id" jsonschema:"ID of the campaign to send"`
 }
 
 type CampaignSendOut struct {
@@ -70,13 +70,10 @@ func (d *Deps) CampaignCreate(ctx context.Context, req *mcp.CallToolRequest, in 
 	}, nil
 }
 
-func (d *Deps) CampaignSend(ctx context.Context, req *mcp.CallToolRequest, in CampaignSendIn) (*mcp.CallToolResult, CampaignSendOut, error) {
-	campaign, err := d.Repo.GetCampaign(ctx, in.CampaignID)
+func (d *Deps) RunCampaign(ctx context.Context, campaignID int64) (recipients, sent, failed int, err error) {
+	campaign, err := d.Repo.GetCampaign(ctx, campaignID)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
-			return mcpserver.Err("not_found", "campaign not found"), CampaignSendOut{}, nil
-		}
-		return nil, CampaignSendOut{}, fmt.Errorf("campaign_send get campaign: %w", err)
+		return 0, 0, 0, err
 	}
 
 	var filter db.ContactFilter
@@ -95,12 +92,11 @@ func (d *Deps) CampaignSend(ctx context.Context, req *mcp.CallToolRequest, in Ca
 		}
 	}
 
-	var recipients, sent, failed int
 	var cursor int64
 	for {
 		items, _, nextCursor, err := d.Repo.ListContacts(ctx, filter, 100, cursor)
 		if err != nil {
-			return nil, CampaignSendOut{}, fmt.Errorf("campaign_send list contacts: %w", err)
+			return 0, 0, 0, fmt.Errorf("campaign_send list contacts: %w", err)
 		}
 		if len(items) == 0 {
 			break
@@ -134,11 +130,23 @@ func (d *Deps) CampaignSend(ctx context.Context, req *mcp.CallToolRequest, in Ca
 	}
 
 	if err := d.Repo.UpdateCampaignStatus(ctx, campaign.ID, "sent"); err != nil {
-		return nil, CampaignSendOut{}, fmt.Errorf("campaign_send update status: %w", err)
+		return recipients, sent, failed, fmt.Errorf("campaign_send update status: %w", err)
+	}
+
+	return recipients, sent, failed, nil
+}
+
+func (d *Deps) CampaignSend(ctx context.Context, req *mcp.CallToolRequest, in CampaignSendIn) (*mcp.CallToolResult, CampaignSendOut, error) {
+	recipients, sent, failed, err := d.RunCampaign(ctx, in.CampaignID)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			return mcpserver.Err("not_found", "campaign not found"), CampaignSendOut{}, nil
+		}
+		return nil, CampaignSendOut{}, fmt.Errorf("campaign_send: %w", err)
 	}
 
 	return nil, CampaignSendOut{
-		CampaignID: campaign.ID,
+		CampaignID: in.CampaignID,
 		Recipients: recipients,
 		Sent:       sent,
 		Failed:     failed,

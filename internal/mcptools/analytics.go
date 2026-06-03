@@ -21,7 +21,7 @@ type AnalyticsOverviewOut struct {
 }
 
 type CampaignStatsIn struct {
-	CampaignID int64 `json:"campaign_id" jsonschema:"required,description=ID of the campaign"`
+	CampaignID int64 `json:"campaign_id" jsonschema:"ID of the campaign"`
 }
 
 type CampaignStatsOut struct {

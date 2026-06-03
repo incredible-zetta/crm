@@ -11,9 +11,9 @@ import (
 )
 
 type ScheduleTaskIn struct {
-	Kind    string         `json:"kind" jsonschema:"required,description=The kind of task (email or campaign)"`
-	Payload map[string]any `json:"payload" jsonschema:"description=JSON payload for the task"`
-	RunAt   string         `json:"run_at" jsonschema:"required,description=Execution time in RFC3339 format"`
+	Kind    string         `json:"kind" jsonschema:"The kind of task (email or campaign)"`
+	Payload map[string]any `json:"payload" jsonschema:"JSON payload for the task"`
+	RunAt   string         `json:"run_at" jsonschema:"Execution time in RFC3339 format"`
 }
 
 type ScheduleTaskOut struct {
