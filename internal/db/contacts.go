@@ -379,7 +379,7 @@ func (r *Repo) ListContacts(ctx context.Context, f ContactFilter, limit int, cur
 		listQuery += " WHERE " + strings.Join(queryParts, " AND ")
 	}
 	listQuery += " ORDER BY id ASC LIMIT ?"
-	queryArgs = append(queryArgs, limit)
+	queryArgs = append(queryArgs, limit+1)
 
 	rows, err := r.db.QueryContext(ctx, listQuery, queryArgs...)
 	if err != nil {
@@ -449,8 +449,11 @@ func (r *Repo) ListContacts(ctx context.Context, f ContactFilter, limit int, cur
 		return nil, 0, 0, fmt.Errorf("list contacts rows: %w", err)
 	}
 
-	if len(items) == limit {
-		nextCursor = items[len(items)-1].ID
+	if len(items) > limit {
+		items = items[:limit]
+		nextCursor = items[limit-1].ID
+	} else {
+		nextCursor = 0
 	}
 
 	return items, total, nextCursor, nil

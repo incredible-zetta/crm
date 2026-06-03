@@ -25,6 +25,7 @@ func getTestDB(t *testing.T) *Repo {
 	}
 	t.Cleanup(func() {
 		_, _ = d.Exec("DELETE FROM contacts WHERE email LIKE 't3_%'")
+		_, _ = d.Exec("DELETE FROM contacts WHERE email LIKE 't3b_%'")
 		d.Close()
 	})
 	return NewRepo(d)
@@ -32,6 +33,10 @@ func getTestDB(t *testing.T) *Repo {
 
 func makeUniqueEmail(prefix string) string {
 	return fmt.Sprintf("t3_%d_%s@test.local", time.Now().UnixNano(), prefix)
+}
+
+func makeUniqueEmailT3B(prefix string) string {
+	return fmt.Sprintf("t3b_%d_%s@test.local", time.Now().UnixNano(), prefix)
 }
 
 func TestUpsertInsertThenUpdate(t *testing.T) {
@@ -213,50 +218,44 @@ func TestListFieldsTagQuery(t *testing.T) {
 	repo := getTestDB(t)
 	ctx := context.Background()
 
+	uniqueSuffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	uniqueTag := fmt.Sprintf("vip_%s", uniqueSuffix)
+	uniqueCompany := fmt.Sprintf("Wonderland_%s", uniqueSuffix)
 	email := makeUniqueEmail("tag-query")
+
 	_, err := repo.UpsertContact(ctx, Contact{
 		Email:     email,
 		FirstName: "Alice",
 		LastName:  "Wonder",
-		Company:   "Wonderland",
-		Tags:      []string{"vip", "curious"},
+		Company:   uniqueCompany,
+		Tags:      []string{uniqueTag, "curious"},
 	})
 	if err != nil {
 		t.Fatalf("failed to insert test contact: %v", err)
 	}
 
 	// Search by Tag
-	items, total, _, err := repo.ListContacts(ctx, ContactFilter{Tag: "vip"}, 10, 0)
+	items, total, _, err := repo.ListContacts(ctx, ContactFilter{Tag: uniqueTag}, 10, 0)
 	if err != nil {
 		t.Fatalf("ListContacts by Tag: %v", err)
 	}
 
-	found := false
-	for _, item := range items {
-		if item.Email == email {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Errorf("expected to find contact by tag 'vip' (total match count: %d)", total)
+	if len(items) != 1 {
+		t.Errorf("expected exactly 1 item for unique tag, got %d (total=%d)", len(items), total)
+	} else if items[0].Email != email {
+		t.Errorf("expected contact email %s, got %s", email, items[0].Email)
 	}
 
-	// Search by Q (query email/first/last/company)
-	itemsQ, _, _, err := repo.ListContacts(ctx, ContactFilter{Q: "Wond"}, 10, 0)
+	// Search by Q (query email/first/last/company) using the unique company substring
+	itemsQ, totalQ, _, err := repo.ListContacts(ctx, ContactFilter{Q: uniqueCompany}, 10, 0)
 	if err != nil {
 		t.Fatalf("ListContacts by Q: %v", err)
 	}
 
-	foundQ := false
-	for _, item := range itemsQ {
-		if item.Email == email {
-			foundQ = true
-			break
-		}
-	}
-	if !foundQ {
-		t.Errorf("expected to find contact by Q 'Wond'")
+	if len(itemsQ) != 1 {
+		t.Errorf("expected exactly 1 item for unique Q, got %d (totalQ=%d)", len(itemsQ), totalQ)
+	} else if itemsQ[0].Email != email {
+		t.Errorf("expected contact email %s, got %s", email, itemsQ[0].Email)
 	}
 }
 
@@ -361,5 +360,141 @@ func TestUpdateContactPatch(t *testing.T) {
 	_, err = repo.UpdateContact(ctx, c.ID, ContactPatch{Stage: &badStage})
 	if err == nil {
 		t.Error("expected error updating with invalid stage, got nil")
+	}
+}
+
+func TestGetContactByEmailNotFound(t *testing.T) {
+	repo := getTestDB(t)
+	ctx := context.Background()
+
+	email := fmt.Sprintf("t3b_nope_%d@test.local", time.Now().UnixNano())
+	_, err := repo.GetContactByEmail(ctx, email)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got: %v", err)
+	}
+}
+
+func TestListLimitDefaultAndCap(t *testing.T) {
+	repo := getTestDB(t)
+	ctx := context.Background()
+
+	companyName := fmt.Sprintf("t3b_limit_%d", time.Now().UnixNano())
+
+	// Insert 3 contacts for this unique company
+	for i := 1; i <= 3; i++ {
+		_, err := repo.UpsertContact(ctx, Contact{
+			Email:     makeUniqueEmailT3B(fmt.Sprintf("limit_cap_%d", i)),
+			FirstName: fmt.Sprintf("Cap%d", i),
+			Company:   companyName,
+			Stage:     "new",
+		})
+		if err != nil {
+			t.Fatalf("failed to insert contact: %v", err)
+		}
+	}
+
+	// 1. Call ListContacts with limit=0 (which should default to 20).
+	items, total, _, err := repo.ListContacts(ctx, ContactFilter{Company: companyName}, 0, 0)
+	if err != nil {
+		t.Fatalf("ListContacts with limit=0: %v", err)
+	}
+	if total != 3 {
+		t.Errorf("expected total 3, got %d", total)
+	}
+	if len(items) != 3 {
+		t.Errorf("expected 3 items (since effective limit is 20), got %d", len(items))
+	}
+
+	// 2. Call ListContacts with limit=500 (which must be capped at 100).
+	itemsLarge, totalLarge, _, err := repo.ListContacts(ctx, ContactFilter{Company: companyName}, 500, 0)
+	if err != nil {
+		t.Fatalf("ListContacts with limit=500: %v", err)
+	}
+	if totalLarge != 3 {
+		t.Errorf("expected total 3, got %d", totalLarge)
+	}
+	if len(itemsLarge) > 100 {
+		t.Errorf("expected items clamped to <= 100, got %d", len(itemsLarge))
+	}
+	if len(itemsLarge) != 3 {
+		t.Errorf("expected 3 items, got %d", len(itemsLarge))
+	}
+}
+
+func TestNextCursorExactFullPage(t *testing.T) {
+	repo := getTestDB(t)
+	ctx := context.Background()
+
+	companyName := fmt.Sprintf("t3b_exact_full_%d", time.Now().UnixNano())
+
+	// Insert exactly 2 matching contacts
+	var inserted []Contact
+	for i := 1; i <= 2; i++ {
+		c, err := repo.UpsertContact(ctx, Contact{
+			Email:     makeUniqueEmailT3B(fmt.Sprintf("exact_%d", i)),
+			FirstName: fmt.Sprintf("Exact%d", i),
+			Company:   companyName,
+			Stage:     "new",
+		})
+		if err != nil {
+			t.Fatalf("failed to insert contact: %v", err)
+		}
+		inserted = append(inserted, c)
+	}
+
+	filter := ContactFilter{Company: companyName}
+
+	// 1. ListContacts with limit=2 (the exact number of items matching)
+	items, total, nextCursor, err := repo.ListContacts(ctx, filter, 2, 0)
+	if err != nil {
+		t.Fatalf("ListContacts with limit=2: %v", err)
+	}
+
+	if total != 2 {
+		t.Errorf("expected total 2, got %d", total)
+	}
+	if len(items) != 2 {
+		t.Errorf("expected 2 items, got %d", len(items))
+	}
+	// The core bug fix: since there is no next page, nextCursor must be 0!
+	if nextCursor != 0 {
+		t.Errorf("expected nextCursor to be 0 for exact full page, got %d", nextCursor)
+	}
+
+	// 2. ListContacts with limit=1 (first page)
+	itemsPage1, totalPage1, nextCursorPage1, err := repo.ListContacts(ctx, filter, 1, 0)
+	if err != nil {
+		t.Fatalf("ListContacts page 1 with limit=1: %v", err)
+	}
+	if totalPage1 != 2 {
+		t.Errorf("expected total 2, got %d", totalPage1)
+	}
+	if len(itemsPage1) != 1 {
+		t.Errorf("expected 1 item, got %d", len(itemsPage1))
+	}
+	if nextCursorPage1 != inserted[0].ID {
+		t.Errorf("expected nextCursor to be %d (ID of first contact), got %d", inserted[0].ID, nextCursorPage1)
+	}
+
+	// 3. ListContacts with limit=1 and cursor=nextCursorPage1 (second page)
+	itemsPage2, totalPage2, nextCursorPage2, err := repo.ListContacts(ctx, filter, 1, nextCursorPage1)
+	if err != nil {
+		t.Fatalf("ListContacts page 2 with limit=1: %v", err)
+	}
+	if totalPage2 != 2 {
+		t.Errorf("expected total 2, got %d", totalPage2)
+	}
+	if len(itemsPage2) != 1 {
+		t.Errorf("expected 1 item, got %d", len(itemsPage2))
+	}
+	if itemsPage2[0].ID != inserted[1].ID {
+		t.Errorf("expected second contact ID %d, got %d", inserted[1].ID, itemsPage2[0].ID)
+	}
+	if nextCursorPage2 != 0 {
+		t.Errorf("expected nextCursor for last page to be 0, got %d", nextCursorPage2)
 	}
 }
