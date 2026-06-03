@@ -25,11 +25,10 @@ type Executor interface {
 }
 
 type Worker struct {
-	Claimer     TaskClaimer
-	Exec        Executor
-	Batch       int              // max tasks per tick (default 10)
-	MaxAttempts int              // after this many attempts, give up (mark failed permanently). default 3
-	Now         func() time.Time // injectable clock; default time.Now
+	Claimer TaskClaimer
+	Exec    Executor
+	Batch   int              // max tasks per tick (default 10)
+	Now     func() time.Time // injectable clock; default time.Now
 }
 
 // RunOnce performs one tick of scheduling:
@@ -41,8 +40,7 @@ type Worker struct {
 // 3. Return count processed (attempted) and the FIRST claim error if ClaimDue itself failed.
 //   - If a MarkDone/MarkFailed call errors, continue (best-effort) but we collect/return nothing for those.
 //
-// 4. Defaults: Batch<=0 -> 10, MaxAttempts<=0 -> 3, Now nil -> time.Now.
-//   - NOTE: MaxAttempts enforcement — since ClaimDue only returns pending tasks and MarkFailed flips status to 'failed' (terminal in our schema), tasks don't auto-retry in the current schema (failed is terminal). So MaxAttempts is effectively informational here; we do not implement re-queueing. Keep MaxAttempts field but document that 'failed' is terminal in this schema (no automatic retry). Just mark failed on error.
+// 4. Defaults: Batch<=0 -> 10, Now nil -> time.Now.
 func (w *Worker) RunOnce(ctx context.Context) (processed int, err error) {
 	batch := w.Batch
 	if batch <= 0 {
@@ -80,8 +78,12 @@ func (w *Worker) RunOnce(ctx context.Context) (processed int, err error) {
 }
 
 // Start runs an initial RunOnce immediately, then loops calling RunOnce on each interval tick until ctx.Done().
+// If interval <= 0, it defaults to a sane value of 15 seconds to prevent ticker panics.
 // Log errors from RunOnce but keep looping.
 func (w *Worker) Start(ctx context.Context, interval time.Duration) {
+	if interval <= 0 {
+		interval = 15 * time.Second
+	}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 

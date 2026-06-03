@@ -13,11 +13,13 @@ type fakeClaimer struct {
 	tasksToClaim []Task
 	claimed      bool
 	claimErr     error
+	markDoneErr  func(id int64) error
 
 	doneCalls   []int64
 	failedCalls map[int64]string
 
 	claimLimits []int
+	lastCtx     context.Context
 }
 
 func (fc *fakeClaimer) ClaimDue(ctx context.Context, now time.Time, limit int) ([]Task, error) {
@@ -25,6 +27,7 @@ func (fc *fakeClaimer) ClaimDue(ctx context.Context, now time.Time, limit int) (
 	defer fc.mu.Unlock()
 
 	fc.claimLimits = append(fc.claimLimits, limit)
+	fc.lastCtx = ctx
 
 	if fc.claimErr != nil {
 		return nil, fc.claimErr
@@ -40,6 +43,9 @@ func (fc *fakeClaimer) MarkDone(ctx context.Context, id int64) error {
 	fc.mu.Lock()
 	defer fc.mu.Unlock()
 	fc.doneCalls = append(fc.doneCalls, id)
+	if fc.markDoneErr != nil {
+		return fc.markDoneErr(id)
+	}
 	return nil
 }
 
@@ -57,12 +63,14 @@ type fakeExecutor struct {
 	mu          sync.Mutex
 	executeFunc func(Task) error
 	executedIDs []int64
+	lastCtx     context.Context
 }
 
 func (fe *fakeExecutor) Execute(ctx context.Context, t Task) error {
 	fe.mu.Lock()
 	defer fe.mu.Unlock()
 	fe.executedIDs = append(fe.executedIDs, t.ID)
+	fe.lastCtx = ctx
 	if fe.executeFunc != nil {
 		return fe.executeFunc(t)
 	}
@@ -212,10 +220,17 @@ func TestRunOnceDefaults(t *testing.T) {
 	}
 }
 
-func TestStartStopsOnContext(t *testing.T) {
+func TestRunOnceMarkErrorsBestEffort(t *testing.T) {
 	fc := &fakeClaimer{
 		tasksToClaim: []Task{
-			{ID: 101, Kind: "email"},
+			{ID: 1, Kind: "email"},
+			{ID: 2, Kind: "campaign"},
+		},
+		markDoneErr: func(id int64) error {
+			if id == 1 {
+				return errors.New("mark done failed")
+			}
+			return nil
 		},
 	}
 	fe := &fakeExecutor{}
@@ -225,22 +240,115 @@ func TestStartStopsOnContext(t *testing.T) {
 		Exec:    fe,
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	processed, err := w.RunOnce(context.Background())
+	if err != nil {
+		t.Fatalf("expected no error (errors from MarkDone should be swallowed/best-effort), got %v", err)
+	}
+	if processed != 2 {
+		t.Errorf("expected processed 2, got %d", processed)
+	}
+
+	fc.mu.Lock()
+	defer fc.mu.Unlock()
+	if len(fc.doneCalls) != 2 {
+		t.Errorf("expected both tasks to be processed and have MarkDone called, got %d", len(fc.doneCalls))
+	}
+}
+
+func TestRunOncePropagatesContext(t *testing.T) {
+	type contextKey string
+	key := contextKey("sentinel-key")
+	expectedVal := "sentinel-value"
+
+	ctx := context.WithValue(context.Background(), key, expectedVal)
+
+	fc := &fakeClaimer{
+		tasksToClaim: []Task{
+			{ID: 42, Kind: "email"},
+		},
+	}
+	fe := &fakeExecutor{}
+
+	w := &Worker{
+		Claimer: fc,
+		Exec:    fe,
+	}
+
+	_, err := w.RunOnce(ctx)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	fc.mu.Lock()
+	claimCtx := fc.lastCtx
+	fc.mu.Unlock()
+
+	if claimCtx == nil {
+		t.Fatal("ClaimDue context was nil")
+	}
+	if val := claimCtx.Value(key); val != expectedVal {
+		t.Errorf("expected ClaimDue context value to be %q, got %q", expectedVal, val)
+	}
+
+	fe.mu.Lock()
+	execCtx := fe.lastCtx
+	fe.mu.Unlock()
+
+	if execCtx == nil {
+		t.Fatal("Execute context was nil")
+	}
+	if val := execCtx.Value(key); val != expectedVal {
+		t.Errorf("expected Execute context value to be %q, got %q", expectedVal, val)
+	}
+}
+
+func TestStartStopsOnContext(t *testing.T) {
+	runSignal := make(chan struct{})
+	var once sync.Once
+
+	fc := &fakeClaimer{
+		tasksToClaim: []Task{
+			{ID: 101, Kind: "email"},
+		},
+	}
+	fe := &fakeExecutor{
+		executeFunc: func(task Task) error {
+			once.Do(func() {
+				close(runSignal)
+			})
+			return nil
+		},
+	}
+
+	w := &Worker{
+		Claimer: fc,
+		Exec:    fe,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Start should run the first RunOnce immediately, then block or loop on ticker.
-	// Since we set timeout to 50ms and interval to 10ms, it should stop on context cancel.
 	done := make(chan struct{})
 	go func() {
-		w.Start(ctx, 10*time.Millisecond)
+		w.Start(ctx, 10*time.Second)
 		close(done)
 	}()
 
+	// Wait for the first task to start executing
+	select {
+	case <-runSignal:
+		// Now cancel the context
+		cancel()
+	case <-time.After(2 * time.Second):
+		t.Fatal("Start did not execute the first task within timeout")
+	}
+
+	// Assert Start stops promptly after cancellation
 	select {
 	case <-done:
-		// success: returned promptly
-	case <-time.After(500 * time.Millisecond):
-		t.Fatal("Start did not return within timeout")
+		// success: returned promptly after cancellation
+	case <-time.After(1 * time.Second):
+		t.Fatal("Start did not exit promptly after context cancellation")
 	}
 
 	fe.mu.Lock()
@@ -248,4 +356,21 @@ func TestStartStopsOnContext(t *testing.T) {
 	if len(fe.executedIDs) == 0 {
 		t.Errorf("expected executor to have run at least once")
 	}
+}
+
+func TestStartIntervalGuard(t *testing.T) {
+	fc := &fakeClaimer{}
+	fe := &fakeExecutor{}
+
+	w := &Worker{
+		Claimer: fc,
+		Exec:    fe,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	// Cancel immediately so Start returns after the initial RunOnce without waiting
+	cancel()
+
+	// Should not panic when interval <= 0
+	w.Start(ctx, 0)
 }
