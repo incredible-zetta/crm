@@ -55,3 +55,8 @@ func Migrate(db *sql.DB) error {
 
 	return nil
 }
+
+// DB returns the underlying sql.DB connection for direct queries.
+func (r *Repo) DB() *sql.DB {
+	return r.db
+}
