@@ -282,7 +282,7 @@ func TestCampaignRepo(t *testing.T) {
 	repo := store.Campaigns()
 	ctx := context.Background()
 
-	name := "t_mysql_campaign_1"
+	name := fmt.Sprintf("t_mysql_campaign_%d", time.Now().UnixNano())
 
 	// 1. Create campaign
 	c := domain.Campaign{
@@ -421,7 +421,7 @@ func TestTemplateRepo(t *testing.T) {
 	repo := store.Templates()
 	ctx := context.Background()
 
-	name := "t_mysql_template_1"
+	name := fmt.Sprintf("t_mysql_template_%d", time.Now().UnixNano())
 
 	// 1. Create
 	tpl := domain.Template{

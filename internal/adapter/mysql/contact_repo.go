@@ -383,7 +383,7 @@ func (r *contactRepo) SetUnsubCode(ctx context.Context, id int64, code string) e
 	return nil
 }
 
-func scanContact(row interface { Scan(dest ...any) error }) (domain.Contact, error) {
+func scanContact(row interface{ Scan(dest ...any) error }) (domain.Contact, error) {
 	var c domain.Contact
 	var (
 		firstName      sql.NullString

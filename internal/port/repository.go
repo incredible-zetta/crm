@@ -14,6 +14,10 @@ type Paging struct {
 }
 
 // ContactPage is a generic paged result.
+//
+// Total is the grand total of rows matching the filter (ignoring the cursor),
+// suitable for "showing 1-20 of 137" displays. NextCursor is 0 when there is
+// no further page.
 type ContactPage struct {
 	Items      []domain.Contact
 	Total      int
