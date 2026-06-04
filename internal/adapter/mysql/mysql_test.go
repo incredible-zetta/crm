@@ -205,6 +205,9 @@ func TestContactRepo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("set unsubscribed: %v", err)
 	}
+	if err := repo.SetUnsubscribed(ctx, inserted.ID, unsubTime); err != nil {
+		t.Fatalf("set unsubscribed idempotent: %v", err)
+	}
 
 	gUnsubscribed, err := repo.Get(ctx, inserted.ID)
 	if err != nil {

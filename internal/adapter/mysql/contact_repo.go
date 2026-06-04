@@ -3,6 +3,7 @@ package mysql
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -362,7 +363,13 @@ func (r *contactRepo) SetUnsubscribed(ctx context.Context, id int64, at time.Tim
 		return fmt.Errorf("rows affected: %w", err)
 	}
 	if affected == 0 {
-		return fmt.Errorf("contact not found: %w", domain.ErrNotFound)
+		var exists int
+		if err := r.db.QueryRowContext(ctx, "SELECT 1 FROM contacts WHERE id = ? AND deleted_at IS NULL", id).Scan(&exists); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return fmt.Errorf("contact not found: %w", domain.ErrNotFound)
+			}
+			return fmt.Errorf("check contact exists: %w", err)
+		}
 	}
 	return nil
 }
