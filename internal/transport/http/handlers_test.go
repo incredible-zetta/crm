@@ -88,6 +88,13 @@ func TestHomePage(t *testing.T) {
 	}
 }
 
+func TestRegisterDoesNotConflictWithMCPRoute(t *testing.T) {
+	mux := http.NewServeMux()
+	h := &Handlers{Tracking: &fakeTracking{}, Opens: &fakeOpens{}, Exports: &fakeExports{}, Unsub: &fakeUnsub{}}
+	h.Register(mux)
+	mux.Handle("/mcp", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) }))
+}
+
 func TestHomeUnknownPath404(t *testing.T) {
 	srv := newServer(&Handlers{Tracking: &fakeTracking{}, Opens: &fakeOpens{}, Exports: &fakeExports{}, Unsub: &fakeUnsub{}})
 	defer srv.Close()

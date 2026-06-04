@@ -47,7 +47,7 @@ type Handlers struct {
 
 // Register attaches the public routes to the mux.
 func (h *Handlers) Register(mux *http.ServeMux) {
-	mux.HandleFunc("GET /", h.handleHome)
+	mux.HandleFunc("GET /{$}", h.handleHome)
 	mux.HandleFunc("GET /t/{code}", h.handleClick)
 	mux.HandleFunc("GET /o/{code}", h.handleOpen)
 	mux.HandleFunc("GET /export/{id}", h.handleExport)
