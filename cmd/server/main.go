@@ -109,6 +109,8 @@ func main() {
 		Opens:    svc.Tracking,
 		Exports:  svc.Contact,
 		Unsub:    unsubscriberAdapter{svc.Contact},
+		Version:  version,
+		BaseURL:  cfg.BaseURL,
 	}
 
 	mux := http.NewServeMux()

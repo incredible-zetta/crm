@@ -3,6 +3,7 @@ package httptransport
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -70,6 +71,32 @@ func get(t *testing.T, u string) *http.Response {
 		t.Fatalf("GET %s: %v", u, err)
 	}
 	return resp
+}
+
+func TestHomePage(t *testing.T) {
+	srv := newServer(&Handlers{Tracking: &fakeTracking{}, Opens: &fakeOpens{}, Exports: &fakeExports{}, Unsub: &fakeUnsub{}, Version: "v0.0.1-beta", BaseURL: "https://crm.example.com"})
+	defer srv.Close()
+
+	resp := get(t, srv.URL+"/")
+	defer resp.Body.Close()
+	body := readBody(resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	if !strings.Contains(body, "Zetta CRM Backend") || !strings.Contains(body, "v0.0.1-beta") || !strings.Contains(body, "POST https://crm.example.com/mcp") {
+		t.Errorf("expected branded backend page with version and MCP endpoint, got %q", body)
+	}
+}
+
+func TestHomeUnknownPath404(t *testing.T) {
+	srv := newServer(&Handlers{Tracking: &fakeTracking{}, Opens: &fakeOpens{}, Exports: &fakeExports{}, Unsub: &fakeUnsub{}})
+	defer srv.Close()
+
+	resp := get(t, srv.URL+"/missing")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", resp.StatusCode)
+	}
 }
 
 func TestClickRedirects(t *testing.T) {
@@ -215,7 +242,6 @@ func TestHealth(t *testing.T) {
 }
 
 func readBody(resp *http.Response) string {
-	b := make([]byte, 4096)
-	n, _ := resp.Body.Read(b)
-	return string(b[:n])
+	b, _ := io.ReadAll(resp.Body)
+	return string(b)
 }
