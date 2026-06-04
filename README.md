@@ -111,6 +111,8 @@ Fixed enum: `new → contacted → qualified → proposal → won → lost`. Inv
 
 Zetta CRM uses a hexagonal (ports & adapters) layout — `domain → port → service`, with `adapter/*` (MySQL, email, system) and `transport/*` (MCP, HTTP) on the edges. The service layer holds all business logic and is tested without a database. See [ARCHITECTURE.md](ARCHITECTURE.md) for the dependency rule, package map, and how to add a tool or swap an adapter.
 
+Install guides live in the [GitHub Wiki](https://github.com/incredible-zetta/crm/wiki) and are mirrored in [`docs/wiki/`](docs/wiki/).
+
 ## Configuration
 
 All config comes from environment variables (EasyPanel injects them). See `.env.example`.
@@ -177,6 +179,7 @@ go test ./...
 
 ```bash
 docker build -t crm-mcp .
+# or pull release image: ghcr.io/incredible-zetta/crm:v0.0.1-beta
 docker run --rm -p 8080:8080 \
   -e MCP_API_KEY=... -e DB_DSN=... -e BASE_URL=https://crm.example.com \
   -v crm-exports:/data/exports \

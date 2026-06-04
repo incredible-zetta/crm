@@ -10,7 +10,8 @@ RUN go mod download
 
 # Build
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /crm-server ./cmd/server
+ARG VERSION=dev
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /crm-server ./cmd/server
 
 # ---- runtime stage ----
 FROM gcr.io/distroless/static-debian12:nonroot

@@ -21,7 +21,7 @@ import (
 	mcptransport "github.com/incredible-zetta/crm/internal/transport/mcp"
 )
 
-const version = "2.0.0"
+var version = "dev"
 
 func main() {
 	// 1. Config
