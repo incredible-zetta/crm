@@ -21,10 +21,22 @@ type Config struct {
 	MailgunDomain        string
 	MailgunAPIKey        string
 	LogLevel             string
+	IMAPHost             string
+	IMAPPort             string
+	IMAPUser             string
+	IMAPPass             string
+	IMAPMailbox          string
+	IMAPPollIntervalSec  int
+	IMAPSinceDays        int
+	AdminNotifyEmail     string
 }
 
 func (c *Config) DebugEnabled() bool {
 	return strings.EqualFold(c.LogLevel, "debug")
+}
+
+func (c *Config) InboxEnabled() bool {
+	return c.IMAPHost != "" && c.IMAPUser != "" && c.IMAPPass != "" && c.IMAPMailbox != "" && c.AdminNotifyEmail != ""
 }
 
 func Load() (*Config, error) {
@@ -57,6 +69,31 @@ func Load() (*Config, error) {
 		schedulerIntervalSec = val
 	}
 
+	imapPort := os.Getenv("IMAP_PORT")
+	if imapPort == "" {
+		imapPort = "993"
+	}
+	imapMailbox := os.Getenv("IMAP_MAILBOX")
+	if imapMailbox == "" {
+		imapMailbox = "INBOX"
+	}
+	imapPollIntervalSec := 60
+	if intervalStr := os.Getenv("IMAP_POLL_INTERVAL_SEC"); intervalStr != "" {
+		val, err := strconv.Atoi(intervalStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid IMAP_POLL_INTERVAL_SEC: %w", err)
+		}
+		imapPollIntervalSec = val
+	}
+	imapSinceDays := 14
+	if daysStr := os.Getenv("IMAP_SINCE_DAYS"); daysStr != "" {
+		val, err := strconv.Atoi(daysStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid IMAP_SINCE_DAYS: %w", err)
+		}
+		imapSinceDays = val
+	}
+
 	return &Config{
 		MCPAPIKey:            mcpAPIKey,
 		DBDSN:                dbDSN,
@@ -71,5 +108,13 @@ func Load() (*Config, error) {
 		MailgunDomain:        os.Getenv("MAILGUN_DOMAIN"),
 		MailgunAPIKey:        os.Getenv("MAILGUN_API_KEY"),
 		LogLevel:             os.Getenv("LOG_LEVEL"),
+		IMAPHost:             os.Getenv("IMAP_HOST"),
+		IMAPPort:             imapPort,
+		IMAPUser:             os.Getenv("IMAP_USER"),
+		IMAPPass:             os.Getenv("IMAP_PASS"),
+		IMAPMailbox:          imapMailbox,
+		IMAPPollIntervalSec:  imapPollIntervalSec,
+		IMAPSinceDays:        imapSinceDays,
+		AdminNotifyEmail:     os.Getenv("ADMIN_NOTIFY_EMAIL"),
 	}, nil
 }

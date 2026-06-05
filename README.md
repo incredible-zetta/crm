@@ -128,10 +128,16 @@ All config comes from environment variables (EasyPanel injects them). See `.env.
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | no | — | SMTP sender config |
 | `MAILGUN_DOMAIN` / `MAILGUN_API_KEY` | no | — | Mailgun sender config (preferred when both set) |
 | `LOG_LEVEL` | no | — | Set to `debug` to print startup diagnostics and request logs to container stderr/stdout |
+| `IMAP_HOST` / `IMAP_PORT` / `IMAP_USER` / `IMAP_PASS` / `IMAP_MAILBOX` | no | port `993`, mailbox `INBOX` | Optional inbound mailbox for lead replies |
+| `IMAP_POLL_INTERVAL_SEC` | no | `60` | Inbox polling interval when IMAP is enabled |
+| `IMAP_SINCE_DAYS` | no | `14` | First-sync lookback window |
+| `ADMIN_NOTIFY_EMAIL` | no | — | Admin email notified for new replies from known contacts |
 
 Provider selection: Mailgun is used when both `MAILGUN_DOMAIN` and `MAILGUN_API_KEY` are set, otherwise SMTP. If neither is configured the server still boots with a disabled sender that fails explicitly at send time (`email_send`/`campaign_send` return a terse error).
 
 Debug logging: set `LOG_LEVEL=debug` to print redacted startup diagnostics, route registration, and HTTP request logs to the container logs.
+
+Inbox: IMAP polling is disabled unless `IMAP_HOST`, `IMAP_USER`, `IMAP_PASS`, `IMAP_MAILBOX`, and `ADMIN_NOTIFY_EMAIL` are set. New inbound messages are stored, and admin notifications are sent only for known contacts matched by sender email.
 
 > If the DSN password contains shell metacharacters (e.g. `!`), single-quote the value.
 

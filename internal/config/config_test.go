@@ -43,6 +43,77 @@ func TestLoadRequiresBaseURL(t *testing.T) {
 	}
 }
 
+func TestLoadInboxDefaultsDisabled(t *testing.T) {
+	os.Clearenv()
+	os.Setenv("MCP_API_KEY", "k")
+	os.Setenv("DB_DSN", "dsn")
+	os.Setenv("BASE_URL", "http://x")
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.IMAPPort != "993" {
+		t.Fatalf("want default IMAP port 993, got %q", c.IMAPPort)
+	}
+	if c.IMAPMailbox != "INBOX" {
+		t.Fatalf("want default IMAP mailbox INBOX, got %q", c.IMAPMailbox)
+	}
+	if c.IMAPPollIntervalSec != 60 {
+		t.Fatalf("want default IMAP poll interval 60, got %d", c.IMAPPollIntervalSec)
+	}
+	if c.IMAPSinceDays != 14 {
+		t.Fatalf("want default IMAP since days 14, got %d", c.IMAPSinceDays)
+	}
+	if c.InboxEnabled() {
+		t.Fatal("expected inbox disabled when IMAP/admin env missing")
+	}
+}
+
+func TestLoadInboxEnabled(t *testing.T) {
+	os.Clearenv()
+	os.Setenv("MCP_API_KEY", "k")
+	os.Setenv("DB_DSN", "dsn")
+	os.Setenv("BASE_URL", "http://x")
+	os.Setenv("IMAP_HOST", "imap.test")
+	os.Setenv("IMAP_PORT", "1993")
+	os.Setenv("IMAP_USER", "inbox@test")
+	os.Setenv("IMAP_PASS", "secret")
+	os.Setenv("IMAP_MAILBOX", "Leads")
+	os.Setenv("IMAP_POLL_INTERVAL_SEC", "120")
+	os.Setenv("IMAP_SINCE_DAYS", "30")
+	os.Setenv("ADMIN_NOTIFY_EMAIL", "admin@test")
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.InboxEnabled() {
+		t.Fatal("expected inbox enabled")
+	}
+	if c.IMAPHost != "imap.test" || c.IMAPPort != "1993" || c.IMAPUser != "inbox@test" || c.IMAPPass != "secret" || c.IMAPMailbox != "Leads" || c.AdminNotifyEmail != "admin@test" {
+		t.Fatalf("unexpected inbox config: %+v", c)
+	}
+	if c.IMAPPollIntervalSec != 120 || c.IMAPSinceDays != 30 {
+		t.Fatalf("unexpected inbox intervals: poll=%d since=%d", c.IMAPPollIntervalSec, c.IMAPSinceDays)
+	}
+}
+
+func TestLoadInvalidIMAPNumbers(t *testing.T) {
+	os.Clearenv()
+	os.Setenv("MCP_API_KEY", "k")
+	os.Setenv("DB_DSN", "dsn")
+	os.Setenv("BASE_URL", "http://x")
+	os.Setenv("IMAP_POLL_INTERVAL_SEC", "bad")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "IMAP_POLL_INTERVAL_SEC") {
+		t.Fatalf("expected invalid IMAP_POLL_INTERVAL_SEC error, got %v", err)
+	}
+
+	os.Setenv("IMAP_POLL_INTERVAL_SEC", "60")
+	os.Setenv("IMAP_SINCE_DAYS", "bad")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "IMAP_SINCE_DAYS") {
+		t.Fatalf("expected invalid IMAP_SINCE_DAYS error, got %v", err)
+	}
+}
+
 func TestLoadDebugLogLevel(t *testing.T) {
 	os.Clearenv()
 	os.Setenv("MCP_API_KEY", "k")
@@ -104,6 +175,10 @@ func TestLoadAllValues(t *testing.T) {
 	os.Setenv("MAILGUN_DOMAIN", "mg.test")
 	os.Setenv("MAILGUN_API_KEY", "mgkey")
 	os.Setenv("LOG_LEVEL", "debug")
+	os.Setenv("IMAP_HOST", "imap.test")
+	os.Setenv("IMAP_USER", "inbox@test")
+	os.Setenv("IMAP_PASS", "imap-pass")
+	os.Setenv("ADMIN_NOTIFY_EMAIL", "admin@test")
 	c, err := Load()
 	if err != nil {
 		t.Fatal(err)
