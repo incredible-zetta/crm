@@ -57,6 +57,16 @@ func Register(srv *mcp.Server, d *Deps) {
 		Description: "Unsubscribe a contact by ID",
 	}, d.ContactUnsubscribe)
 
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "contact_bulk_update",
+		Description: "Apply a partial update to many contacts by ID list (max 500). Tags are additive via add_tags/remove_tags or replaced via set_tags.",
+	}, d.ContactBulkUpdate)
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "contact_bulk_update_by_filter",
+		Description: "Apply a partial update to every contact matching a segment filter (stage, company, tag, q).",
+	}, d.ContactBulkUpdateByFilter)
+
 	// Group 2: Templates (templates.go)
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "template_create",

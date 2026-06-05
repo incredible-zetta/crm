@@ -794,3 +794,117 @@ func TestEnsureUnsubCode(t *testing.T) {
 		t.Errorf("expected UnsubCode in repo to be updated, got %q", updatedC2.UnsubCode)
 	}
 }
+
+func TestBulkUpdateByIDsTagsAndStage(t *testing.T) {
+	repo := newFakeContactRepo()
+	ctx := context.Background()
+	a, _ := repo.Upsert(ctx, domain.Contact{Email: "a@x.com", Tags: []string{"keep"}})
+	b, _ := repo.Upsert(ctx, domain.Contact{Email: "b@x.com", Tags: []string{"old", "keep"}})
+	svc := service.NewContactService(repo, &fakeEventRepo{}, newFakeExportRepo(), &stubIDGen{}, &stubClock{}, "", "http://crm.local")
+
+	stage := "qualified"
+	res, err := svc.BulkUpdateByIDs(ctx, []int64{a.ID, b.ID}, service.BulkPatch{
+		Stage:      &stage,
+		AddTags:    []string{"vip"},
+		RemoveTags: []string{"old"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res.Matched != 2 || res.Updated != 2 || res.Skipped != 0 {
+		t.Fatalf("unexpected result: %+v", res)
+	}
+	ga, _ := repo.Get(ctx, a.ID)
+	gb, _ := repo.Get(ctx, b.ID)
+	if ga.Stage != domain.StageQualified || gb.Stage != domain.StageQualified {
+		t.Errorf("expected stage qualified, got %q %q", ga.Stage, gb.Stage)
+	}
+	if !hasTag(ga.Tags, "vip") || !hasTag(ga.Tags, "keep") {
+		t.Errorf("a tags wrong: %v", ga.Tags)
+	}
+	if hasTag(gb.Tags, "old") || !hasTag(gb.Tags, "vip") || !hasTag(gb.Tags, "keep") {
+		t.Errorf("b tags wrong: %v", gb.Tags)
+	}
+}
+
+func TestBulkUpdateByIDsValidation(t *testing.T) {
+	repo := newFakeContactRepo()
+	svc := service.NewContactService(repo, &fakeEventRepo{}, newFakeExportRepo(), &stubIDGen{}, &stubClock{}, "", "http://crm.local")
+	ctx := context.Background()
+
+	if _, err := svc.BulkUpdateByIDs(ctx, nil, service.BulkPatch{AddTags: []string{"x"}}); !errors.Is(err, domain.ErrValidation) {
+		t.Errorf("expected validation error for empty ids")
+	}
+	if _, err := svc.BulkUpdateByIDs(ctx, []int64{1}, service.BulkPatch{}); !errors.Is(err, domain.ErrValidation) {
+		t.Errorf("expected validation error for empty patch")
+	}
+	bad := "nope"
+	if _, err := svc.BulkUpdateByIDs(ctx, []int64{1}, service.BulkPatch{Stage: &bad}); !errors.Is(err, domain.ErrValidation) {
+		t.Errorf("expected validation error for invalid stage")
+	}
+}
+
+func TestBulkUpdateByIDsMissingContactSkips(t *testing.T) {
+	repo := newFakeContactRepo()
+	ctx := context.Background()
+	a, _ := repo.Upsert(ctx, domain.Contact{Email: "a@x.com"})
+	svc := service.NewContactService(repo, &fakeEventRepo{}, newFakeExportRepo(), &stubIDGen{}, &stubClock{}, "", "http://crm.local")
+
+	co := "Acme"
+	res, err := svc.BulkUpdateByIDs(ctx, []int64{a.ID, 9999}, service.BulkPatch{Company: &co})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res.Matched != 2 || res.Updated != 1 || res.Skipped != 1 {
+		t.Fatalf("unexpected result: %+v", res)
+	}
+	if len(res.Errors) != 1 {
+		t.Errorf("expected one error entry, got %v", res.Errors)
+	}
+}
+
+func TestBulkUpdateByFilter(t *testing.T) {
+	repo := newFakeContactRepo()
+	ctx := context.Background()
+	_, _ = repo.Upsert(ctx, domain.Contact{Email: "a@x.com", Stage: domain.StageProposal})
+	_, _ = repo.Upsert(ctx, domain.Contact{Email: "b@x.com", Stage: domain.StageProposal})
+	_, _ = repo.Upsert(ctx, domain.Contact{Email: "c@x.com", Stage: domain.StageNew})
+	svc := service.NewContactService(repo, &fakeEventRepo{}, newFakeExportRepo(), &stubIDGen{}, &stubClock{}, "", "http://crm.local")
+
+	res, err := svc.BulkUpdateByFilter(ctx, domain.ContactFilter{Stage: "proposal"}, service.BulkPatch{AddTags: []string{"q3"}})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res.Matched != 2 || res.Updated != 2 {
+		t.Fatalf("unexpected result: %+v", res)
+	}
+	all, _ := repo.List(ctx, domain.ContactFilter{Tag: "q3"}, port.Paging{Limit: 100})
+	if all.Total != 2 {
+		t.Errorf("expected 2 tagged q3, got %d", all.Total)
+	}
+}
+
+func TestBulkSetTagsOverwrites(t *testing.T) {
+	repo := newFakeContactRepo()
+	ctx := context.Background()
+	a, _ := repo.Upsert(ctx, domain.Contact{Email: "a@x.com", Tags: []string{"old1", "old2"}})
+	svc := service.NewContactService(repo, &fakeEventRepo{}, newFakeExportRepo(), &stubIDGen{}, &stubClock{}, "", "http://crm.local")
+
+	newTags := []string{"only"}
+	if _, err := svc.BulkUpdateByIDs(ctx, []int64{a.ID}, service.BulkPatch{SetTags: &newTags, AddTags: []string{"ignored"}}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	ga, _ := repo.Get(ctx, a.ID)
+	if len(ga.Tags) != 1 || ga.Tags[0] != "only" {
+		t.Errorf("expected set_tags to overwrite, got %v", ga.Tags)
+	}
+}
+
+func hasTag(tags []string, want string) bool {
+	for _, t := range tags {
+		if t == want {
+			return true
+		}
+	}
+	return false
+}

@@ -88,6 +88,155 @@ func (s *ContactService) Update(ctx context.Context, id int64, patch domain.Cont
 	return s.repo.Update(ctx, id, patch)
 }
 
+// BulkPatch describes a partial update applied to many contacts at once. Unlike
+// ContactPatch, tags are expressed as additive/subtractive sets so an agent can
+// tag a segment without clobbering existing tags. SetTags (when non-nil)
+// overwrites the whole tag list and takes precedence over Add/Remove.
+type BulkPatch struct {
+	Company    *string
+	Stage      *string
+	Notes      *string
+	Source     *string
+	SetTags    *[]string
+	AddTags    []string
+	RemoveTags []string
+}
+
+func (p BulkPatch) isEmpty() bool {
+	return p.Company == nil && p.Stage == nil && p.Notes == nil && p.Source == nil &&
+		p.SetTags == nil && len(p.AddTags) == 0 && len(p.RemoveTags) == 0
+}
+
+// BulkUpdateResult summarizes a bulk update run.
+type BulkUpdateResult struct {
+	Matched int
+	Updated int
+	Skipped int
+	Errors  []string
+}
+
+const bulkUpdateMaxIDs = 500
+
+// BulkUpdateByIDs applies the same partial patch to each listed contact.
+func (s *ContactService) BulkUpdateByIDs(ctx context.Context, ids []int64, patch BulkPatch) (BulkUpdateResult, error) {
+	if len(ids) == 0 {
+		return BulkUpdateResult{}, fmt.Errorf("%w: ids required", domain.ErrValidation)
+	}
+	if len(ids) > bulkUpdateMaxIDs {
+		return BulkUpdateResult{}, fmt.Errorf("%w: too many ids (max %d)", domain.ErrValidation, bulkUpdateMaxIDs)
+	}
+	if patch.isEmpty() {
+		return BulkUpdateResult{}, fmt.Errorf("%w: empty patch", domain.ErrValidation)
+	}
+	if patch.Stage != nil && !domain.Stage(*patch.Stage).Valid() {
+		return BulkUpdateResult{}, fmt.Errorf("%w: invalid stage %q", domain.ErrValidation, *patch.Stage)
+	}
+
+	var res BulkUpdateResult
+	for _, id := range ids {
+		res.Matched++
+		if err := s.applyBulkPatch(ctx, id, patch); err != nil {
+			res.Skipped++
+			res.Errors = append(res.Errors, fmt.Sprintf("id %d: %v", id, err))
+			continue
+		}
+		res.Updated++
+	}
+	return res, nil
+}
+
+// BulkUpdateByFilter applies the same partial patch to every contact matching
+// the filter. It pages internally so large segments do not require the caller
+// to loop.
+func (s *ContactService) BulkUpdateByFilter(ctx context.Context, f domain.ContactFilter, patch BulkPatch) (BulkUpdateResult, error) {
+	if patch.isEmpty() {
+		return BulkUpdateResult{}, fmt.Errorf("%w: empty patch", domain.ErrValidation)
+	}
+	if patch.Stage != nil && !domain.Stage(*patch.Stage).Valid() {
+		return BulkUpdateResult{}, fmt.Errorf("%w: invalid stage %q", domain.ErrValidation, *patch.Stage)
+	}
+
+	var res BulkUpdateResult
+	var cursor int64
+	for {
+		page, err := s.repo.List(ctx, f, port.Paging{Limit: 100, Cursor: cursor})
+		if err != nil {
+			return res, fmt.Errorf("failed to page contacts: %w", err)
+		}
+		if len(page.Items) == 0 {
+			break
+		}
+		for _, c := range page.Items {
+			res.Matched++
+			if err := s.applyBulkPatchToContact(ctx, c, patch); err != nil {
+				res.Skipped++
+				res.Errors = append(res.Errors, fmt.Sprintf("id %d: %v", c.ID, err))
+				continue
+			}
+			res.Updated++
+		}
+		if page.NextCursor == 0 {
+			break
+		}
+		cursor = page.NextCursor
+	}
+	return res, nil
+}
+
+func (s *ContactService) applyBulkPatch(ctx context.Context, id int64, patch BulkPatch) error {
+	c, err := s.repo.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	return s.applyBulkPatchToContact(ctx, c, patch)
+}
+
+func (s *ContactService) applyBulkPatchToContact(ctx context.Context, c domain.Contact, patch BulkPatch) error {
+	cp := domain.ContactPatch{
+		Company: patch.Company,
+		Stage:   patch.Stage,
+		Notes:   patch.Notes,
+		Source:  patch.Source,
+	}
+	if tags, changed := resolveBulkTags(c.Tags, patch); changed {
+		cp.Tags = &tags
+	}
+	_, err := s.repo.Update(ctx, c.ID, cp)
+	return err
+}
+
+// resolveBulkTags computes the new tag set for a contact given a BulkPatch.
+// Returns the resolved tags and whether they differ from the patch intent.
+func resolveBulkTags(current []string, patch BulkPatch) ([]string, bool) {
+	if patch.SetTags != nil {
+		return append([]string{}, (*patch.SetTags)...), true
+	}
+	if len(patch.AddTags) == 0 && len(patch.RemoveTags) == 0 {
+		return nil, false
+	}
+	seen := map[string]bool{}
+	var out []string
+	for _, t := range current {
+		seen[t] = true
+	}
+	remove := map[string]bool{}
+	for _, t := range patch.RemoveTags {
+		remove[t] = true
+	}
+	for _, t := range current {
+		if !remove[t] {
+			out = append(out, t)
+		}
+	}
+	for _, t := range patch.AddTags {
+		if !seen[t] && !remove[t] {
+			out = append(out, t)
+			seen[t] = true
+		}
+	}
+	return out, true
+}
+
 // List returns a page of contacts.
 func (s *ContactService) List(ctx context.Context, f domain.ContactFilter, limit int, cursor int64) (port.ContactPage, error) {
 	if limit <= 0 {

@@ -1028,3 +1028,61 @@ func TestErrorContractNotFound(t *testing.T) {
 		t.Errorf("expected message 'campaign not found', got %q", errEnv.Msg)
 	}
 }
+
+func TestContactBulkUpdate(t *testing.T) {
+	h := setupTestDeps(t)
+	ctx := context.Background()
+
+	a, _ := h.contacts.Upsert(ctx, domain.Contact{Email: "a@bulk.local", Tags: []string{"keep"}})
+	b, _ := h.contacts.Upsert(ctx, domain.Contact{Email: "b@bulk.local"})
+
+	stage := "qualified"
+	res, out, err := h.deps.ContactBulkUpdate(ctx, nil, mcptransport.ContactBulkUpdateIn{
+		IDs:   []int64{a.ID, b.ID},
+		Patch: mcptransport.BulkPatchIn{Stage: &stage, AddTags: []string{"vip"}},
+	})
+	if err != nil || (res != nil && res.IsError) {
+		t.Fatalf("bulk update failed: %v %v", err, res)
+	}
+	if out.Matched != 2 || out.Updated != 2 {
+		t.Fatalf("unexpected out: %+v", out)
+	}
+	ga, _ := h.contacts.Get(ctx, a.ID)
+	if ga.Stage != domain.StageQualified {
+		t.Errorf("expected qualified, got %q", ga.Stage)
+	}
+}
+
+func TestContactBulkUpdateByFilter(t *testing.T) {
+	h := setupTestDeps(t)
+	ctx := context.Background()
+
+	_, _ = h.contacts.Upsert(ctx, domain.Contact{Email: "p1@bulk.local", Stage: domain.StageProposal})
+	_, _ = h.contacts.Upsert(ctx, domain.Contact{Email: "p2@bulk.local", Stage: domain.StageProposal})
+	_, _ = h.contacts.Upsert(ctx, domain.Contact{Email: "n1@bulk.local", Stage: domain.StageNew})
+
+	res, out, err := h.deps.ContactBulkUpdateByFilter(ctx, nil, mcptransport.ContactBulkUpdateByFilterIn{
+		Segment: map[string]any{"stage": "proposal"},
+		Patch:   mcptransport.BulkPatchIn{AddTags: []string{"q3"}},
+	})
+	if err != nil || (res != nil && res.IsError) {
+		t.Fatalf("bulk update by filter failed: %v %v", err, res)
+	}
+	if out.Matched != 2 || out.Updated != 2 {
+		t.Fatalf("unexpected out: %+v", out)
+	}
+}
+
+func TestContactBulkUpdateValidation(t *testing.T) {
+	h := setupTestDeps(t)
+	res, _, err := h.deps.ContactBulkUpdate(context.Background(), nil, mcptransport.ContactBulkUpdateIn{
+		IDs:   []int64{1},
+		Patch: mcptransport.BulkPatchIn{},
+	})
+	if err != nil {
+		t.Fatalf("unexpected transport error: %v", err)
+	}
+	if res == nil || !res.IsError {
+		t.Fatalf("expected invalid_input error for empty patch")
+	}
+}

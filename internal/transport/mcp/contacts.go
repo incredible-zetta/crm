@@ -9,6 +9,7 @@ import (
 
 	"github.com/incredible-zetta/crm/internal/domain"
 	"github.com/incredible-zetta/crm/internal/mcpserver"
+	"github.com/incredible-zetta/crm/internal/service"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -447,4 +448,84 @@ func (d *Deps) ContactUnsubscribe(ctx context.Context, req *mcp.CallToolRequest,
 		ID:           in.ID,
 		Unsubscribed: true,
 	}, nil
+}
+
+// BulkPatchIn is the shared patch shape for bulk update tools. Tags are
+// additive/subtractive by default; set_tags overwrites the whole list.
+type BulkPatchIn struct {
+	Company    *string   `json:"company,omitempty" jsonschema:"Set company on all matched contacts"`
+	Stage      *string   `json:"stage,omitempty" jsonschema:"Set stage (new, contacted, qualified, proposal, won, lost)"`
+	Notes      *string   `json:"notes,omitempty" jsonschema:"Set notes"`
+	Source     *string   `json:"source,omitempty" jsonschema:"Set source"`
+	SetTags    *[]string `json:"set_tags,omitempty" jsonschema:"Replace the entire tag list (overrides add_tags/remove_tags)"`
+	AddTags    []string  `json:"add_tags,omitempty" jsonschema:"Tags to add without removing existing tags"`
+	RemoveTags []string  `json:"remove_tags,omitempty" jsonschema:"Tags to remove"`
+}
+
+func (b BulkPatchIn) toService() service.BulkPatch {
+	return service.BulkPatch{
+		Company:    b.Company,
+		Stage:      b.Stage,
+		Notes:      b.Notes,
+		Source:     b.Source,
+		SetTags:    b.SetTags,
+		AddTags:    b.AddTags,
+		RemoveTags: b.RemoveTags,
+	}
+}
+
+type ContactBulkUpdateIn struct {
+	IDs   []int64     `json:"ids" jsonschema:"Contact IDs to update (max 500)"`
+	Patch BulkPatchIn `json:"patch" jsonschema:"Partial update applied to every listed contact"`
+}
+
+type ContactBulkUpdateByFilterIn struct {
+	Segment map[string]any `json:"segment,omitempty" jsonschema:"Filter to match contacts (keys: stage, company, tag, q). Empty matches all."`
+	Patch   BulkPatchIn    `json:"patch" jsonschema:"Partial update applied to every matched contact"`
+}
+
+type BulkUpdateOut struct {
+	Matched int      `json:"matched"`
+	Updated int      `json:"updated"`
+	Skipped int      `json:"skipped,omitempty"`
+	Errors  []string `json:"errors,omitempty"`
+}
+
+func (d *Deps) ContactBulkUpdate(ctx context.Context, req *mcp.CallToolRequest, in ContactBulkUpdateIn) (*mcp.CallToolResult, BulkUpdateOut, error) {
+	res, err := d.Svc.Contact.BulkUpdateByIDs(ctx, in.IDs, in.Patch.toService())
+	if err != nil {
+		if errors.Is(err, domain.ErrValidation) {
+			msg := strings.TrimPrefix(err.Error(), "validation error: ")
+			return mcpserver.Err("invalid_input", msg), BulkUpdateOut{}, nil
+		}
+		return nil, BulkUpdateOut{}, fmt.Errorf("contact_bulk_update: %w", err)
+	}
+	return nil, BulkUpdateOut{Matched: res.Matched, Updated: res.Updated, Skipped: res.Skipped, Errors: res.Errors}, nil
+}
+
+func (d *Deps) ContactBulkUpdateByFilter(ctx context.Context, req *mcp.CallToolRequest, in ContactBulkUpdateByFilterIn) (*mcp.CallToolResult, BulkUpdateOut, error) {
+	var filter domain.ContactFilter
+	if in.Segment != nil {
+		if v, ok := in.Segment["stage"].(string); ok {
+			filter.Stage = v
+		}
+		if v, ok := in.Segment["company"].(string); ok {
+			filter.Company = v
+		}
+		if v, ok := in.Segment["tag"].(string); ok {
+			filter.Tag = v
+		}
+		if v, ok := in.Segment["q"].(string); ok {
+			filter.Q = v
+		}
+	}
+	res, err := d.Svc.Contact.BulkUpdateByFilter(ctx, filter, in.Patch.toService())
+	if err != nil {
+		if errors.Is(err, domain.ErrValidation) {
+			msg := strings.TrimPrefix(err.Error(), "validation error: ")
+			return mcpserver.Err("invalid_input", msg), BulkUpdateOut{}, nil
+		}
+		return nil, BulkUpdateOut{}, fmt.Errorf("contact_bulk_update_by_filter: %w", err)
+	}
+	return nil, BulkUpdateOut{Matched: res.Matched, Updated: res.Updated, Skipped: res.Skipped, Errors: res.Errors}, nil
 }

@@ -38,7 +38,7 @@ X-API-Key: <MCP_API_KEY>
 
 The key check is constant-time and fail-closed. Tracking and export routes are intentionally public because email recipients open them without credentials.
 
-## Tools (34)
+## Tools (36)
 
 ### Contacts
 | Tool | Description |
@@ -51,6 +51,8 @@ The key check is constant-time and fail-closed. Tracking and export routes are i
 | `contact_export` | Export filtered contacts to a CSV download URL (not inline rows) |
 | `contact_delete` | Soft-delete a contact; `purge: true` for a hard GDPR delete |
 | `contact_unsubscribe` | Mark a contact unsubscribed (suppresses future email) |
+| `contact_bulk_update` | Apply a partial patch to many contacts by ID list (max 500); tags via `add_tags`/`remove_tags` or `set_tags` |
+| `contact_bulk_update_by_filter` | Apply a partial patch to every contact matching a segment filter (`stage`, `company`, `tag`, `q`) |
 
 ### Email & templates
 | Tool | Description |
@@ -252,7 +254,7 @@ internal/adapter/system/    real clock + crypto id generator
 internal/template/          render + link rewrite + open pixel + unsubscribe footer
 internal/scheduler/         in-process worker (claim -> execute -> mark)
 internal/mcpserver/         MCP server scaffold + auth + terse response helpers
-internal/transport/mcp/     34 thin MCP tool handlers
+internal/transport/mcp/     36 thin MCP tool handlers
 internal/transport/http/    public routes (click, open pixel, export, unsubscribe, health)
 internal/config/            env config loader
 migrations/                 0001_init schema (embedded)
