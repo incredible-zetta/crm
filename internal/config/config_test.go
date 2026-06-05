@@ -43,6 +43,24 @@ func TestLoadRequiresBaseURL(t *testing.T) {
 	}
 }
 
+func TestLoadDebugLogLevel(t *testing.T) {
+	os.Clearenv()
+	os.Setenv("MCP_API_KEY", "k")
+	os.Setenv("DB_DSN", "dsn")
+	os.Setenv("BASE_URL", "http://x")
+	os.Setenv("LOG_LEVEL", "debug")
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.LogLevel != "debug" {
+		t.Fatalf("want debug log level, got %q", c.LogLevel)
+	}
+	if !c.DebugEnabled() {
+		t.Fatal("expected debug logging enabled")
+	}
+}
+
 func TestLoadDefaults(t *testing.T) {
 	os.Clearenv()
 	os.Setenv("MCP_API_KEY", "k")
@@ -85,6 +103,7 @@ func TestLoadAllValues(t *testing.T) {
 	os.Setenv("SMTP_FROM", "from@test")
 	os.Setenv("MAILGUN_DOMAIN", "mg.test")
 	os.Setenv("MAILGUN_API_KEY", "mgkey")
+	os.Setenv("LOG_LEVEL", "debug")
 	c, err := Load()
 	if err != nil {
 		t.Fatal(err)
@@ -124,5 +143,8 @@ func TestLoadAllValues(t *testing.T) {
 	}
 	if c.MailgunAPIKey != "mgkey" {
 		t.Errorf("expected MailgunAPIKey to be 'mgkey', got %q", c.MailgunAPIKey)
+	}
+	if c.LogLevel != "debug" {
+		t.Errorf("expected LogLevel to be 'debug', got %q", c.LogLevel)
 	}
 }

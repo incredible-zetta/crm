@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"regexp"
+	"strings"
 	"syscall"
 	"time"
 
@@ -30,15 +32,21 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
+	debug := cfg.DebugEnabled()
+	debugLog(debug, "debug logging enabled: version=%s base_url=%s port=%s scheduler_interval_sec=%d db_dsn=%s", version, cfg.BaseURL, cfg.Port, cfg.SchedulerIntervalSec, redactDSN(cfg.DBDSN))
+
 	// 2. Database + migrations
+	debugLog(debug, "opening database: %s", redactDSN(cfg.DBDSN))
 	database, err := mysql.Open(cfg.DBDSN)
 	if err != nil {
 		log.Fatalf("failed to open database: %v", err)
 	}
 	defer database.Close()
+	debugLog(debug, "running database migrations")
 	if err := mysql.Migrate(database); err != nil {
 		log.Fatalf("failed to run database migrations: %v", err)
 	}
+	debugLog(debug, "database migrations complete")
 	store := mysql.New(database)
 
 	// 3. Email sender (driven adapter). Falls back to a disabled sender that
@@ -48,6 +56,7 @@ func main() {
 	if cfg.MailgunAPIKey != "" && cfg.MailgunDomain != "" {
 		provider = "mailgun"
 	}
+	debugLog(debug, "email provider selected: %s", provider)
 	if provider == "mailgun" || cfg.SMTPHost != "" {
 		s, senderErr := email.New(email.Config{
 			Provider:      provider,
@@ -117,6 +126,7 @@ func main() {
 	pub.Register(mux)
 	mux.Handle("/mcp", mcpHandler)
 	mux.Handle("/mcp/", mcpHandler)
+	debugLog(debug, "registered routes: GET /{$}, GET /healthz, GET /t/{code}, GET /o/{code}, GET /export/{id}, GET /u/{code}, /mcp, /mcp/")
 
 	// 8. Scheduler worker -> TaskService.Execute
 	worker := &scheduler.Worker{
@@ -130,7 +140,11 @@ func main() {
 
 	go worker.Start(ctx, time.Duration(cfg.SchedulerIntervalSec)*time.Second)
 
-	httpSrv := &http.Server{Addr: ":" + cfg.Port, Handler: mux}
+	handler := http.Handler(mux)
+	if debug {
+		handler = debugRequestLogger(handler)
+	}
+	httpSrv := &http.Server{Addr: ":" + cfg.Port, Handler: handler}
 	go func() {
 		<-ctx.Done()
 		log.Println("Shutting down HTTP server...")
@@ -155,4 +169,39 @@ type unsubscriberAdapter struct{ svc *service.ContactService }
 func (u unsubscriberAdapter) UnsubscribeByCode(ctx context.Context, code string) error {
 	_, err := u.svc.UnsubscribeByCode(ctx, code)
 	return err
+}
+
+func debugLog(enabled bool, format string, args ...any) {
+	if enabled {
+		log.Printf("DEBUG: "+format, args...)
+	}
+}
+
+func debugRequestLogger(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rw := &statusResponseWriter{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(rw, r)
+		log.Printf("DEBUG: http %s %s status=%d duration_ms=%d", r.Method, r.URL.Path, rw.status, time.Since(start).Milliseconds())
+	})
+}
+
+type statusResponseWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (w *statusResponseWriter) WriteHeader(code int) {
+	w.status = code
+	w.ResponseWriter.WriteHeader(code)
+}
+
+var dsnCredentialPattern = regexp.MustCompile(`^([^:@/]+):([^@]*)@`)
+
+func redactDSN(dsn string) string {
+	redacted := dsnCredentialPattern.ReplaceAllString(dsn, `$1:***@`)
+	if idx := strings.Index(redacted, "?"); idx >= 0 {
+		redacted = redacted[:idx] + "?..."
+	}
+	return redacted
 }

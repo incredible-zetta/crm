@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 )
 
 type Config struct {
@@ -19,6 +20,11 @@ type Config struct {
 	SMTPFrom             string
 	MailgunDomain        string
 	MailgunAPIKey        string
+	LogLevel             string
+}
+
+func (c *Config) DebugEnabled() bool {
+	return strings.EqualFold(c.LogLevel, "debug")
 }
 
 func Load() (*Config, error) {
@@ -64,5 +70,6 @@ func Load() (*Config, error) {
 		SMTPFrom:             os.Getenv("SMTP_FROM"),
 		MailgunDomain:        os.Getenv("MAILGUN_DOMAIN"),
 		MailgunAPIKey:        os.Getenv("MAILGUN_API_KEY"),
+		LogLevel:             os.Getenv("LOG_LEVEL"),
 	}, nil
 }

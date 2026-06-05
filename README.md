@@ -127,8 +127,11 @@ All config comes from environment variables (EasyPanel injects them). See `.env.
 | `EXPORT_DIR` | no | `/data/exports` | Directory for generated CSV files |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | no | — | SMTP sender config |
 | `MAILGUN_DOMAIN` / `MAILGUN_API_KEY` | no | — | Mailgun sender config (preferred when both set) |
+| `LOG_LEVEL` | no | — | Set to `debug` to print startup diagnostics and request logs to container stderr/stdout |
 
 Provider selection: Mailgun is used when both `MAILGUN_DOMAIN` and `MAILGUN_API_KEY` are set, otherwise SMTP. If neither is configured the server still boots with a disabled sender that fails explicitly at send time (`email_send`/`campaign_send` return a terse error).
+
+Debug logging: set `LOG_LEVEL=debug` to print redacted startup diagnostics, route registration, and HTTP request logs to the container logs.
 
 > If the DSN password contains shell metacharacters (e.g. `!`), single-quote the value.
 
