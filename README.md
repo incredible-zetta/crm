@@ -142,12 +142,15 @@ All config comes from environment variables (EasyPanel injects them). See `.env.
 | `IMAP_POLL_INTERVAL_SEC` | no | `60` | Inbox polling interval when IMAP is enabled |
 | `IMAP_SINCE_DAYS` | no | `14` | First-sync lookback window |
 | `ADMIN_NOTIFY_EMAIL` | no | — | Admin email notified for new replies from known contacts |
+| `EMAIL_RATE_MAX` / `EMAIL_RATE_WINDOW_SEC` | no | — | Throttle outbound email to `MAX` sends per `WINDOW` seconds (e.g. `200` / `100` for Larksuite). Both must be set to enable. |
 
 Provider selection: Mailgun is used when both `MAILGUN_DOMAIN` and `MAILGUN_API_KEY` are set, otherwise SMTP. If neither is configured the server still boots with a disabled sender that fails explicitly at send time (`email_send`/`campaign_send` return a terse error).
 
 Debug logging: set `LOG_LEVEL=debug` to print redacted startup diagnostics, route registration, and HTTP request logs to the container logs.
 
 Inbox: IMAP polling is disabled unless `IMAP_HOST`, `IMAP_USER`, `IMAP_PASS`, `IMAP_MAILBOX`, and `ADMIN_NOTIFY_EMAIL` are set. New inbound messages are stored, and admin notifications are sent only for known contacts matched by sender email.
+
+Email rate limiting: set `EMAIL_RATE_MAX` and `EMAIL_RATE_WINDOW_SEC` to pace outbound delivery under a provider cap (Larksuite allows 200 messages / 100s, so `EMAIL_RATE_MAX=200` and `EMAIL_RATE_WINDOW_SEC=100`). The limiter is a token bucket applied to every send — single `email_send` and `campaign_send` alike — so a campaign loop blocks until a slot frees instead of bursting. Leave unset to send without throttling.
 
 > If the DSN password contains shell metacharacters (e.g. `!`), single-quote the value.
 

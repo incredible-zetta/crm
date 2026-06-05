@@ -79,6 +79,13 @@ func main() {
 		log.Println("WARNING: neither SMTP nor Mailgun is configured; email sending is disabled")
 	}
 
+	// Pace outbound email to stay under provider rate limits (e.g. Larksuite
+	// allows 200 messages / 100s). Applies to single sends and campaign loops.
+	if cfg.EmailRateEnabled() {
+		sender = email.NewThrottledSender(sender, cfg.EmailRateMax, time.Duration(cfg.EmailRateWindowSec)*time.Second)
+		debugLog(debug, "email rate limit enabled: %d per %ds", cfg.EmailRateMax, cfg.EmailRateWindowSec)
+	}
+
 	// 4. Export directory
 	exportDir := os.Getenv("EXPORT_DIR")
 	if exportDir == "" {

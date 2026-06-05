@@ -29,6 +29,8 @@ type Config struct {
 	IMAPPollIntervalSec  int
 	IMAPSinceDays        int
 	AdminNotifyEmail     string
+	EmailRateMax         int
+	EmailRateWindowSec   int
 }
 
 func (c *Config) DebugEnabled() bool {
@@ -37,6 +39,12 @@ func (c *Config) DebugEnabled() bool {
 
 func (c *Config) InboxEnabled() bool {
 	return c.IMAPHost != "" && c.IMAPUser != "" && c.IMAPPass != "" && c.IMAPMailbox != "" && c.AdminNotifyEmail != ""
+}
+
+// EmailRateEnabled reports whether outbound email throttling is configured.
+// Both the message cap and the window must be positive to take effect.
+func (c *Config) EmailRateEnabled() bool {
+	return c.EmailRateMax > 0 && c.EmailRateWindowSec > 0
 }
 
 func Load() (*Config, error) {
@@ -94,6 +102,23 @@ func Load() (*Config, error) {
 		imapSinceDays = val
 	}
 
+	emailRateMax := 0
+	if v := os.Getenv("EMAIL_RATE_MAX"); v != "" {
+		val, err := strconv.Atoi(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid EMAIL_RATE_MAX: %w", err)
+		}
+		emailRateMax = val
+	}
+	emailRateWindowSec := 0
+	if v := os.Getenv("EMAIL_RATE_WINDOW_SEC"); v != "" {
+		val, err := strconv.Atoi(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid EMAIL_RATE_WINDOW_SEC: %w", err)
+		}
+		emailRateWindowSec = val
+	}
+
 	return &Config{
 		MCPAPIKey:            mcpAPIKey,
 		DBDSN:                dbDSN,
@@ -116,5 +141,7 @@ func Load() (*Config, error) {
 		IMAPPollIntervalSec:  imapPollIntervalSec,
 		IMAPSinceDays:        imapSinceDays,
 		AdminNotifyEmail:     os.Getenv("ADMIN_NOTIFY_EMAIL"),
+		EmailRateMax:         emailRateMax,
+		EmailRateWindowSec:   emailRateWindowSec,
 	}, nil
 }
