@@ -144,7 +144,7 @@ func (d *Deps) TemplateRender(ctx context.Context, req *mcp.CallToolRequest, in 
 		if errors.Is(err, domain.ErrValidation) {
 			return mcpserver.Err("invalid_input", err.Error()), TemplateRenderOut{}, nil
 		}
-		return mcpserver.Err("render_failed", "template rendering failed"), TemplateRenderOut{}, nil
+		return mcpserver.Err("render_failed", err.Error()), TemplateRenderOut{}, nil
 	}
 
 	out := TemplateRenderOut{

@@ -773,6 +773,28 @@ func TestTemplateRender(t *testing.T) {
 	if out.HTML != "<b>Alice</b>" {
 		t.Errorf("expected html <b>Alice</b>, got %q", out.HTML)
 	}
+
+	// 3. Render failures explain the template error so operators can fix input.
+	res, _, err = h.deps.TemplateRender(ctx, nil, mcptransport.TemplateRenderIn{
+		Subject: "Hello {{.name",
+		Vars:    map[string]any{"name": "Alice"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected go error: %v", err)
+	}
+	if res == nil || !res.IsError {
+		t.Fatal("expected render_failed tool error")
+	}
+	var errEnv mcpserver.ErrEnvelope
+	if err := json.Unmarshal([]byte(res.Content[0].(*mcp.TextContent).Text), &errEnv); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+	if errEnv.Error != "render_failed" {
+		t.Fatalf("expected render_failed, got %s", errEnv.Error)
+	}
+	if !strings.Contains(errEnv.Msg, "failed to parse template") {
+		t.Fatalf("expected parse detail, got %q", errEnv.Msg)
+	}
 }
 
 func TestCampaignSend(t *testing.T) {
