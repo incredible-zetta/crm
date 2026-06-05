@@ -738,6 +738,9 @@ func TestEmailSend(t *testing.T) {
 	if errEnv.Error != "send_failed" {
 		t.Errorf("expected send_failed error code, got: %s", errEnv.Error)
 	}
+	if !strings.Contains(errEnv.Msg, "network error sending email") {
+		t.Errorf("expected underlying send error detail in msg, got: %s", errEnv.Msg)
+	}
 }
 
 func TestTemplateRender(t *testing.T) {

@@ -47,7 +47,7 @@ func (d *Deps) EmailSend(ctx context.Context, req *mcp.CallToolRequest, in Email
 			msg = strings.TrimPrefix(msg, "validation error: ")
 			return mcpserver.Err("invalid_input", msg), EmailSendOut{}, nil
 		}
-		return mcpserver.Err("send_failed", "email send failed"), EmailSendOut{}, nil
+		return mcpserver.Err("send_failed", err.Error()), EmailSendOut{}, nil
 	}
 
 	return nil, EmailSendOut{
