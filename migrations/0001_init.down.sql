@@ -1,3 +1,5 @@
+DROP TABLE IF EXISTS inbound_messages;
+DROP TABLE IF EXISTS inbox_cursors;
 DROP TABLE IF EXISTS exports;
 DROP TABLE IF EXISTS scheduled_tasks;
 DROP TABLE IF EXISTS email_events;

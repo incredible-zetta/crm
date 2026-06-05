@@ -101,3 +101,8 @@ func (s *Store) Tracking() port.TrackingRepo {
 func (s *Store) Exports() port.ExportRepo {
 	return &exportRepo{db: s.db}
 }
+
+// Inbox returns an InboxRepo implementation.
+func (s *Store) Inbox() port.InboxRepo {
+	return &inboxRepo{db: s.db}
+}

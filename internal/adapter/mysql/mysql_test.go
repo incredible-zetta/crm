@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -33,6 +34,8 @@ func getTestStore(t *testing.T) *Store {
 		_, _ = db.Exec("DELETE FROM email_templates WHERE name LIKE 't_mysql_%'")
 		_, _ = db.Exec("DELETE FROM campaigns WHERE name LIKE 't_mysql_%'")
 		_, _ = db.Exec("DELETE FROM scheduled_tasks WHERE payload LIKE '%t_mysql_%'")
+		_, _ = db.Exec("DELETE FROM inbound_messages WHERE mailbox LIKE 't_mysql_%' OR from_email LIKE 't_mysql_%'")
+		_, _ = db.Exec("DELETE FROM inbox_cursors WHERE mailbox LIKE 't_mysql_%'")
 		_, _ = db.Exec("DELETE FROM exports WHERE id LIKE 't_mysql_%'")
 		db.Close()
 	})
@@ -927,5 +930,116 @@ func TestExportRepo(t *testing.T) {
 	_, err = repo.Get(ctx, "t_mysql_exp_999")
 	if !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("expected ErrNotFound for non-existent export, got %v", err)
+	}
+}
+
+func TestInboxRepo(t *testing.T) {
+	store := getTestStore(t)
+	repo := store.Inbox()
+	ctx := context.Background()
+	mailbox := fmt.Sprintf("t_mysql_%d_inbox", time.Now().UnixNano())
+	contactEmail := makeUniqueEmail("inbox_contact")
+	contact, err := store.Contacts().Upsert(ctx, domain.Contact{Email: contactEmail, FirstName: "Inbox", Stage: domain.StageNew})
+	if err != nil {
+		t.Fatalf("create contact: %v", err)
+	}
+
+	cursor, err := repo.GetCursor(ctx, mailbox)
+	if err != nil {
+		t.Fatalf("get empty cursor: %v", err)
+	}
+	if cursor.Mailbox != mailbox || cursor.LastUID != 0 {
+		t.Fatalf("unexpected empty cursor: %+v", cursor)
+	}
+
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := repo.UpsertCursor(ctx, domain.InboxCursor{Mailbox: mailbox, LastUID: 9, LastMessageDate: &now}); err != nil {
+		t.Fatalf("upsert cursor: %v", err)
+	}
+	cursor, err = repo.GetCursor(ctx, mailbox)
+	if err != nil {
+		t.Fatalf("get cursor: %v", err)
+	}
+	if cursor.LastUID != 9 || cursor.LastMessageDate == nil {
+		t.Fatalf("unexpected stored cursor: %+v", cursor)
+	}
+
+	msg := domain.InboundMessage{
+		Mailbox:        mailbox,
+		UID:            10,
+		MessageID:      fmt.Sprintf("<t_mysql_%d@test>", time.Now().UnixNano()),
+		FromEmail:      strings.ToUpper(contactEmail),
+		FromName:       "Inbox Contact",
+		ToEmail:        "no-reply@test.local",
+		Subject:        "Re: Promo",
+		ReceivedAt:     now,
+		TextBody:       "Saya tertarik",
+		HTMLBody:       "<p>Saya tertarik</p>",
+		Snippet:        "Saya tertarik",
+		ContactID:      &contact.ID,
+		RawHeadersJSON: `{"Message-ID":"test"}`,
+	}
+	inserted, isNew, err := repo.InsertMessage(ctx, msg)
+	if err != nil {
+		t.Fatalf("insert message: %v", err)
+	}
+	if !isNew || inserted.ID == 0 {
+		t.Fatalf("expected new inserted message, got isNew=%v msg=%+v", isNew, inserted)
+	}
+	if inserted.FromEmail != strings.ToLower(contactEmail) {
+		t.Fatalf("expected normalized email, got %q", inserted.FromEmail)
+	}
+
+	dup, isNew, err := repo.InsertMessage(ctx, msg)
+	if err != nil {
+		t.Fatalf("duplicate insert: %v", err)
+	}
+	if isNew || dup.ID != inserted.ID {
+		t.Fatalf("expected duplicate existing message, got isNew=%v msg=%+v", isNew, dup)
+	}
+
+	page, err := repo.ListMessages(ctx, domain.InboxFilter{KnownOnly: true}, port.Paging{Limit: 1})
+	if err != nil {
+		t.Fatalf("list messages: %v", err)
+	}
+	if page.Total < 1 || len(page.Items) != 1 || page.Items[0].ID != inserted.ID {
+		t.Fatalf("unexpected page: %+v", page)
+	}
+
+	got, err := repo.GetMessage(ctx, inserted.ID)
+	if err != nil {
+		t.Fatalf("get message: %v", err)
+	}
+	if got.Subject != "Re: Promo" || got.ContactID == nil || *got.ContactID != contact.ID {
+		t.Fatalf("unexpected message: %+v", got)
+	}
+
+	if err := repo.MarkRead(ctx, inserted.ID, &now); err != nil {
+		t.Fatalf("mark read: %v", err)
+	}
+	if err := repo.MarkReplied(ctx, inserted.ID, now); err != nil {
+		t.Fatalf("mark replied: %v", err)
+	}
+	unnotified, err := repo.ListUnnotifiedKnown(ctx, 10)
+	if err != nil {
+		t.Fatalf("list unnotified: %v", err)
+	}
+	found := false
+	for _, item := range unnotified {
+		if item.ID == inserted.ID {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected inserted message in unnotified known list: %+v", unnotified)
+	}
+	if err := repo.MarkNotified(ctx, inserted.ID, now); err != nil {
+		t.Fatalf("mark notified: %v", err)
+	}
+	if err := repo.SoftDeleteMessage(ctx, inserted.ID); err != nil {
+		t.Fatalf("soft delete: %v", err)
+	}
+	if _, err := repo.GetMessage(ctx, inserted.ID); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("expected not found after soft delete, got %v", err)
 	}
 }
