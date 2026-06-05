@@ -24,7 +24,38 @@ type ContactPage struct {
 	NextCursor int64
 }
 
+// InboxPage is a cursor-paged inbound message result.
+type InboxPage struct {
+	Items      []domain.InboundMessage
+	Total      int
+	NextCursor int64
+}
+
 // ContactRepo defines the database operations for contacts.
+// InboxRepo defines operations for storing inbound email messages and IMAP cursors.
+type InboxRepo interface {
+	GetCursor(ctx context.Context, mailbox string) (domain.InboxCursor, error)
+	UpsertCursor(ctx context.Context, cursor domain.InboxCursor) error
+	InsertMessage(ctx context.Context, msg domain.InboundMessage) (domain.InboundMessage, bool, error)
+	GetMessage(ctx context.Context, id int64) (domain.InboundMessage, error)
+	ListMessages(ctx context.Context, f domain.InboxFilter, p Paging) (InboxPage, error)
+	MarkRead(ctx context.Context, id int64, at *time.Time) error
+	MarkReplied(ctx context.Context, id int64, at time.Time) error
+	SoftDeleteMessage(ctx context.Context, id int64) error
+	MarkNotified(ctx context.Context, id int64, at time.Time) error
+	ListUnnotifiedKnown(ctx context.Context, limit int) ([]domain.InboundMessage, error)
+}
+
+// InboxFetcher fetches inbound email messages from a mailbox.
+type InboxFetcher interface {
+	FetchNew(ctx context.Context, cursor domain.InboxCursor, limit int) ([]domain.InboundMessage, uint32, error)
+}
+
+// AdminNotifier notifies an admin about CRM events.
+type AdminNotifier interface {
+	NotifyInboundMessage(ctx context.Context, msg domain.InboundMessage, contact domain.Contact) error
+}
+
 type ContactRepo interface {
 	// Upsert inserts or updates a contact.
 	Upsert(ctx context.Context, c domain.Contact) (domain.Contact, error)
