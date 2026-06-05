@@ -52,6 +52,7 @@ func (h *Handlers) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /o/{code}", h.handleOpen)
 	mux.HandleFunc("GET /export/{id}", h.handleExport)
 	mux.HandleFunc("GET /u/{code}", h.handleUnsubscribe)
+	mux.HandleFunc("POST /u/{code}", h.handleUnsubscribePost)
 	mux.HandleFunc("GET /healthz", h.handleHealth)
 }
 
@@ -148,6 +149,16 @@ func (h *Handlers) handleUnsubscribe(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte(unsubPage("You have been unsubscribed. You will no longer receive emails from us.")))
 }
 
+// handleUnsubscribePost implements RFC 8058 one-click unsubscribe. Mail clients
+// (Gmail, Apple Mail, Yahoo) POST here when the user clicks the native
+// unsubscribe button surfaced by the List-Unsubscribe header.
+func (h *Handlers) handleUnsubscribePost(w http.ResponseWriter, r *http.Request) {
+	code := r.PathValue("code")
+	_ = h.Unsub.UnsubscribeByCode(r.Context(), code)
+	// Always return 200 with an empty body per one-click expectations.
+	w.WriteHeader(http.StatusOK)
+}
+
 func homePage(version, baseURL string) string {
 	escapedVersion := html.EscapeString(version)
 	escapedBaseURL := html.EscapeString(strings.TrimSuffix(baseURL, "/"))
@@ -201,6 +212,7 @@ GET /t/{code}
 GET /o/{code}.png
 GET /export/{id}.csv
 GET /u/{code}
+POST /u/{code}
 
 Private MCP:
 POST /mcp

@@ -237,6 +237,24 @@ func TestUnsubscribeUnknownCodeStillOK(t *testing.T) {
 	}
 }
 
+func TestUnsubscribeOneClickPost(t *testing.T) {
+	unsub := &fakeUnsub{}
+	srv := newServer(&Handlers{Tracking: &fakeTracking{}, Opens: &fakeOpens{}, Exports: &fakeExports{}, Unsub: unsub})
+	defer srv.Close()
+
+	resp, err := http.Post(srv.URL+"/u/code123", "application/x-www-form-urlencoded", strings.NewReader("List-Unsubscribe=One-Click"))
+	if err != nil {
+		t.Fatalf("post failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	if len(unsub.codes) != 1 || unsub.codes[0] != "code123" {
+		t.Errorf("expected one-click unsubscribe for code123, got %v", unsub.codes)
+	}
+}
+
 func TestHealth(t *testing.T) {
 	srv := newServer(&Handlers{Tracking: &fakeTracking{}, Opens: &fakeOpens{}, Exports: &fakeExports{}, Unsub: &fakeUnsub{}})
 	defer srv.Close()

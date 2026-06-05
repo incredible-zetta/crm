@@ -137,7 +137,7 @@ func main() {
 	pub.Register(mux)
 	mux.Handle("/mcp", mcpHandler)
 	mux.Handle("/mcp/", mcpHandler)
-	debugLog(debug, "registered routes: GET /{$}, GET /healthz, GET /t/{code}, GET /o/{code}, GET /export/{id}, GET /u/{code}, /mcp, /mcp/")
+	debugLog(debug, "registered routes: GET /{$}, GET /healthz, GET /t/{code}, GET /o/{code}, GET /export/{id}, GET /u/{code}, POST /u/{code}, /mcp, /mcp/")
 
 	// 8. Scheduler worker -> TaskService.Execute
 	worker := &scheduler.Worker{

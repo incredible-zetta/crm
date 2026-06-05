@@ -149,6 +149,32 @@ func TestSendResolvesContactEmail(t *testing.T) {
 	}
 }
 
+func TestSendInjectsListUnsubscribeHeaders(t *testing.T) {
+	contacts := &fakeContactRepo{
+		contacts: map[int64]domain.Contact{
+			1: {ID: 1, Email: "lead@example.com"},
+		},
+	}
+	sender := &fakeSender{}
+	events := &fakeEventRepo{}
+	svc := NewEmailService(sender, contacts, &fakeTemplateRepo{}, &fakeTrackingRepo{}, events, stubClock{}, stubIDGenerator{}, "http://crm.local")
+
+	_, _, err := svc.Send(context.Background(), SendInput{ContactID: 1, Subject: "Hello", Text: "Test"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(sender.sent) != 1 {
+		t.Fatalf("expected 1 sent message, got %d", len(sender.sent))
+	}
+	headers := sender.sent[0].Headers
+	if headers["List-Unsubscribe"] != "<http://crm.local/u/unsub123>" {
+		t.Errorf("unexpected List-Unsubscribe header: %q", headers["List-Unsubscribe"])
+	}
+	if headers["List-Unsubscribe-Post"] != "List-Unsubscribe=One-Click" {
+		t.Errorf("unexpected List-Unsubscribe-Post header: %q", headers["List-Unsubscribe-Post"])
+	}
+}
+
 func TestSendUnsubscribedGuard(t *testing.T) {
 	now := time.Now()
 	contacts := &fakeContactRepo{

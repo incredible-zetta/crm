@@ -113,7 +113,7 @@ Fixed enum: `new → contacted → qualified → proposal → won → lost`. Inv
 
 ## Compliance & data lifecycle
 
-- **Unsubscribe.** Every contact has a public opt-out token. Campaign emails carry an unsubscribe footer linking to `GET /u/{code}`. Visiting it sets `unsubscribed_at` and logs an `unsubscribe` event. `email_send` and `campaign_send` refuse to send to unsubscribed contacts (campaigns count them as `skipped`).
+- **Unsubscribe.** Every contact has a public opt-out token. Contact-addressed emails carry an unsubscribe footer linking to `GET /u/{code}`, plus `List-Unsubscribe` and `List-Unsubscribe-Post: List-Unsubscribe=One-Click` headers (RFC 2369 / 8058) so Gmail and Yahoo surface a native unsubscribe button. Mail clients POST to `POST /u/{code}` for one-click opt-out. Visiting or posting sets `unsubscribed_at` and logs an `unsubscribe` event. `email_send` and `campaign_send` refuse to send to unsubscribed contacts (campaigns count them as `skipped`).
 - **Soft delete.** `contact_delete`, `campaign_delete`, and `template_delete` set `deleted_at`; deleted rows are hidden from all lists, sends, and stats but remain recoverable.
 - **Hard delete (GDPR).** `contact_delete` with `purge: true` removes the row permanently.
 

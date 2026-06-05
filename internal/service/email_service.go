@@ -147,12 +147,20 @@ func (s *EmailService) Send(ctx context.Context, in SendInput) (status string, t
 			return "", resolvedTo, fmt.Errorf("failed to rewrite links: %w", err)
 		}
 		rewrittenHTML = template.InjectPixel(rewrittenHTML, s.baseURL, openCode)
+	}
 
-		// Compliance: append a per-contact unsubscribe footer for contact-addressed
-		// sends. Best-effort — a failure to mint the code must not block the send,
-		// it just omits the footer.
-		if in.ContactID > 0 {
-			if code, codeErr := s.ensureUnsubCode(ctx, in.ContactID); codeErr == nil && code != "" {
+	// Compliance: build per-contact unsubscribe URL once. Used for both the
+	// List-Unsubscribe headers (RFC 2369 / 8058) and the visible HTML footer.
+	// Best-effort — a failure to mint the code must not block the send.
+	var headers map[string]string
+	if in.ContactID > 0 {
+		if code, codeErr := s.ensureUnsubCode(ctx, in.ContactID); codeErr == nil && code != "" {
+			unsubURL := strings.TrimSuffix(s.baseURL, "/") + "/u/" + code
+			headers = map[string]string{
+				"List-Unsubscribe":      "<" + unsubURL + ">",
+				"List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+			}
+			if rewrittenHTML != "" {
 				rewrittenHTML = template.InjectUnsubscribeFooter(rewrittenHTML, s.baseURL, code)
 			}
 		}
@@ -163,6 +171,7 @@ func (s *EmailService) Send(ctx context.Context, in SendInput) (status string, t
 		Subject: renderedSubject,
 		HTML:    rewrittenHTML,
 		Text:    renderedText,
+		Headers: headers,
 	})
 	if sendErr != nil {
 		// best-effort event insertion

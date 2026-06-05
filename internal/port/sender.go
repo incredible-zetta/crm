@@ -9,6 +9,9 @@ type OutboundMessage struct {
 	HTML    string
 	Text    string
 	From    string
+	// Headers carries optional extra RFC 5322 headers (e.g. List-Unsubscribe).
+	// Keys and values must not contain CR or LF.
+	Headers map[string]string
 }
 
 // EmailSender defines the interface for delivering outbound emails.

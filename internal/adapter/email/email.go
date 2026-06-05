@@ -96,6 +96,11 @@ func (s *smtpSender) Send(ctx context.Context, m port.OutboundMessage) error {
 	if hasHeaderInjection(m.To) || hasHeaderInjection(from) || hasHeaderInjection(m.Subject) {
 		return fmt.Errorf("invalid header value (contains newline)")
 	}
+	for k, v := range m.Headers {
+		if hasHeaderInjection(k) || hasHeaderInjection(v) {
+			return fmt.Errorf("invalid extra header value (contains newline)")
+		}
+	}
 
 	if m.Text == "" && m.HTML == "" {
 		return errors.New("at least one of HTML or Text body must be provided")
@@ -109,6 +114,9 @@ func (s *smtpSender) Send(ctx context.Context, m port.OutboundMessage) error {
 	buf.WriteString(fmt.Sprintf("To: %s\r\n", m.To))
 	buf.WriteString(fmt.Sprintf("Subject: %s\r\n", m.Subject))
 	buf.WriteString(fmt.Sprintf("Date: %s\r\n", time.Now().Format(time.RFC1123Z)))
+	for k, v := range m.Headers {
+		buf.WriteString(fmt.Sprintf("%s: %s\r\n", k, v))
+	}
 	buf.WriteString("MIME-Version: 1.0\r\n")
 
 	if m.Text != "" && m.HTML != "" {
@@ -197,6 +205,11 @@ func (m *mailgunSender) Send(ctx context.Context, msg port.OutboundMessage) erro
 	if hasHeaderInjection(msg.To) || hasHeaderInjection(from) || hasHeaderInjection(msg.Subject) {
 		return fmt.Errorf("invalid header value (contains newline)")
 	}
+	for k, v := range msg.Headers {
+		if hasHeaderInjection(k) || hasHeaderInjection(v) {
+			return fmt.Errorf("invalid extra header value (contains newline)")
+		}
+	}
 
 	if msg.Text == "" && msg.HTML == "" {
 		return errors.New("at least one of HTML or Text body must be provided")
@@ -223,6 +236,11 @@ func (m *mailgunSender) Send(ctx context.Context, msg port.OutboundMessage) erro
 	if msg.HTML != "" {
 		if err := writer.WriteField("html", msg.HTML); err != nil {
 			return fmt.Errorf("failed to write form field html: %w", err)
+		}
+	}
+	for k, v := range msg.Headers {
+		if err := writer.WriteField("h:"+k, v); err != nil {
+			return fmt.Errorf("failed to write custom header %s: %w", k, err)
 		}
 	}
 	if err := writer.Close(); err != nil {
