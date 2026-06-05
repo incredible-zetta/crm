@@ -19,6 +19,16 @@ func TestRenderSubstitutes(t *testing.T) {
 	}
 }
 
+func TestRenderSupportsBareMergeVariables(t *testing.T) {
+	got, err := template.Render("Halo {{first_name}}", map[string]any{"first_name": "Indra"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "Halo Indra" {
+		t.Fatalf("got %q, want %q", got, "Halo Indra")
+	}
+}
+
 func TestRenderMissingKeyNoError(t *testing.T) {
 	got, err := template.Render("Hi {{.Name}}", map[string]any{})
 	if err != nil {

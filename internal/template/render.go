@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"regexp"
 	"strings"
 	texttemplate "text/template"
 	"text/template/parse"
@@ -17,7 +18,10 @@ type Rendered struct {
 
 // Render parses the template and executes it with the provided variables.
 // Supports flat top-level variables ({{.Key}}). Missing top-level keys render as empty.
+var bareMergeVarPattern = regexp.MustCompile(`{{\s*([A-Za-z_][A-Za-z0-9_]*)\s*}}`)
+
 func Render(tmpl string, vars map[string]any) (string, error) {
+	tmpl = normalizeBareMergeVars(tmpl)
 	t, err := texttemplate.New("tmpl").Option("missingkey=zero").Parse(tmpl)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)
@@ -36,6 +40,10 @@ func Render(tmpl string, vars map[string]any) (string, error) {
 	}
 
 	return buf.String(), nil
+}
+
+func normalizeBareMergeVars(tmpl string) string {
+	return bareMergeVarPattern.ReplaceAllString(tmpl, `{{.$1}}`)
 }
 
 func prePopulateMissingKeys(node parse.Node, vars map[string]any) {
