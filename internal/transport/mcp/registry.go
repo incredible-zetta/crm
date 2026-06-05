@@ -163,4 +163,35 @@ func Register(srv *mcp.Server, d *Deps) {
 		Name:        "campaign_stats",
 		Description: "Retrieve detailed delivery, open and click statistics for a specific campaign",
 	}, d.CampaignStats)
+
+	// Group 9: Inbox (inbox.go)
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "inbox_sync",
+		Description: "Fetch new inbound replies from the configured IMAP inbox",
+	}, d.InboxSync)
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "inbox_list",
+		Description: "List stored inbound messages with snippets",
+	}, d.InboxList)
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "inbox_get",
+		Description: "Read a full stored inbound message",
+	}, d.InboxGet)
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "inbox_mark_read",
+		Description: "Mark a stored inbound message read or unread",
+	}, d.InboxMarkRead)
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "inbox_reply",
+		Description: "Reply to an inbound message using the configured sender identity",
+	}, d.InboxReply)
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "inbox_delete",
+		Description: "Soft-delete a stored inbound message locally",
+	}, d.InboxDelete)
 }
