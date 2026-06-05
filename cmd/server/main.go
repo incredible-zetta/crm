@@ -12,9 +12,11 @@ import (
 	"time"
 
 	"github.com/incredible-zetta/crm/internal/adapter/email"
+	imapadapter "github.com/incredible-zetta/crm/internal/adapter/imap"
 	"github.com/incredible-zetta/crm/internal/adapter/mysql"
 	"github.com/incredible-zetta/crm/internal/adapter/system"
 	"github.com/incredible-zetta/crm/internal/config"
+	"github.com/incredible-zetta/crm/internal/inboxpoller"
 	"github.com/incredible-zetta/crm/internal/mcpserver"
 	"github.com/incredible-zetta/crm/internal/port"
 	"github.com/incredible-zetta/crm/internal/scheduler"
@@ -33,7 +35,7 @@ func main() {
 	}
 
 	debug := cfg.DebugEnabled()
-	debugLog(debug, "debug logging enabled: version=%s base_url=%s port=%s scheduler_interval_sec=%d db_dsn=%s", version, cfg.BaseURL, cfg.Port, cfg.SchedulerIntervalSec, redactDSN(cfg.DBDSN))
+	debugLog(debug, "debug logging enabled: version=%s base_url=%s port=%s scheduler_interval_sec=%d inbox_enabled=%t db_dsn=%s", version, cfg.BaseURL, cfg.Port, cfg.SchedulerIntervalSec, cfg.InboxEnabled(), redactDSN(cfg.DBDSN))
 
 	// 2. Database + migrations
 	debugLog(debug, "opening database: %s", redactDSN(cfg.DBDSN))
@@ -96,12 +98,21 @@ func main() {
 			Events:    store.Events(),
 			Tracking:  store.Tracking(),
 			Exports:   store.Exports(),
+			Inbox:     store.Inbox(),
 		},
 		sender,
 		system.RealClock{},
 		system.CryptoIDGen{},
 		service.Config{BaseURL: cfg.BaseURL, ExportDir: exportDir},
 	)
+	if cfg.InboxEnabled() {
+		fetcher := imapadapter.NewFetcher(imapadapter.Config{Host: cfg.IMAPHost, Port: cfg.IMAPPort, User: cfg.IMAPUser, Pass: cfg.IMAPPass, Mailbox: cfg.IMAPMailbox, SinceDays: cfg.IMAPSinceDays})
+		notifier := email.NewAdminNotifier(sender, cfg.AdminNotifyEmail)
+		svc.Inbox = service.NewInboxService(store.Inbox(), store.Contacts(), fetcher, notifier, sender, system.RealClock{}, cfg.IMAPMailbox)
+	} else {
+		svc.Inbox = nil
+		debugLog(debug, "inbox disabled: set IMAP_HOST, IMAP_USER, IMAP_PASS, IMAP_MAILBOX, ADMIN_NOTIFY_EMAIL to enable")
+	}
 
 	// 6. MCP transport (auth-gated /mcp)
 	mcpSrv := mcpserver.NewMCPServer("zettacrm", version)
@@ -139,6 +150,10 @@ func main() {
 	defer cancel()
 
 	go worker.Start(ctx, time.Duration(cfg.SchedulerIntervalSec)*time.Second)
+	if cfg.InboxEnabled() && svc.Inbox != nil {
+		inboxpoller.New(svc.Inbox, time.Duration(cfg.IMAPPollIntervalSec)*time.Second, 100).Start(ctx)
+		debugLog(debug, "inbox poller started: mailbox=%s interval_sec=%d", cfg.IMAPMailbox, cfg.IMAPPollIntervalSec)
+	}
 
 	handler := http.Handler(mux)
 	if debug {

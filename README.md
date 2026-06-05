@@ -38,7 +38,7 @@ X-API-Key: <MCP_API_KEY>
 
 The key check is constant-time and fail-closed. Tracking and export routes are intentionally public because email recipients open them without credentials.
 
-## Tools (28)
+## Tools (34)
 
 ### Contacts
 | Tool | Description |
@@ -81,6 +81,16 @@ The key check is constant-time and fail-closed. Tracking and export routes are i
 | `task_list` | List scheduled tasks (filter by status) |
 | `task_cancel` | Cancel a pending scheduled task |
 | `tracking_link_create` | Wrap a URL in a click-tracked redirect |
+
+### Inbox
+| Tool | Description |
+|------|-------------|
+| `inbox_sync` | Manually fetch new inbound replies from configured IMAP mailbox |
+| `inbox_list` | List stored inbound messages with snippets |
+| `inbox_get` | Read full text/html body and headers for one inbound message |
+| `inbox_mark_read` | Mark an inbound message read or unread |
+| `inbox_reply` | Reply from the configured sender identity |
+| `inbox_delete` | Soft-delete the local inbox copy; remote IMAP mail is not deleted |
 
 ### Ops & analytics
 | Tool | Description |
@@ -239,7 +249,7 @@ internal/adapter/system/    real clock + crypto id generator
 internal/template/          render + link rewrite + open pixel + unsubscribe footer
 internal/scheduler/         in-process worker (claim -> execute -> mark)
 internal/mcpserver/         MCP server scaffold + auth + terse response helpers
-internal/transport/mcp/     28 thin MCP tool handlers
+internal/transport/mcp/     34 thin MCP tool handlers
 internal/transport/http/    public routes (click, open pixel, export, unsubscribe, health)
 internal/config/            env config loader
 migrations/                 0001_init schema (embedded)

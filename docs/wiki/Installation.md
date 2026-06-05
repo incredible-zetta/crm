@@ -114,3 +114,20 @@ Public routes:
 - `/u/{code}` — public unsubscribe page.
 
 Terminate TLS at your platform/proxy and set `BASE_URL=https://your-domain.example`.
+
+## Optional IMAP inbox
+
+Set these env vars to enable inbound reply sync and admin notifications:
+
+```env
+IMAP_HOST=imap.example.com
+IMAP_PORT=993
+IMAP_USER=no-reply@example.com
+IMAP_PASS=your-imap-password
+IMAP_MAILBOX=INBOX
+IMAP_POLL_INTERVAL_SEC=60
+IMAP_SINCE_DAYS=14
+ADMIN_NOTIFY_EMAIL=admin@example.com
+```
+
+When enabled, Zetta CRM polls IMAP, stores inbound replies, matches known contacts by sender email, and exposes `inbox_sync`, `inbox_list`, `inbox_get`, `inbox_mark_read`, `inbox_reply`, and `inbox_delete` over MCP.

@@ -151,3 +151,21 @@ new `adapter/` package and wire it in `cmd/server`. Nothing in `service`,
 go test ./...                 # unit layers always run; mysql skips without DB_DSN
 DB_DSN='...' go test ./...     # full suite incl. mysql integration
 ```
+
+## Inbox / IMAP flow
+
+Inbound email follows same hexagonal boundary:
+
+```text
+IMAP server -> adapter/imap -> port.InboxFetcher -> service.InboxService -> port.InboxRepo -> adapter/mysql
+                                                        |-> port.AdminNotifier -> adapter/email
+MCP inbox tools -> transport/mcp -> service.InboxService
+```
+
+Rules:
+- IMAP is optional. Missing IMAP/admin env disables inbox; server still boots.
+- Poller is in-process and calls `InboxService.Sync`; errors are logged, never panic.
+- Sender matching is by normalized `from_email` against active contacts.
+- Admin notifications fire only for new messages from known contacts.
+- `inbox_list` returns snippets; `inbox_get` returns full body.
+- `inbox_delete` soft-deletes only local MySQL copy; remote IMAP mail is untouched.

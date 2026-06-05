@@ -93,3 +93,20 @@ or:
 ```text
 X-API-Key: <MCP_API_KEY>
 ```
+
+## Optional IMAP inbox env
+
+Add these variables in EasyPanel only if you want inbound reply sync:
+
+```env
+IMAP_HOST=imap.example.com
+IMAP_PORT=993
+IMAP_USER=no-reply@example.com
+IMAP_PASS=your-imap-password
+IMAP_MAILBOX=INBOX
+IMAP_POLL_INTERVAL_SEC=60
+IMAP_SINCE_DAYS=14
+ADMIN_NOTIFY_EMAIL=admin@example.com
+```
+
+If any required IMAP value is missing, inbox sync stays disabled and the container still boots.
