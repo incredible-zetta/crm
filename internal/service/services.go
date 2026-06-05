@@ -20,6 +20,7 @@ type Repos struct {
 	Events    port.EventRepo
 	Tracking  port.TrackingRepo
 	Exports   port.ExportRepo
+	Inbox     port.InboxRepo
 }
 
 // Services is the assembled use-case layer. It is the single entry point the
@@ -33,6 +34,7 @@ type Services struct {
 	Task      *TaskService
 	Analytics *AnalyticsService
 	Tracking  *TrackingService
+	Inbox     *InboxService
 }
 
 // New wires every service from the provided ports and config. The wiring order
@@ -49,6 +51,10 @@ func New(repos Repos, sender port.EmailSender, clock port.Clock, idgen port.IDGe
 	task := NewTaskService(repos.Tasks, clock, email, campaign)
 	analytics := NewAnalyticsService(repos.Contacts, repos.Events, repos.Tasks)
 	tracking := NewTrackingService(repos.Tracking, repos.Events, clock, cfg.BaseURL)
+	var inbox *InboxService
+	if repos.Inbox != nil {
+		inbox = NewInboxService(repos.Inbox, repos.Contacts, nil, nil, sender, clock, "INBOX")
+	}
 
 	return &Services{
 		Contact:   contact,
@@ -58,5 +64,6 @@ func New(repos Repos, sender port.EmailSender, clock port.Clock, idgen port.IDGe
 		Task:      task,
 		Analytics: analytics,
 		Tracking:  tracking,
+		Inbox:     inbox,
 	}
 }
