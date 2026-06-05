@@ -822,6 +822,7 @@ func TestCampaignSend(t *testing.T) {
 
 	res, out, err := h.deps.CampaignSend(ctx, nil, mcptransport.CampaignSendIn{
 		CampaignID: camp.ID,
+		Sync:       true,
 	})
 	if err != nil || (res != nil && res.IsError) {
 		t.Fatalf("campaign send failed: %v, %v", err, res)
@@ -829,6 +830,9 @@ func TestCampaignSend(t *testing.T) {
 
 	if out.CampaignID != camp.ID {
 		t.Errorf("expected campaign ID %d, got %d", camp.ID, out.CampaignID)
+	}
+	if out.Status != "sent" {
+		t.Errorf("expected status sent, got %q", out.Status)
 	}
 	if out.Recipients != 2 {
 		t.Errorf("expected 2 recipients in segment, got %d", out.Recipients)
@@ -838,6 +842,49 @@ func TestCampaignSend(t *testing.T) {
 	}
 	if out.Skipped != 1 {
 		t.Errorf("expected 1 skipped (unsubscribed), got %d", out.Skipped)
+	}
+}
+
+func TestCampaignSendAsyncEnqueues(t *testing.T) {
+	h := setupTestDeps(t)
+	ctx := context.Background()
+
+	tmpl, _ := h.templates.Create(ctx, domain.Template{Name: "async-tmpl", Subject: "Promo"})
+	camp, _ := h.campaigns.Create(ctx, domain.Campaign{Name: "Async Promo", TemplateID: tmpl.ID})
+
+	res, out, err := h.deps.CampaignSend(ctx, nil, mcptransport.CampaignSendIn{CampaignID: camp.ID})
+	if err != nil || (res != nil && res.IsError) {
+		t.Fatalf("campaign send failed: %v, %v", err, res)
+	}
+	if out.Status != "queued" {
+		t.Errorf("expected status queued, got %q", out.Status)
+	}
+	if out.TaskID == 0 {
+		t.Errorf("expected non-zero task id")
+	}
+	if out.Sent != 0 || out.Recipients != 0 {
+		t.Errorf("async send must not report inline counts, got %+v", out)
+	}
+
+	// Campaign should be marked sending, and a campaign task enqueued.
+	got, _ := h.campaigns.Get(ctx, camp.ID)
+	if got.Status != domain.CampaignSending {
+		t.Errorf("expected campaign status sending, got %q", got.Status)
+	}
+	tasks, _ := h.tasks.List(ctx, "", 10)
+	if len(tasks) != 1 || tasks[0].Kind != domain.TaskCampaign {
+		t.Fatalf("expected one campaign task enqueued, got %+v", tasks)
+	}
+}
+
+func TestCampaignSendAsyncNotFound(t *testing.T) {
+	h := setupTestDeps(t)
+	res, _, err := h.deps.CampaignSend(context.Background(), nil, mcptransport.CampaignSendIn{CampaignID: 999999})
+	if err != nil {
+		t.Fatalf("unexpected transport error: %v", err)
+	}
+	if res == nil || !res.IsError {
+		t.Fatalf("expected not_found error result for missing campaign")
 	}
 }
 

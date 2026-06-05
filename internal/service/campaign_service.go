@@ -89,6 +89,16 @@ func (s *CampaignService) Delete(ctx context.Context, id int64) error {
 	return s.repo.SoftDelete(ctx, id)
 }
 
+// MarkSending transitions a campaign into the sending state. It verifies the
+// campaign exists first so the async enqueue path can fail fast with
+// ErrNotFound. It is idempotent: a campaign already sending stays sending.
+func (s *CampaignService) MarkSending(ctx context.Context, id int64) error {
+	if _, err := s.repo.Get(ctx, id); err != nil {
+		return err
+	}
+	return s.repo.UpdateStatus(ctx, id, domain.CampaignSending)
+}
+
 // Stats returns performance metrics for a campaign.
 func (s *CampaignService) Stats(ctx context.Context, id int64) (CampaignStats, error) {
 	_, err := s.repo.Get(ctx, id)
@@ -142,6 +152,9 @@ func (s *CampaignService) Send(ctx context.Context, id int64) (recipients, sent,
 		return 0, 0, 0, 0, err
 	}
 
+	// Mark sending so concurrent callers and pollers observe progress. Best-effort.
+	_ = s.repo.UpdateStatus(ctx, campaign.ID, domain.CampaignSending)
+
 	var filter domain.ContactFilter
 	if campaign.Segment != nil {
 		if val, ok := campaign.Segment["stage"].(string); ok {
@@ -162,6 +175,7 @@ func (s *CampaignService) Send(ctx context.Context, id int64) (recipients, sent,
 	for {
 		page, err := s.contacts.List(ctx, filter, port.Paging{Limit: 100, Cursor: cursor})
 		if err != nil {
+			_ = s.repo.UpdateStatus(ctx, campaign.ID, domain.CampaignFailed)
 			return recipients, sent, failed, skipped, fmt.Errorf("failed to page contacts: %w", err)
 		}
 		if len(page.Items) == 0 {

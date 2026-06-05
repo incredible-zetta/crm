@@ -28,14 +28,17 @@ type CampaignCreateOut struct {
 
 type CampaignSendIn struct {
 	CampaignID int64 `json:"campaign_id" jsonschema:"ID of the campaign to send"`
+	Sync       bool  `json:"sync,omitempty" jsonschema:"Send synchronously and wait for completion. Default false enqueues a background task and returns immediately."`
 }
 
 type CampaignSendOut struct {
-	CampaignID int64 `json:"campaign_id"`
-	Recipients int   `json:"recipients"`
-	Sent       int   `json:"sent"`
-	Failed     int   `json:"failed"`
-	Skipped    int   `json:"skipped,omitempty"`
+	CampaignID int64  `json:"campaign_id"`
+	Status     string `json:"status"`
+	TaskID     int64  `json:"task_id,omitempty"`
+	Recipients int    `json:"recipients,omitempty"`
+	Sent       int    `json:"sent,omitempty"`
+	Failed     int    `json:"failed,omitempty"`
+	Skipped    int    `json:"skipped,omitempty"`
 }
 
 type CampaignListIn struct{}
@@ -120,20 +123,45 @@ func (d *Deps) CampaignCreate(ctx context.Context, req *mcp.CallToolRequest, in 
 }
 
 func (d *Deps) CampaignSend(ctx context.Context, req *mcp.CallToolRequest, in CampaignSendIn) (*mcp.CallToolResult, CampaignSendOut, error) {
-	recipients, sent, failed, skipped, err := d.Svc.Campaign.Send(ctx, in.CampaignID)
-	if err != nil {
+	// Synchronous escape hatch: send inline and wait. Useful for small test
+	// sends. Default path enqueues a background task to avoid blocking the
+	// MCP call and risking request timeouts on large segments.
+	if in.Sync {
+		recipients, sent, failed, skipped, err := d.Svc.Campaign.Send(ctx, in.CampaignID)
+		if err != nil {
+			if errors.Is(err, domain.ErrNotFound) {
+				return mcpserver.Err("not_found", "campaign not found"), CampaignSendOut{}, nil
+			}
+			return nil, CampaignSendOut{}, fmt.Errorf("campaign_send: %w", err)
+		}
+		return nil, CampaignSendOut{
+			CampaignID: in.CampaignID,
+			Status:     "sent",
+			Recipients: recipients,
+			Sent:       sent,
+			Failed:     failed,
+			Skipped:    skipped,
+		}, nil
+	}
+
+	// Mark the campaign as sending up front so it fails fast if the campaign
+	// does not exist and so pollers see progress before the worker picks it up.
+	if err := d.Svc.Campaign.MarkSending(ctx, in.CampaignID); err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
 			return mcpserver.Err("not_found", "campaign not found"), CampaignSendOut{}, nil
 		}
 		return nil, CampaignSendOut{}, fmt.Errorf("campaign_send: %w", err)
 	}
 
+	taskID, err := d.Svc.Task.Schedule(ctx, string(domain.TaskCampaign), map[string]any{"campaign_id": in.CampaignID}, time.Now())
+	if err != nil {
+		return nil, CampaignSendOut{}, fmt.Errorf("campaign_send enqueue: %w", err)
+	}
+
 	return nil, CampaignSendOut{
 		CampaignID: in.CampaignID,
-		Recipients: recipients,
-		Sent:       sent,
-		Failed:     failed,
-		Skipped:    skipped,
+		Status:     "queued",
+		TaskID:     taskID,
 	}, nil
 }
 

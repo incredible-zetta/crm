@@ -71,7 +71,7 @@ The key check is constant-time and fail-closed. Tracking and export routes are i
 | `campaign_list` | List campaigns |
 | `campaign_update` | Update a campaign (name, template, provider, segment, schedule) |
 | `campaign_delete` | Soft-delete a campaign |
-| `campaign_send` | Dispatch a campaign to its segment (skips unsubscribed) |
+| `campaign_send` | Enqueue a campaign for background dispatch (returns `task_id`, status `queued`); `sync: true` sends inline and waits |
 | `campaign_stats` | Delivery / open / click stats + top links for a campaign |
 
 ### Scheduling & tracking
