@@ -25,6 +25,13 @@ type ContactService struct {
 	clock     port.Clock
 	exportDir string
 	baseURL   string
+	verifier  port.EmailVerifier // optional; nil disables verification
+}
+
+// SetVerifier attaches an email verifier. When set, Create and Update verify
+// the address and persist the verdict; AuditEmails and VerifyContact use it too.
+func (s *ContactService) SetVerifier(v port.EmailVerifier) {
+	s.verifier = v
 }
 
 // NewContactService creates a new ContactService.
@@ -62,6 +69,14 @@ func (s *ContactService) Create(ctx context.Context, c domain.Contact) (domain.C
 	if err != nil {
 		return domain.Contact{}, err
 	}
+	if s.verifier != nil {
+		v := s.verifier.Verify(ctx, created.Email)
+		if setErr := s.repo.SetEmailStatus(ctx, created.ID, v); setErr == nil {
+			created.EmailStatus = v.Status
+			created.EmailReason = v.Reason
+			created.EmailCheckedAt = &v.CheckedAt
+		}
+	}
 	return created, nil
 }
 
@@ -85,7 +100,91 @@ func (s *ContactService) Update(ctx context.Context, id int64, patch domain.Cont
 	if patch.Email != nil && *patch.Email == "" {
 		return domain.Contact{}, fmt.Errorf("%w: email required", domain.ErrValidation)
 	}
-	return s.repo.Update(ctx, id, patch)
+	updated, err := s.repo.Update(ctx, id, patch)
+	if err != nil {
+		return domain.Contact{}, err
+	}
+	// Re-verify only when the email address itself changed.
+	if patch.Email != nil && s.verifier != nil {
+		v := s.verifier.Verify(ctx, updated.Email)
+		if setErr := s.repo.SetEmailStatus(ctx, updated.ID, v); setErr == nil {
+			updated.EmailStatus = v.Status
+			updated.EmailReason = v.Reason
+			updated.EmailCheckedAt = &v.CheckedAt
+		}
+	}
+	return updated, nil
+}
+
+// VerifyContact verifies one contact's email and persists the verdict.
+func (s *ContactService) VerifyContact(ctx context.Context, id int64) (domain.Contact, domain.EmailVerification, error) {
+	if s.verifier == nil {
+		return domain.Contact{}, domain.EmailVerification{}, fmt.Errorf("%w: email verification disabled", domain.ErrValidation)
+	}
+	c, err := s.repo.Get(ctx, id)
+	if err != nil {
+		return domain.Contact{}, domain.EmailVerification{}, err
+	}
+	v := s.verifier.Verify(ctx, c.Email)
+	if err := s.repo.SetEmailStatus(ctx, c.ID, v); err != nil {
+		return domain.Contact{}, domain.EmailVerification{}, err
+	}
+	c.EmailStatus = v.Status
+	c.EmailReason = v.Reason
+	c.EmailCheckedAt = &v.CheckedAt
+	return c, v, nil
+}
+
+// EmailAuditResult summarizes a batch verification run.
+type EmailAuditResult struct {
+	Checked    int
+	Valid      int
+	Invalid    int
+	Risky      int
+	Unknown    int
+	NextCursor int64
+}
+
+// AuditEmails verifies a page of contacts matching the filter and persists each
+// verdict. It processes up to limit contacts (default 100, cap 500) starting at
+// cursor, returning NextCursor for the caller to continue. onlyUnchecked skips
+// contacts already verified.
+func (s *ContactService) AuditEmails(ctx context.Context, f domain.ContactFilter, onlyUnchecked bool, limit int, cursor int64) (EmailAuditResult, error) {
+	if s.verifier == nil {
+		return EmailAuditResult{}, fmt.Errorf("%w: email verification disabled", domain.ErrValidation)
+	}
+	if limit <= 0 {
+		limit = 100
+	} else if limit > 500 {
+		limit = 500
+	}
+	var res EmailAuditResult
+	page, err := s.repo.List(ctx, f, port.Paging{Limit: limit, Cursor: cursor})
+	if err != nil {
+		return res, fmt.Errorf("failed to list contacts: %w", err)
+	}
+	for _, c := range page.Items {
+		if onlyUnchecked && c.EmailCheckedAt != nil {
+			continue
+		}
+		v := s.verifier.Verify(ctx, c.Email)
+		if err := s.repo.SetEmailStatus(ctx, c.ID, v); err != nil {
+			continue
+		}
+		res.Checked++
+		switch v.Status {
+		case domain.EmailValid:
+			res.Valid++
+		case domain.EmailInvalid:
+			res.Invalid++
+		case domain.EmailRisky:
+			res.Risky++
+		default:
+			res.Unknown++
+		}
+	}
+	res.NextCursor = page.NextCursor
+	return res, nil
 }
 
 // BulkPatch describes a partial update applied to many contacts at once. Unlike

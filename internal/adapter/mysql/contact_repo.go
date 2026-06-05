@@ -86,7 +86,7 @@ ON DUPLICATE KEY UPDATE
 }
 
 func (r *contactRepo) Get(ctx context.Context, id int64) (domain.Contact, error) {
-	query := `SELECT id, email, first_name, last_name, company, phone, stage, tags, notes, custom, source, unsub_code, unsubscribed_at, deleted_at, created_at, updated_at 
+	query := `SELECT id, email, first_name, last_name, company, phone, stage, tags, notes, custom, source, unsub_code, unsubscribed_at, deleted_at, created_at, updated_at, email_status, email_reason, email_checked_at 
 FROM contacts WHERE id = ? AND deleted_at IS NULL`
 	row := r.db.QueryRowContext(ctx, query, id)
 	c, err := scanContact(row)
@@ -100,7 +100,7 @@ FROM contacts WHERE id = ? AND deleted_at IS NULL`
 }
 
 func (r *contactRepo) GetByEmail(ctx context.Context, email string) (domain.Contact, error) {
-	query := `SELECT id, email, first_name, last_name, company, phone, stage, tags, notes, custom, source, unsub_code, unsubscribed_at, deleted_at, created_at, updated_at 
+	query := `SELECT id, email, first_name, last_name, company, phone, stage, tags, notes, custom, source, unsub_code, unsubscribed_at, deleted_at, created_at, updated_at, email_status, email_reason, email_checked_at 
 FROM contacts WHERE email = ? AND deleted_at IS NULL`
 	row := r.db.QueryRowContext(ctx, query, email)
 	c, err := scanContact(row)
@@ -114,7 +114,7 @@ FROM contacts WHERE email = ? AND deleted_at IS NULL`
 }
 
 func (r *contactRepo) GetByUnsubCode(ctx context.Context, code string) (domain.Contact, error) {
-	query := `SELECT id, email, first_name, last_name, company, phone, stage, tags, notes, custom, source, unsub_code, unsubscribed_at, deleted_at, created_at, updated_at 
+	query := `SELECT id, email, first_name, last_name, company, phone, stage, tags, notes, custom, source, unsub_code, unsubscribed_at, deleted_at, created_at, updated_at, email_status, email_reason, email_checked_at 
 FROM contacts WHERE unsub_code = ?`
 	row := r.db.QueryRowContext(ctx, query, code)
 	c, err := scanContact(row)
@@ -262,7 +262,7 @@ func (r *contactRepo) List(ctx context.Context, f domain.ContactFilter, p port.P
 		queryArgs = append(queryArgs, p.Cursor)
 	}
 
-	listQuery := `SELECT id, email, first_name, last_name, company, phone, stage, tags, notes, custom, source, unsub_code, unsubscribed_at, deleted_at, created_at, updated_at 
+	listQuery := `SELECT id, email, first_name, last_name, company, phone, stage, tags, notes, custom, source, unsub_code, unsubscribed_at, deleted_at, created_at, updated_at, email_status, email_reason, email_checked_at 
 FROM contacts WHERE ` + strings.Join(queryParts, " AND ") + " ORDER BY id ASC LIMIT ?"
 	queryArgs = append(queryArgs, limit+1)
 
@@ -390,6 +390,26 @@ func (r *contactRepo) SetUnsubCode(ctx context.Context, id int64, code string) e
 	return nil
 }
 
+func (r *contactRepo) SetEmailStatus(ctx context.Context, id int64, v domain.EmailVerification) error {
+	status := v.Status
+	if status == "" {
+		status = domain.EmailUnknown
+	}
+	query := "UPDATE contacts SET email_status = ?, email_reason = ?, email_checked_at = ? WHERE id = ? AND deleted_at IS NULL"
+	res, err := r.db.ExecContext(ctx, query, string(status), toNullString(v.Reason), toNullTime(&v.CheckedAt), id)
+	if err != nil {
+		return fmt.Errorf("set email status: %w", err)
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
+	if affected == 0 {
+		return fmt.Errorf("contact not found: %w", domain.ErrNotFound)
+	}
+	return nil
+}
+
 func scanContact(row interface{ Scan(dest ...any) error }) (domain.Contact, error) {
 	var c domain.Contact
 	var (
@@ -402,6 +422,9 @@ func scanContact(row interface{ Scan(dest ...any) error }) (domain.Contact, erro
 		unsubCode      sql.NullString
 		unsubscribedAt sql.NullTime
 		deletedAt      sql.NullTime
+		emailStatus    sql.NullString
+		emailReason    sql.NullString
+		emailCheckedAt sql.NullTime
 		tagsBuf        []byte
 		customBuf      []byte
 	)
@@ -423,6 +446,9 @@ func scanContact(row interface{ Scan(dest ...any) error }) (domain.Contact, erro
 		&deletedAt,
 		&c.CreatedAt,
 		&c.UpdatedAt,
+		&emailStatus,
+		&emailReason,
+		&emailCheckedAt,
 	)
 	if err != nil {
 		return domain.Contact{}, err
@@ -437,6 +463,13 @@ func scanContact(row interface{ Scan(dest ...any) error }) (domain.Contact, erro
 	c.UnsubCode = unsubCode.String
 	c.UnsubscribedAt = fromNullTime(unsubscribedAt)
 	c.DeletedAt = fromNullTime(deletedAt)
+	if emailStatus.Valid && emailStatus.String != "" {
+		c.EmailStatus = domain.EmailStatus(emailStatus.String)
+	} else {
+		c.EmailStatus = domain.EmailUnknown
+	}
+	c.EmailReason = emailReason.String
+	c.EmailCheckedAt = fromNullTime(emailCheckedAt)
 
 	if tagsBuf != nil {
 		if err := unmarshalJSON(tagsBuf, &c.Tags); err != nil {

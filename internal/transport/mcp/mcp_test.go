@@ -134,6 +134,19 @@ func (r *fakeContactRepo) SetUnsubCode(ctx context.Context, id int64, code strin
 	return nil
 }
 
+func (r *fakeContactRepo) SetEmailStatus(ctx context.Context, id int64, v domain.EmailVerification) error {
+	c, ok := r.contacts[id]
+	if !ok || c.DeletedAt != nil {
+		return domain.ErrNotFound
+	}
+	c.EmailStatus = v.Status
+	c.EmailReason = v.Reason
+	checked := v.CheckedAt
+	c.EmailCheckedAt = &checked
+	r.contacts[id] = c
+	return nil
+}
+
 func (r *fakeContactRepo) SoftDelete(ctx context.Context, id int64) error {
 	c, ok := r.contacts[id]
 	if !ok {
@@ -1084,5 +1097,75 @@ func TestContactBulkUpdateValidation(t *testing.T) {
 	}
 	if res == nil || !res.IsError {
 		t.Fatalf("expected invalid_input error for empty patch")
+	}
+}
+
+type fakeVerifier struct{}
+
+func (fakeVerifier) Verify(ctx context.Context, email string) domain.EmailVerification {
+	status := domain.EmailValid
+	reason := "deliverable"
+	if strings.Contains(email, "bad") {
+		status = domain.EmailInvalid
+		reason = "domain has no mail server"
+	}
+	return domain.EmailVerification{Email: email, Status: status, Reason: reason, CheckedAt: time.Unix(0, 0)}
+}
+
+func TestEmailVerifyAndAuditSync(t *testing.T) {
+	h := setupTestDeps(t)
+	ctx := context.Background()
+	h.deps.Svc.Contact.SetVerifier(fakeVerifier{})
+
+	good, _ := h.contacts.Upsert(ctx, domain.Contact{Email: "good@example.com"})
+	_, _ = h.contacts.Upsert(ctx, domain.Contact{Email: "bad@nodomain.test"})
+
+	// single verify
+	res, out, err := h.deps.EmailVerify(ctx, nil, mcptransport.EmailVerifyIn{ID: good.ID})
+	if err != nil || (res != nil && res.IsError) {
+		t.Fatalf("verify failed: %v %v", err, res)
+	}
+	if out.Status != "valid" {
+		t.Errorf("expected valid, got %q", out.Status)
+	}
+
+	// sync audit of all
+	res2, out2, err := h.deps.EmailAudit(ctx, nil, mcptransport.EmailAuditIn{Sync: true, Limit: 100})
+	if err != nil || (res2 != nil && res2.IsError) {
+		t.Fatalf("audit failed: %v %v", err, res2)
+	}
+	if out2.Checked != 2 || out2.Valid != 1 || out2.Invalid != 1 {
+		t.Fatalf("unexpected audit result: %+v", out2)
+	}
+}
+
+func TestEmailAuditAsyncEnqueues(t *testing.T) {
+	h := setupTestDeps(t)
+	ctx := context.Background()
+	h.deps.Svc.Contact.SetVerifier(fakeVerifier{})
+
+	res, out, err := h.deps.EmailAudit(ctx, nil, mcptransport.EmailAuditIn{Segment: map[string]any{"stage": "new"}})
+	if err != nil || (res != nil && res.IsError) {
+		t.Fatalf("audit enqueue failed: %v %v", err, res)
+	}
+	if out.Status != "queued" || out.TaskID == 0 {
+		t.Fatalf("expected queued with task id, got %+v", out)
+	}
+	tasks, _ := h.tasks.List(ctx, "", 10)
+	if len(tasks) != 1 || tasks[0].Kind != domain.TaskEmailAudit {
+		t.Fatalf("expected one email_audit task, got %+v", tasks)
+	}
+}
+
+func TestEmailVerifyDisabled(t *testing.T) {
+	h := setupTestDeps(t)
+	ctx := context.Background()
+	c, _ := h.contacts.Upsert(ctx, domain.Contact{Email: "x@example.com"})
+	res, _, err := h.deps.EmailVerify(ctx, nil, mcptransport.EmailVerifyIn{ID: c.ID})
+	if err != nil {
+		t.Fatalf("unexpected transport error: %v", err)
+	}
+	if res == nil || !res.IsError {
+		t.Fatalf("expected disabled error when no verifier set")
 	}
 }

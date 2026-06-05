@@ -262,6 +262,10 @@ func (r *fakeCampaignContactRepo) SetUnsubCode(ctx context.Context, id int64, co
 	return nil
 }
 
+func (r *fakeCampaignContactRepo) SetEmailStatus(ctx context.Context, id int64, v domain.EmailVerification) error {
+	return nil
+}
+
 type fakeCampaignEventRepo struct {
 	mu          sync.Mutex
 	events      []domain.EmailEvent

@@ -51,6 +51,7 @@ func New(repos Repos, sender port.EmailSender, clock port.Clock, idgen port.IDGe
 	task := NewTaskService(repos.Tasks, clock, email, campaign)
 	analytics := NewAnalyticsService(repos.Contacts, repos.Events, repos.Tasks)
 	tracking := NewTrackingService(repos.Tracking, repos.Events, clock, cfg.BaseURL)
+	task.SetContact(contact)
 	var inbox *InboxService
 	if repos.Inbox != nil {
 		inbox = NewInboxService(repos.Inbox, repos.Contacts, nil, nil, sender, clock, "INBOX")

@@ -67,6 +67,16 @@ func Register(srv *mcp.Server, d *Deps) {
 		Description: "Apply a partial update to every contact matching a segment filter (stage, company, tag, q).",
 	}, d.ContactBulkUpdateByFilter)
 
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "email_verify",
+		Description: "Verify one contact's email (syntax + DNS/MX + heuristics) and persist the verdict",
+	}, d.EmailVerify)
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "email_audit",
+		Description: "Batch-verify a segment of contacts and persist verdicts; paginate via next_cursor",
+	}, d.EmailAudit)
+
 	// Group 2: Templates (templates.go)
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "template_create",

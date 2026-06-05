@@ -15,15 +15,22 @@ import (
 
 // EmailService orchestrates the single-email sending pipeline.
 type EmailService struct {
-	sender     port.EmailSender
-	contacts   port.ContactRepo
-	templates  port.TemplateRepo
-	tracking   port.TrackingRepo
-	events     port.EventRepo
-	clock      port.Clock
-	idgen      port.IDGenerator
-	baseURL    string
-	openCodeFn func() (string, error)
+	sender       port.EmailSender
+	contacts     port.ContactRepo
+	templates    port.TemplateRepo
+	tracking     port.TrackingRepo
+	events       port.EventRepo
+	clock        port.Clock
+	idgen        port.IDGenerator
+	baseURL      string
+	openCodeFn   func() (string, error)
+	blockInvalid bool // when true, refuse to send to contacts verified invalid
+}
+
+// SetBlockInvalid toggles refusing sends to contacts whose persisted email
+// verification status is invalid.
+func (s *EmailService) SetBlockInvalid(block bool) {
+	s.blockInvalid = block
 }
 
 // NewEmailService creates a new EmailService.
@@ -81,6 +88,9 @@ func (s *EmailService) Send(ctx context.Context, in SendInput) (status string, t
 		}
 		if c.IsUnsubscribed() {
 			return "", "", fmt.Errorf("%w: contact is unsubscribed", domain.ErrValidation)
+		}
+		if s.blockInvalid && c.EmailStatus == domain.EmailInvalid {
+			return "", "", fmt.Errorf("%w: contact email is verified invalid", domain.ErrValidation)
 		}
 		if in.To != "" && !strings.EqualFold(in.To, c.Email) {
 			return "", "", fmt.Errorf("%w: to does not match contact email", domain.ErrValidation)

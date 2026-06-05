@@ -70,6 +70,10 @@ func (r stubContactRepo) SetUnsubCode(ctx context.Context, id int64, code string
 	return nil
 }
 
+func (r stubContactRepo) SetEmailStatus(ctx context.Context, id int64, v domain.EmailVerification) error {
+	return nil
+}
+
 var _ port.ContactRepo = stubContactRepo{}
 
 type stubCampaignRepo struct{}

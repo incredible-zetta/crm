@@ -38,7 +38,7 @@ X-API-Key: <MCP_API_KEY>
 
 The key check is constant-time and fail-closed. Tracking and export routes are intentionally public because email recipients open them without credentials.
 
-## Tools (36)
+## Tools (38)
 
 ### Contacts
 | Tool | Description |
@@ -53,6 +53,8 @@ The key check is constant-time and fail-closed. Tracking and export routes are i
 | `contact_unsubscribe` | Mark a contact unsubscribed (suppresses future email) |
 | `contact_bulk_update` | Apply a partial patch to many contacts by ID list (max 500); tags via `add_tags`/`remove_tags` or `set_tags` |
 | `contact_bulk_update_by_filter` | Apply a partial patch to every contact matching a segment filter (`stage`, `company`, `tag`, `q`) |
+| `email_verify` | Verify one contact's email (syntax + DNS/MX + heuristics) and persist the verdict |
+| `email_audit` | Batch-verify a segment of contacts; async by default (returns `task_id`), `sync:true` for a single inline page |
 
 ### Email & templates
 | Tool | Description |
@@ -145,6 +147,8 @@ All config comes from environment variables (EasyPanel injects them). See `.env.
 | `IMAP_SINCE_DAYS` | no | `14` | First-sync lookback window |
 | `ADMIN_NOTIFY_EMAIL` | no | — | Admin email notified for new replies from known contacts |
 | `EMAIL_RATE_MAX` / `EMAIL_RATE_WINDOW_SEC` | no | — | Throttle outbound email to `MAX` sends per `WINDOW` seconds (e.g. `200` / `100` for Larksuite). Both must be set to enable. |
+| `VERIFY_EMAILS` | no | `false` | Verify email on contact create/update (syntax + DNS/MX + disposable/role heuristics) and persist the verdict |
+| `BLOCK_INVALID_SEND` | no | `false` | Refuse to send to contacts whose persisted email status is `invalid` |
 
 Provider selection: Mailgun is used when both `MAILGUN_DOMAIN` and `MAILGUN_API_KEY` are set, otherwise SMTP. If neither is configured the server still boots with a disabled sender that fails explicitly at send time (`email_send`/`campaign_send` return a terse error).
 
@@ -153,6 +157,8 @@ Debug logging: set `LOG_LEVEL=debug` to print redacted startup diagnostics, rout
 Inbox: IMAP polling is disabled unless `IMAP_HOST`, `IMAP_USER`, `IMAP_PASS`, `IMAP_MAILBOX`, and `ADMIN_NOTIFY_EMAIL` are set. New inbound messages are stored, and admin notifications are sent only for known contacts matched by sender email.
 
 Email rate limiting: set `EMAIL_RATE_MAX` and `EMAIL_RATE_WINDOW_SEC` to pace outbound delivery under a provider cap (Larksuite allows 200 messages / 100s, so `EMAIL_RATE_MAX=200` and `EMAIL_RATE_WINDOW_SEC=100`). The limiter is a token bucket applied to every send — single `email_send` and `campaign_send` alike — so a campaign loop blocks until a slot frees instead of bursting. Leave unset to send without throttling.
+
+Email verification: set `VERIFY_EMAILS=true` to verify addresses on contact create/update. Verification is self-hosted — RFC syntax check, DNS MX lookup (with A/AAAA fallback), and disposable/role-address heuristics — and records a verdict per contact: `valid`, `invalid`, `risky`, or `unknown`. It deliberately skips SMTP RCPT probing, which is unreliable and harms sender reputation, so `valid` means deliverable-capable, not guaranteed-inbox. Use `email_verify` for one contact and `email_audit` to sweep a segment (async by default). Set `BLOCK_INVALID_SEND=true` to refuse sending to contacts verified `invalid`.
 
 > If the DSN password contains shell metacharacters (e.g. `!`), single-quote the value.
 
@@ -254,7 +260,7 @@ internal/adapter/system/    real clock + crypto id generator
 internal/template/          render + link rewrite + open pixel + unsubscribe footer
 internal/scheduler/         in-process worker (claim -> execute -> mark)
 internal/mcpserver/         MCP server scaffold + auth + terse response helpers
-internal/transport/mcp/     36 thin MCP tool handlers
+internal/transport/mcp/     38 thin MCP tool handlers
 internal/transport/http/    public routes (click, open pixel, export, unsubscribe, health)
 internal/config/            env config loader
 migrations/                 0001_init schema (embedded)

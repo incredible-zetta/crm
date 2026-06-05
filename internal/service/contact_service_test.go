@@ -312,6 +312,21 @@ func (r *fakeContactRepo) SetUnsubCode(ctx context.Context, id int64, code strin
 	return nil
 }
 
+func (r *fakeContactRepo) SetEmailStatus(ctx context.Context, id int64, v domain.EmailVerification) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	c, ok := r.contacts[id]
+	if !ok || c.DeletedAt != nil {
+		return domain.ErrNotFound
+	}
+	c.EmailStatus = v.Status
+	c.EmailReason = v.Reason
+	checked := v.CheckedAt
+	c.EmailCheckedAt = &checked
+	r.contacts[id] = c
+	return nil
+}
+
 type fakeEventRepo struct {
 	mu     sync.Mutex
 	events []domain.EmailEvent
@@ -907,4 +922,57 @@ func hasTag(tags []string, want string) bool {
 		}
 	}
 	return false
+}
+
+type svcFakeVerifier struct{}
+
+func (svcFakeVerifier) Verify(ctx context.Context, email string) domain.EmailVerification {
+	st := domain.EmailValid
+	reason := "deliverable"
+	if strings.Contains(email, "bad") {
+		st = domain.EmailInvalid
+		reason = "domain has no mail server"
+	}
+	return domain.EmailVerification{Email: email, Status: st, Reason: reason, CheckedAt: time.Unix(0, 0)}
+}
+
+func TestCreateVerifiesEmailWhenVerifierSet(t *testing.T) {
+	repo := newFakeContactRepo()
+	svc := service.NewContactService(repo, &fakeEventRepo{}, newFakeExportRepo(), &stubIDGen{}, &stubClock{}, "", "http://crm.local")
+	svc.SetVerifier(svcFakeVerifier{})
+	ctx := context.Background()
+
+	c, err := svc.Create(ctx, domain.Contact{Email: "good@example.com"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c.EmailStatus != domain.EmailValid || c.EmailCheckedAt == nil {
+		t.Fatalf("expected valid verified contact, got %+v", c)
+	}
+}
+
+func TestAuditEmailsCountsByStatus(t *testing.T) {
+	repo := newFakeContactRepo()
+	svc := service.NewContactService(repo, &fakeEventRepo{}, newFakeExportRepo(), &stubIDGen{}, &stubClock{}, "", "http://crm.local")
+	svc.SetVerifier(svcFakeVerifier{})
+	ctx := context.Background()
+	_, _ = repo.Upsert(ctx, domain.Contact{Email: "good1@example.com"})
+	_, _ = repo.Upsert(ctx, domain.Contact{Email: "good2@example.com"})
+	_, _ = repo.Upsert(ctx, domain.Contact{Email: "bad@nodomain.test"})
+
+	res, err := svc.AuditEmails(ctx, domain.ContactFilter{}, false, 100, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res.Checked != 3 || res.Valid != 2 || res.Invalid != 1 {
+		t.Fatalf("unexpected audit result: %+v", res)
+	}
+}
+
+func TestAuditEmailsDisabled(t *testing.T) {
+	repo := newFakeContactRepo()
+	svc := service.NewContactService(repo, &fakeEventRepo{}, newFakeExportRepo(), &stubIDGen{}, &stubClock{}, "", "http://crm.local")
+	if _, err := svc.AuditEmails(context.Background(), domain.ContactFilter{}, false, 100, 0); !errors.Is(err, domain.ErrValidation) {
+		t.Fatalf("expected validation error when verifier disabled, got %v", err)
+	}
 }

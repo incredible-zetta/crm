@@ -15,6 +15,7 @@ import (
 	imapadapter "github.com/incredible-zetta/crm/internal/adapter/imap"
 	"github.com/incredible-zetta/crm/internal/adapter/mysql"
 	"github.com/incredible-zetta/crm/internal/adapter/system"
+	"github.com/incredible-zetta/crm/internal/adapter/verify"
 	"github.com/incredible-zetta/crm/internal/config"
 	"github.com/incredible-zetta/crm/internal/inboxpoller"
 	"github.com/incredible-zetta/crm/internal/mcpserver"
@@ -119,6 +120,17 @@ func main() {
 	} else {
 		svc.Inbox = nil
 		debugLog(debug, "inbox disabled: set IMAP_HOST, IMAP_USER, IMAP_PASS, IMAP_MAILBOX, ADMIN_NOTIFY_EMAIL to enable")
+	}
+
+	// Email verification (self-hosted: syntax + DNS/MX + heuristics).
+	if cfg.VerifyEmails {
+		verifier := verify.New()
+		svc.Contact.SetVerifier(verifier)
+		debugLog(debug, "email verification enabled on create/update/audit")
+	}
+	if cfg.BlockInvalidSend {
+		svc.Email.SetBlockInvalid(true)
+		debugLog(debug, "send guard enabled: refusing contacts verified invalid")
 	}
 
 	// 6. MCP transport (auth-gated /mcp)

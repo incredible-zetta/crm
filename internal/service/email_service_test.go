@@ -47,6 +47,19 @@ func (f *fakeContactRepo) SetUnsubCode(ctx context.Context, id int64, code strin
 	return nil
 }
 
+func (f *fakeContactRepo) SetEmailStatus(ctx context.Context, id int64, v domain.EmailVerification) error {
+	c, ok := f.contacts[id]
+	if !ok {
+		return domain.ErrNotFound
+	}
+	c.EmailStatus = v.Status
+	c.EmailReason = v.Reason
+	checked := v.CheckedAt
+	c.EmailCheckedAt = &checked
+	f.contacts[id] = c
+	return nil
+}
+
 type fakeTemplateRepo struct {
 	port.TemplateRepo
 	templates map[int64]domain.Template

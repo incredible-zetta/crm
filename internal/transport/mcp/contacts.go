@@ -529,3 +529,112 @@ func (d *Deps) ContactBulkUpdateByFilter(ctx context.Context, req *mcp.CallToolR
 	}
 	return nil, BulkUpdateOut{Matched: res.Matched, Updated: res.Updated, Skipped: res.Skipped, Errors: res.Errors}, nil
 }
+
+type EmailVerifyIn struct {
+	ID int64 `json:"id" jsonschema:"Contact ID to verify"`
+}
+
+type EmailVerifyOut struct {
+	ID        int64  `json:"id"`
+	Email     string `json:"email"`
+	Status    string `json:"status"`
+	Reason    string `json:"reason,omitempty"`
+	CheckedAt string `json:"checked_at"`
+}
+
+type EmailAuditIn struct {
+	Segment       map[string]any `json:"segment,omitempty" jsonschema:"Filter to match contacts (keys: stage, company, tag, q). Empty matches all."`
+	OnlyUnchecked bool           `json:"only_unchecked,omitempty" jsonschema:"Skip contacts already verified"`
+	Sync          bool           `json:"sync,omitempty" jsonschema:"Verify inline and wait. Default false enqueues a background task that audits the whole segment."`
+	Limit         int            `json:"limit,omitempty" jsonschema:"Sync only: max contacts to verify this call (default 100, cap 500)"`
+	Cursor        int64          `json:"cursor,omitempty" jsonschema:"Sync only: pagination cursor; pass next_cursor to continue"`
+}
+
+type EmailAuditOut struct {
+	Status     string `json:"status"`
+	TaskID     int64  `json:"task_id,omitempty"`
+	Checked    int    `json:"checked,omitempty"`
+	Valid      int    `json:"valid,omitempty"`
+	Invalid    int    `json:"invalid,omitempty"`
+	Risky      int    `json:"risky,omitempty"`
+	Unknown    int    `json:"unknown,omitempty"`
+	NextCursor int64  `json:"next_cursor,omitempty"`
+}
+
+func (d *Deps) EmailVerify(ctx context.Context, req *mcp.CallToolRequest, in EmailVerifyIn) (*mcp.CallToolResult, EmailVerifyOut, error) {
+	c, v, err := d.Svc.Contact.VerifyContact(ctx, in.ID)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return mcpserver.Err("not_found", "contact not found"), EmailVerifyOut{}, nil
+		}
+		if errors.Is(err, domain.ErrValidation) {
+			return mcpserver.Err("disabled", strings.TrimPrefix(err.Error(), "validation error: ")), EmailVerifyOut{}, nil
+		}
+		return nil, EmailVerifyOut{}, fmt.Errorf("email_verify: %w", err)
+	}
+	return nil, EmailVerifyOut{
+		ID:        c.ID,
+		Email:     c.Email,
+		Status:    string(v.Status),
+		Reason:    v.Reason,
+		CheckedAt: v.CheckedAt.Format(time.RFC3339),
+	}, nil
+}
+
+func (d *Deps) EmailAudit(ctx context.Context, req *mcp.CallToolRequest, in EmailAuditIn) (*mcp.CallToolResult, EmailAuditOut, error) {
+	var filter domain.ContactFilter
+	if in.Segment != nil {
+		if v, ok := in.Segment["stage"].(string); ok {
+			filter.Stage = v
+		}
+		if v, ok := in.Segment["company"].(string); ok {
+			filter.Company = v
+		}
+		if v, ok := in.Segment["tag"].(string); ok {
+			filter.Tag = v
+		}
+		if v, ok := in.Segment["q"].(string); ok {
+			filter.Q = v
+		}
+	}
+
+	// Synchronous escape hatch: verify one page inline and return counts.
+	if in.Sync {
+		res, err := d.Svc.Contact.AuditEmails(ctx, filter, in.OnlyUnchecked, in.Limit, in.Cursor)
+		if err != nil {
+			if errors.Is(err, domain.ErrValidation) {
+				return mcpserver.Err("disabled", strings.TrimPrefix(err.Error(), "validation error: ")), EmailAuditOut{}, nil
+			}
+			return nil, EmailAuditOut{}, fmt.Errorf("email_audit: %w", err)
+		}
+		return nil, EmailAuditOut{
+			Status:     "done",
+			Checked:    res.Checked,
+			Valid:      res.Valid,
+			Invalid:    res.Invalid,
+			Risky:      res.Risky,
+			Unknown:    res.Unknown,
+			NextCursor: res.NextCursor,
+		}, nil
+	}
+
+	// Async default: enqueue a background task that audits the whole segment.
+	payload := map[string]any{"only_unchecked": in.OnlyUnchecked}
+	if filter.Stage != "" {
+		payload["stage"] = filter.Stage
+	}
+	if filter.Company != "" {
+		payload["company"] = filter.Company
+	}
+	if filter.Tag != "" {
+		payload["tag"] = filter.Tag
+	}
+	if filter.Q != "" {
+		payload["q"] = filter.Q
+	}
+	taskID, err := d.Svc.Task.Schedule(ctx, string(domain.TaskEmailAudit), payload, time.Now())
+	if err != nil {
+		return nil, EmailAuditOut{}, fmt.Errorf("email_audit enqueue: %w", err)
+	}
+	return nil, EmailAuditOut{Status: "queued", TaskID: taskID}, nil
+}

@@ -31,6 +31,8 @@ type Config struct {
 	AdminNotifyEmail     string
 	EmailRateMax         int
 	EmailRateWindowSec   int
+	VerifyEmails         bool
+	BlockInvalidSend     bool
 }
 
 func (c *Config) DebugEnabled() bool {
@@ -45,6 +47,21 @@ func (c *Config) InboxEnabled() bool {
 // Both the message cap and the window must be positive to take effect.
 func (c *Config) EmailRateEnabled() bool {
 	return c.EmailRateMax > 0 && c.EmailRateWindowSec > 0
+}
+
+func boolEnv(key string, def bool) bool {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return def
+	}
+	switch strings.ToLower(v) {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return def
+	}
 }
 
 func Load() (*Config, error) {
@@ -119,6 +136,9 @@ func Load() (*Config, error) {
 		emailRateWindowSec = val
 	}
 
+	verifyEmails := boolEnv("VERIFY_EMAILS", false)
+	blockInvalidSend := boolEnv("BLOCK_INVALID_SEND", false)
+
 	return &Config{
 		MCPAPIKey:            mcpAPIKey,
 		DBDSN:                dbDSN,
@@ -143,5 +163,7 @@ func Load() (*Config, error) {
 		AdminNotifyEmail:     os.Getenv("ADMIN_NOTIFY_EMAIL"),
 		EmailRateMax:         emailRateMax,
 		EmailRateWindowSec:   emailRateWindowSec,
+		VerifyEmails:         verifyEmails,
+		BlockInvalidSend:     blockInvalidSend,
 	}, nil
 }

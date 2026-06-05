@@ -15,6 +15,7 @@ type TaskService struct {
 	clock    port.Clock
 	email    *EmailService
 	campaign *CampaignService
+	contact  *ContactService // optional; required for email_audit tasks
 }
 
 // NewTaskService creates a new TaskService.
@@ -25,6 +26,11 @@ func NewTaskService(repo port.TaskRepo, clock port.Clock, email *EmailService, c
 		email:    email,
 		campaign: campaign,
 	}
+}
+
+// SetContact attaches the contact service so the worker can run email_audit tasks.
+func (s *TaskService) SetContact(c *ContactService) {
+	s.contact = c
 }
 
 // Schedule validates and inserts a new scheduled background task.
@@ -109,6 +115,41 @@ func (s *TaskService) Execute(ctx context.Context, t domain.ScheduledTask) error
 
 		_, _, _, _, err := s.campaign.Send(ctx, campaignID)
 		return err
+
+	case domain.TaskEmailAudit:
+		if s.contact == nil {
+			return fmt.Errorf("%w: contact service unavailable for audit", domain.ErrValidation)
+		}
+		var filter domain.ContactFilter
+		if v, ok := getString(t.Payload, "stage"); ok {
+			filter.Stage = v
+		}
+		if v, ok := getString(t.Payload, "company"); ok {
+			filter.Company = v
+		}
+		if v, ok := getString(t.Payload, "tag"); ok {
+			filter.Tag = v
+		}
+		if v, ok := getString(t.Payload, "q"); ok {
+			filter.Q = v
+		}
+		onlyUnchecked := false
+		if v, ok := t.Payload["only_unchecked"].(bool); ok {
+			onlyUnchecked = v
+		}
+		// Page through the entire matching set; AuditEmails caps each page.
+		var cursor int64
+		for {
+			res, err := s.contact.AuditEmails(ctx, filter, onlyUnchecked, 500, cursor)
+			if err != nil {
+				return err
+			}
+			if res.NextCursor == 0 {
+				break
+			}
+			cursor = res.NextCursor
+		}
+		return nil
 
 	default:
 		return fmt.Errorf("%w: unknown task kind %q", domain.ErrValidation, t.Kind)

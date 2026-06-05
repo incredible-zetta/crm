@@ -46,9 +46,12 @@ type Contact struct {
 	Notes          string
 	Custom         map[string]any
 	Source         string
-	UnsubCode      string     // public opt-out token (16 hex), may be empty until set
-	UnsubscribedAt *time.Time // nil = subscribed
-	DeletedAt      *time.Time // nil = active (soft delete)
+	UnsubCode      string      // public opt-out token (16 hex), may be empty until set
+	UnsubscribedAt *time.Time  // nil = subscribed
+	DeletedAt      *time.Time  // nil = active (soft delete)
+	EmailStatus    EmailStatus // verification verdict; empty treated as unknown
+	EmailReason    string      // short reason for the verdict
+	EmailCheckedAt *time.Time  // nil = never verified
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 }

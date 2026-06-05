@@ -10,10 +10,12 @@ const (
 	TaskEmail TaskKind = "email"
 	// TaskCampaign represents a campaign delivery task.
 	TaskCampaign TaskKind = "campaign"
+	// TaskEmailAudit represents a batch email verification task.
+	TaskEmailAudit TaskKind = "email_audit"
 )
 
 // TaskKinds contains all valid task kinds.
-var TaskKinds = []TaskKind{TaskEmail, TaskCampaign}
+var TaskKinds = []TaskKind{TaskEmail, TaskCampaign, TaskEmailAudit}
 
 // Valid checks if the task kind is valid.
 func (k TaskKind) Valid() bool {

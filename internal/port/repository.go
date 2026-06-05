@@ -56,6 +56,13 @@ type AdminNotifier interface {
 	NotifyInboundMessage(ctx context.Context, msg domain.InboundMessage, contact domain.Contact) error
 }
 
+// EmailVerifier checks whether an email address is syntactically valid and its
+// domain can receive mail. Implementations must not perform an SMTP RCPT probe
+// (unreliable and reputation-damaging); DNS/MX inspection is the upper bound.
+type EmailVerifier interface {
+	Verify(ctx context.Context, email string) domain.EmailVerification
+}
+
 type ContactRepo interface {
 	// Upsert inserts or updates a contact.
 	Upsert(ctx context.Context, c domain.Contact) (domain.Contact, error)
@@ -79,6 +86,8 @@ type ContactRepo interface {
 	SetUnsubscribed(ctx context.Context, id int64, at time.Time) error
 	// SetUnsubCode assigns a unique unsubscribe opt-out token to a contact.
 	SetUnsubCode(ctx context.Context, id int64, code string) error
+	// SetEmailStatus records the email verification verdict for a contact.
+	SetEmailStatus(ctx context.Context, id int64, v domain.EmailVerification) error
 }
 
 // CampaignRepo defines the database operations for campaigns.
