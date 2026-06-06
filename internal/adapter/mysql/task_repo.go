@@ -213,6 +213,23 @@ func (r *taskRepo) MarkFailed(ctx context.Context, id int64, errMsg string) erro
 	return nil
 }
 
+func (r *taskRepo) HasActiveCampaignTask(ctx context.Context, campaignID int64) (bool, error) {
+	query := `SELECT 1 FROM scheduled_tasks
+WHERE kind = 'campaign'
+  AND status IN ('pending', 'running')
+  AND JSON_EXTRACT(payload, '$.campaign_id') = ?
+LIMIT 1`
+	var exists int
+	err := r.db.QueryRowContext(ctx, query, campaignID).Scan(&exists)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("has active campaign task: %w", err)
+	}
+	return true, nil
+}
+
 func (r *taskRepo) Cancel(ctx context.Context, id int64) error {
 	var status string
 	err := r.db.QueryRowContext(ctx, "SELECT status FROM scheduled_tasks WHERE id = ?", id).Scan(&status)

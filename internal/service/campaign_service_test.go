@@ -132,6 +132,21 @@ func (r *fakeCampaignRepo) SoftDelete(ctx context.Context, id int64) error {
 	return nil
 }
 
+func (r *fakeCampaignRepo) ListDueScheduled(ctx context.Context, now time.Time, limit int) ([]domain.Campaign, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var due []domain.Campaign
+	for _, c := range r.campaigns {
+		if c.DeletedAt != nil || c.Status != domain.CampaignScheduled || c.ScheduledAt == nil {
+			continue
+		}
+		if !c.ScheduledAt.After(now) {
+			due = append(due, c)
+		}
+	}
+	return due, nil
+}
+
 type fakeCampaignContactRepo struct {
 	mu       sync.Mutex
 	contacts map[int64]domain.Contact
@@ -169,7 +184,17 @@ func (r *fakeCampaignContactRepo) GetByUnsubCode(ctx context.Context, code strin
 }
 
 func (r *fakeCampaignContactRepo) Update(ctx context.Context, id int64, patch domain.ContactPatch) (domain.Contact, error) {
-	return domain.Contact{}, nil
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	c, ok := r.contacts[id]
+	if !ok || c.DeletedAt != nil {
+		return domain.Contact{}, domain.ErrNotFound
+	}
+	if patch.Stage != nil {
+		c.Stage = domain.Stage(*patch.Stage)
+	}
+	r.contacts[id] = c
+	return c, nil
 }
 
 func (r *fakeCampaignContactRepo) List(ctx context.Context, f domain.ContactFilter, p port.Paging) (port.ContactPage, error) {
@@ -690,6 +715,85 @@ func TestCampaignStatsRates(t *testing.T) {
 	}
 	if stats2.ClickRate != 0.0 {
 		t.Errorf("expected ClickRate 0.0, got %f", stats2.ClickRate)
+	}
+}
+
+func TestCampaignSendPromotesNewLeads(t *testing.T) {
+	repo := newFakeCampaignRepo()
+	contacts := newFakeCampaignContactRepo()
+	events := &fakeCampaignEventRepo{}
+	mailer := &fakeCampaignMailer{}
+
+	svc := service.NewCampaignService(repo, contacts, events, mailer)
+	ctx := context.Background()
+
+	camp, err := svc.Create(ctx, domain.Campaign{
+		Name:       "B2B Promo",
+		TemplateID: 1,
+		Segment:    map[string]any{"tag": "segment_b2b"},
+	})
+	if err != nil {
+		t.Fatalf("create campaign failed: %v", err)
+	}
+
+	for i := int64(1); i <= 3; i++ {
+		stage := domain.StageNew
+		if i == 3 {
+			stage = domain.StageQualified
+		}
+		_, _ = contacts.Upsert(ctx, domain.Contact{
+			ID:    i,
+			Email: "user@example.com",
+			Stage: stage,
+			Tags:  []string{"segment_b2b"},
+		})
+	}
+
+	_, sent, _, _, err := svc.Send(ctx, camp.ID)
+	if err != nil {
+		t.Fatalf("send campaign failed: %v", err)
+	}
+	if sent != 3 {
+		t.Fatalf("expected 3 sent, got %d", sent)
+	}
+
+	c1, _ := contacts.Get(ctx, 1)
+	c2, _ := contacts.Get(ctx, 2)
+	c3, _ := contacts.Get(ctx, 3)
+	if c1.Stage != domain.StageContacted || c2.Stage != domain.StageContacted {
+		t.Fatalf("expected new leads promoted to contacted, got %s and %s", c1.Stage, c2.Stage)
+	}
+	if c3.Stage != domain.StageQualified {
+		t.Fatalf("expected qualified lead unchanged, got %s", c3.Stage)
+	}
+}
+
+func TestCampaignStatsRepairsDraftWithSentEvents(t *testing.T) {
+	repo := newFakeCampaignRepo()
+	contacts := newFakeCampaignContactRepo()
+	events := &fakeCampaignEventRepo{counts: map[string]int{"sent": 5}}
+	mailer := &fakeCampaignMailer{}
+
+	svc := service.NewCampaignService(repo, contacts, events, mailer)
+	ctx := context.Background()
+
+	camp, _ := svc.Create(ctx, domain.Campaign{Name: "Stale", TemplateID: 1})
+	_ = repo.UpdateStatus(ctx, camp.ID, domain.CampaignDraft)
+
+	stats, err := svc.Stats(ctx, camp.ID)
+	if err != nil {
+		t.Fatalf("stats failed: %v", err)
+	}
+	if stats.Sent != 5 {
+		t.Fatalf("expected sent 5, got %d", stats.Sent)
+	}
+	if stats.TrackingSupport["delivery"] != "unsupported" {
+		t.Fatalf("expected delivery unsupported for smtp, got %q", stats.TrackingSupport["delivery"])
+	}
+
+	updated, _ := svc.Get(ctx, camp.ID)
+	if updated.Status != domain.CampaignSent {
+		t.Fatalf("expected status repaired to sent, got %s", updated.Status)
 	}
 }
 

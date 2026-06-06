@@ -41,6 +41,10 @@ func (f *fakeTaskRepo) Cancel(ctx context.Context, id int64) error {
 	return f.cancelErr
 }
 
+func (f *fakeTaskRepo) HasActiveCampaignTask(ctx context.Context, campaignID int64) (bool, error) {
+	return false, nil
+}
+
 // newTaskTestEmailService builds a working EmailService backed by simple fakes.
 func newTaskTestEmailService(sender *fakeSender, contacts *fakeContactRepo) *EmailService {
 	if contacts == nil {

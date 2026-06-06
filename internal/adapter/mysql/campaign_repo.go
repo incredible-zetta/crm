@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/incredible-zetta/crm/internal/domain"
 	"github.com/incredible-zetta/crm/internal/port"
@@ -171,6 +172,35 @@ func (r *campaignRepo) SetStats(ctx context.Context, id int64, stats map[string]
 	}
 
 	return nil
+}
+
+func (r *campaignRepo) ListDueScheduled(ctx context.Context, now time.Time, limit int) ([]domain.Campaign, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	query := `SELECT id, name, template_id, provider, segment, status, scheduled_at, stats, deleted_at, created_at
+FROM campaigns
+WHERE deleted_at IS NULL AND status = 'scheduled' AND scheduled_at IS NOT NULL AND scheduled_at <= ?
+ORDER BY scheduled_at ASC, id ASC
+LIMIT ?`
+	rows, err := r.db.QueryContext(ctx, query, now, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list due scheduled campaigns: %w", err)
+	}
+	defer rows.Close()
+
+	var campaigns []domain.Campaign
+	for rows.Next() {
+		c, err := scanCampaign(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan campaign: %w", err)
+		}
+		campaigns = append(campaigns, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list due scheduled campaigns rows: %w", err)
+	}
+	return campaigns, nil
 }
 
 func (r *campaignRepo) SoftDelete(ctx context.Context, id int64) error {
