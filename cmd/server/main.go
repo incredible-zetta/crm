@@ -160,8 +160,9 @@ func main() {
 
 	// 8. Scheduler worker -> TaskService.Execute
 	worker := &scheduler.Worker{
-		Claimer: taskClaimer{store.Tasks()},
-		Exec:    taskExecutor{svc.Task},
+		Claimer:  taskClaimer{store.Tasks()},
+		Exec:     taskExecutor{svc.Task},
+		Campaign: svc.CampaignQueue,
 	}
 
 	// 9. Run with graceful shutdown

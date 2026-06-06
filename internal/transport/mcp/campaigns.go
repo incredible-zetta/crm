@@ -115,6 +115,12 @@ func (d *Deps) CampaignCreate(ctx context.Context, req *mcp.CallToolRequest, in 
 		return nil, CampaignCreateOut{}, fmt.Errorf("campaign_create: %w", err)
 	}
 
+	if scheduledTime != nil {
+		if _, err := d.Svc.Task.ScheduleCampaignSend(ctx, created.ID, *scheduledTime); err != nil {
+			return nil, CampaignCreateOut{}, fmt.Errorf("campaign_create schedule task: %w", err)
+		}
+	}
+
 	return nil, CampaignCreateOut{
 		ID:     created.ID,
 		Name:   created.Name,
@@ -150,11 +156,17 @@ func (d *Deps) CampaignSend(ctx context.Context, req *mcp.CallToolRequest, in Ca
 		if errors.Is(err, domain.ErrNotFound) {
 			return mcpserver.Err("not_found", "campaign not found"), CampaignSendOut{}, nil
 		}
+		if errors.Is(err, domain.ErrConflict) {
+			return mcpserver.Err("conflict", "campaign already sent"), CampaignSendOut{}, nil
+		}
 		return nil, CampaignSendOut{}, fmt.Errorf("campaign_send: %w", err)
 	}
 
-	taskID, err := d.Svc.Task.Schedule(ctx, string(domain.TaskCampaign), map[string]any{"campaign_id": in.CampaignID}, time.Now())
+	taskID, err := d.Svc.Task.ScheduleCampaignSend(ctx, in.CampaignID, time.Now())
 	if err != nil {
+		if errors.Is(err, domain.ErrConflict) {
+			return mcpserver.Err("conflict", "campaign already has an active send task"), CampaignSendOut{}, nil
+		}
 		return nil, CampaignSendOut{}, fmt.Errorf("campaign_send enqueue: %w", err)
 	}
 
@@ -234,6 +246,7 @@ func (d *Deps) CampaignUpdate(ctx context.Context, req *mcp.CallToolRequest, in 
 	if in.Segment != nil {
 		campaign.Segment = in.Segment
 	}
+	var newScheduledAt *time.Time
 	if in.ScheduledAt != nil {
 		if *in.ScheduledAt == "" {
 			campaign.ScheduledAt = nil
@@ -243,6 +256,10 @@ func (d *Deps) CampaignUpdate(ctx context.Context, req *mcp.CallToolRequest, in 
 				return mcpserver.Err("invalid_input", "invalid scheduled_at format"), CampaignUpdateOut{}, nil
 			}
 			campaign.ScheduledAt = &t
+			newScheduledAt = &t
+			if existing.Status == domain.CampaignDraft {
+				campaign.Status = domain.CampaignScheduled
+			}
 		}
 	}
 
@@ -255,6 +272,19 @@ func (d *Deps) CampaignUpdate(ctx context.Context, req *mcp.CallToolRequest, in 
 			return mcpserver.Err("not_found", "campaign not found"), CampaignUpdateOut{}, nil
 		}
 		return nil, CampaignUpdateOut{}, fmt.Errorf("campaign_update: %w", err)
+	}
+
+	if campaign.Status != existing.Status {
+		if err := d.Svc.Campaign.SetStatus(ctx, in.ID, campaign.Status); err != nil {
+			return nil, CampaignUpdateOut{}, fmt.Errorf("campaign_update status: %w", err)
+		}
+		updated.Status = campaign.Status
+	}
+
+	if newScheduledAt != nil && updated.Status == domain.CampaignScheduled {
+		if _, err := d.Svc.Task.ScheduleCampaignSend(ctx, updated.ID, *newScheduledAt); err != nil && !errors.Is(err, domain.ErrConflict) {
+			return nil, CampaignUpdateOut{}, fmt.Errorf("campaign_update schedule task: %w", err)
+		}
 	}
 
 	return nil, CampaignUpdateOut{

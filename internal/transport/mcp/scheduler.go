@@ -85,6 +85,14 @@ func (d *Deps) TaskList(ctx context.Context, req *mcp.CallToolRequest, in TaskLi
 		if t.LastError != "" {
 			item["last_error"] = t.LastError
 		}
+		if t.Kind == domain.TaskCampaign {
+			if cid, ok := payloadInt64(t.Payload, "campaign_id"); ok {
+				item["campaign_id"] = cid
+			}
+		}
+		if len(t.Payload) > 0 {
+			item["payload"] = t.Payload
+		}
 		items = append(items, item)
 	}
 
@@ -110,4 +118,20 @@ func (d *Deps) TaskCancel(ctx context.Context, req *mcp.CallToolRequest, in Task
 		ID:        in.ID,
 		Cancelled: true,
 	}, nil
+}
+
+func payloadInt64(m map[string]any, key string) (int64, bool) {
+	v, ok := m[key]
+	if !ok {
+		return 0, false
+	}
+	switch val := v.(type) {
+	case float64:
+		return int64(val), true
+	case int64:
+		return val, true
+	case int:
+		return int64(val), true
+	}
+	return 0, false
 }
