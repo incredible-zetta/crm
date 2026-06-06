@@ -24,11 +24,17 @@ type Executor interface {
 	Execute(ctx context.Context, t Task) error
 }
 
+// CampaignEnqueuer schedules due campaigns before task claiming runs.
+type CampaignEnqueuer interface {
+	EnqueueDue(ctx context.Context, now time.Time) (int, error)
+}
+
 type Worker struct {
-	Claimer TaskClaimer
-	Exec    Executor
-	Batch   int              // max tasks per tick (default 10)
-	Now     func() time.Time // injectable clock; default time.Now
+	Claimer  TaskClaimer
+	Exec     Executor
+	Campaign CampaignEnqueuer // optional repair for overdue scheduled campaigns
+	Batch    int              // max tasks per tick (default 10)
+	Now      func() time.Time // injectable clock; default time.Now
 }
 
 // RunOnce performs one tick of scheduling:
@@ -51,6 +57,12 @@ func (w *Worker) RunOnce(ctx context.Context) (processed int, err error) {
 		nowFn = time.Now
 	}
 	now := nowFn()
+
+	if w.Campaign != nil {
+		if _, err := w.Campaign.EnqueueDue(ctx, now); err != nil {
+			log.Printf("scheduler worker: enqueue due campaigns error: %v", err)
+		}
+	}
 
 	tasks, err := w.Claimer.ClaimDue(ctx, now, batch)
 	if err != nil {

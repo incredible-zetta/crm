@@ -1,0 +1,42 @@
+services:
+  mysql:
+    image: mysql:8
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: crmagents
+      MYSQL_USER: crmagents
+      MYSQL_PASSWORD: crmagentspass
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-prootpass"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+    tmpfs:
+      - /var/lib/mysql
+
+  mailpit:
+    image: axllent/mailpit:latest
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8025"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+
+  crm:
+    build: .
+    depends_on:
+      mysql:
+        condition: service_healthy
+      mailpit:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      MCP_API_KEY: e2e-test-key
+      BASE_URL: http://localhost:8080
+      DB_DSN: crmagents:crmagentspass@tcp(mysql:3306)/crmagents?parseTime=true&multiStatements=true
+      SCHEDULER_INTERVAL_SEC: 2
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      SMTP_FROM: e2e@example.com
+      DEBUG: "true"

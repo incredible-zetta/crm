@@ -27,14 +27,15 @@ type Repos struct {
 // transports (MCP, HTTP) depend on, so they never touch repositories or
 // adapters directly.
 type Services struct {
-	Contact   *ContactService
-	Template  *TemplateService
-	Campaign  *CampaignService
-	Email     *EmailService
-	Task      *TaskService
-	Analytics *AnalyticsService
-	Tracking  *TrackingService
-	Inbox     *InboxService
+	Contact       *ContactService
+	Template      *TemplateService
+	Campaign      *CampaignService
+	Email         *EmailService
+	Task          *TaskService
+	CampaignQueue *CampaignQueue
+	Analytics     *AnalyticsService
+	Tracking      *TrackingService
+	Inbox         *InboxService
 }
 
 // New wires every service from the provided ports and config. The wiring order
@@ -49,6 +50,7 @@ func New(repos Repos, sender port.EmailSender, clock port.Clock, idgen port.IDGe
 	campaign := NewCampaignService(repos.Campaigns, repos.Contacts, repos.Events, email)
 
 	task := NewTaskService(repos.Tasks, clock, email, campaign)
+	campaignQueue := NewCampaignQueue(repos.Campaigns, repos.Tasks)
 	analytics := NewAnalyticsService(repos.Contacts, repos.Events, repos.Tasks)
 	tracking := NewTrackingService(repos.Tracking, repos.Events, clock, cfg.BaseURL)
 	task.SetContact(contact)
@@ -58,13 +60,14 @@ func New(repos Repos, sender port.EmailSender, clock port.Clock, idgen port.IDGe
 	}
 
 	return &Services{
-		Contact:   contact,
-		Template:  template,
-		Campaign:  campaign,
-		Email:     email,
-		Task:      task,
-		Analytics: analytics,
-		Tracking:  tracking,
-		Inbox:     inbox,
+		Contact:       contact,
+		Template:      template,
+		Campaign:      campaign,
+		Email:         email,
+		Task:          task,
+		CampaignQueue: campaignQueue,
+		Analytics:     analytics,
+		Tracking:      tracking,
+		Inbox:         inbox,
 	}
 }
