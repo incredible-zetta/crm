@@ -186,9 +186,9 @@ The system normalizes phone numbers to E.164 digits-only format:
 - Passes through full JIDs (`628xxx@s.whatsapp.net`) unchanged
 
 Examples:
-- `0899-692-6184` → `628996926184`
-- `+62 899 6926 184` → `628996926184`
-- `00628996926184` → `628996926184`
+- `0812-345-6789` → `628123456789`
+- `+62 812 3456 789` → `628123456789`
+- `00628123456789` → `628123456789`
 
 ## Troubleshooting
 
@@ -230,11 +230,34 @@ mysql -u root -p your_database < migrations/0005_whatsapp.down.sql
 
 ## Testing
 
-Unit tests cover:
-- Phone normalization (`internal/adapter/whatsapp/phone_test.go`)
+Adapter layer:
+- Phone normalization (`internal/adapter/whatsapp/phone_test.go`, `markdown_test.go`)
 - Markdown conversion (`internal/adapter/whatsapp/markdown_test.go`)
-- Smart-send policy (`internal/adapter/whatsapp/smart_send_test.go`)
+- Smart-send policy: rate-limit, jitter, daily cap, warmup (`internal/adapter/whatsapp/smart_send_test.go`)
 - HTTP client (`internal/adapter/whatsapp/client_test.go`)
+
+Service layer (`internal/service/whatsapp_service_test.go`):
+- Send: contact linking, not-registered blocking, empty-input rejection, gateway-error no-persist
+- Audit/Check: count + persist, only-unchecked skip
+- IngestMessage: known-contact linking, JID normalization, idempotency
+- IngestReceipt: delivered/read status mapping, unknown-type ignore
+- Reply: linkage + mark-replied; MarkRead outbound rejection
+
+Webhook (`internal/transport/http/whatsapp_webhook_test.go`):
+- Message ingest, from_me skip, receipt status update, unknown-action ignore, invalid JSON
+- HMAC validation: valid accepted, missing/invalid/tampered rejected (401)
+
+MCP tools (`internal/transport/mcp/whatsapp_test.go`):
+- Disabled-contract for all 8 tools when WA unconfigured
+- check/send/list happy paths, validation + not-found contracts
+
+Config (`internal/config/config_test.go`):
+- `WhatsAppEnabled()` gating, env parsing, invalid-number rejection
+
+MySQL repo (`internal/adapter/mysql/mysql_test.go`, integration — needs `DB_DSN`):
+- Insert idempotency, status lifecycle, no-downgrade guard, counters, reply linkage, soft-delete
+
+Test numbers are dummy values (`628123456789`), not real contacts.
 
 Run all tests:
 

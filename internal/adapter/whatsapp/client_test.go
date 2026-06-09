@@ -29,14 +29,14 @@ func TestClientCheck(t *testing.T) {
 		if r.Header.Get("Authorization") != "Basic dGVzdA==" {
 			t.Errorf("missing basic auth")
 		}
-		if r.URL.Query().Get("phone") != "628996926184" {
+		if r.URL.Query().Get("phone") != "628123456789" {
 			t.Errorf("phone not normalized: %q", r.URL.Query().Get("phone"))
 		}
 		_, _ = w.Write([]byte(`{"code":"SUCCESS","message":"ok","results":{"is_on_whatsapp":true}}`))
 	})
 	defer srv.Close()
 
-	res, err := c.Check(context.Background(), "08996926184")
+	res, err := c.Check(context.Background(), "08123456789")
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
@@ -61,7 +61,7 @@ func TestClientSend(t *testing.T) {
 		if err := r.ParseForm(); err != nil {
 			t.Fatalf("parse form: %v", err)
 		}
-		if r.FormValue("phone") != "628996926184" {
+		if r.FormValue("phone") != "628123456789" {
 			t.Errorf("phone = %q", r.FormValue("phone"))
 		}
 		if !strings.Contains(r.FormValue("message"), "hello") {
@@ -71,7 +71,7 @@ func TestClientSend(t *testing.T) {
 	})
 	defer srv.Close()
 
-	res, err := c.Send(context.Background(), port.WhatsAppMessage{Phone: "08996926184", Body: "hello"})
+	res, err := c.Send(context.Background(), port.WhatsAppMessage{Phone: "08123456789", Body: "hello"})
 	if err != nil {
 		t.Fatalf("Send: %v", err)
 	}
@@ -86,7 +86,7 @@ func TestClientErrorSanitized(t *testing.T) {
 		_, _ = w.Write([]byte(`{"code":"ERROR","message":"bad device"}`))
 	})
 	defer srv.Close()
-	_, err := c.Send(context.Background(), port.WhatsAppMessage{Phone: "628996926184", Body: "x"})
+	_, err := c.Send(context.Background(), port.WhatsAppMessage{Phone: "628123456789", Body: "x"})
 	if err == nil {
 		t.Fatal("expected error")
 	}
