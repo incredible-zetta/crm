@@ -34,17 +34,17 @@ type Config struct {
 	VerifyEmails         bool
 	BlockInvalidSend     bool
 	// WhatsApp channel
-	WABaseURL            string // gateway base URL, e.g. https://notification.dev.lazyindra.online
-	WABasicAuth          string // raw base64 of "user:pass" (never logged)
-	WADeviceID           string // x-device-id header, e.g. "cds"
-	WAWebhookSecret      string // HMAC-SHA256 secret for webhook validation (empty = no validation)
-	WASendMax            int    // token bucket: max sends per window
-	WASendWindowSec      int    // token bucket: window in seconds
-	WASendDailyCap       int    // per-recipient daily cap
-	WAJitterMinMS        int    // min jitter before send (ms)
-	WAJitterMaxMS        int    // max jitter before send (ms)
-	WAWarmupPerDay       int    // global warmup ceiling per 24h
-	WABlockUnregistered  bool   // refuse sends to numbers verified not on WhatsApp
+	WABaseURL           string // gateway base URL, e.g. https://notification.dev.lazyindra.online
+	WABasicAuth         string // raw base64 of "user:pass" (never logged)
+	WADeviceID          string // x-device-id header, e.g. "cds"
+	WAWebhookSecret     string // HMAC-SHA256 secret for webhook validation (empty = no validation)
+	WASendMax           int    // token bucket: max sends per window
+	WASendWindowSec     int    // token bucket: window in seconds
+	WASendDailyCap      int    // per-recipient daily cap
+	WAJitterMinMS       int    // min jitter before send (ms)
+	WAJitterMaxMS       int    // max jitter before send (ms)
+	WAWarmupPerDay      int    // global warmup ceiling per 24h
+	WABlockUnregistered bool   // refuse sends to numbers verified not on WhatsApp
 }
 
 func (c *Config) DebugEnabled() bool {

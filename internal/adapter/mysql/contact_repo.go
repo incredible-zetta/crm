@@ -472,22 +472,22 @@ func (r *contactRepo) SetWhatsAppStatus(ctx context.Context, id int64, v domain.
 func scanContact(row interface{ Scan(dest ...any) error }) (domain.Contact, error) {
 	var c domain.Contact
 	var (
-		firstName      sql.NullString
-		lastName       sql.NullString
-		company        sql.NullString
-		phone          sql.NullString
-		notes          sql.NullString
-		source         sql.NullString
-		unsubCode      sql.NullString
-		unsubscribedAt sql.NullTime
-		deletedAt      sql.NullTime
-		emailStatus    sql.NullString
-		emailReason    sql.NullString
-		emailCheckedAt sql.NullTime
+		firstName         sql.NullString
+		lastName          sql.NullString
+		company           sql.NullString
+		phone             sql.NullString
+		notes             sql.NullString
+		source            sql.NullString
+		unsubCode         sql.NullString
+		unsubscribedAt    sql.NullTime
+		deletedAt         sql.NullTime
+		emailStatus       sql.NullString
+		emailReason       sql.NullString
+		emailCheckedAt    sql.NullTime
 		whatsappStatus    sql.NullString
 		whatsappCheckedAt sql.NullTime
-		tagsBuf        []byte
-		customBuf      []byte
+		tagsBuf           []byte
+		customBuf         []byte
 	)
 
 	err := row.Scan(
