@@ -86,27 +86,27 @@ const (
 // MessageID is the gateway-assigned WhatsApp message id, used to correlate
 // later message.ack receipts (delivered/read) with the outbound row.
 type WAMessage struct {
-	ID          int64
-	MessageID   string // gateway WhatsApp message id (wamid)
-	ChatID      string // e.g. 628xxx@s.whatsapp.net
-	Direction   WADirection
-	Phone       string // normalized E.164 (no +), e.g. 628xxx
-	ContactID   *int64 // set when matched to a known contact
-	Body        string // WhatsApp-formatted text (or caption)
-	MediaType   WAMediaType
-	MediaURL    string // gateway-served URL when media present
+	ID           int64
+	MessageID    string // gateway WhatsApp message id (wamid)
+	ChatID       string // e.g. 628xxx@s.whatsapp.net
+	Direction    WADirection
+	Phone        string // normalized E.164 (no +), e.g. 628xxx
+	ContactID    *int64 // set when matched to a known contact
+	Body         string // WhatsApp-formatted text (or caption)
+	MediaType    WAMediaType
+	MediaURL     string // gateway-served URL when media present
 	MediaCaption string
-	Status      WAMessageStatus
-	Error       string // failure reason when Status=failed
-	RepliedTo   string // wamid this message replies to (inbound quote / outbound reply)
-	SentAt      *time.Time
-	DeliveredAt *time.Time
-	ReadAt      *time.Time
-	ReceivedAt  *time.Time // inbound receipt time
-	NotifiedAt  *time.Time // admin-notified time (inbound, known contact)
-	RepliedAt   *time.Time // when we replied to this inbound message
-	DeletedAt   *time.Time
-	CreatedAt   time.Time
+	Status       WAMessageStatus
+	Error        string // failure reason when Status=failed
+	RepliedTo    string // wamid this message replies to (inbound quote / outbound reply)
+	SentAt       *time.Time
+	DeliveredAt  *time.Time
+	ReadAt       *time.Time
+	ReceivedAt   *time.Time // inbound receipt time
+	NotifiedAt   *time.Time // admin-notified time (inbound, known contact)
+	RepliedAt    *time.Time // when we replied to this inbound message
+	DeletedAt    *time.Time
+	CreatedAt    time.Time
 }
 
 // WAInboundFilter constrains WhatsApp message listing.
@@ -152,9 +152,9 @@ type WAInboundEvent struct {
 
 // WAAuditResult summarizes a batch WhatsApp capability audit.
 type WAAuditResult struct {
-	Checked        int
-	Registered     int
-	NotRegistered  int
-	Unknown        int
-	NextCursor     int64
+	Checked       int
+	Registered    int
+	NotRegistered int
+	Unknown       int
+	NextCursor    int64
 }

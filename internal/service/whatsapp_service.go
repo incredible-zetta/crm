@@ -12,12 +12,12 @@ import (
 // capability audits (WhatsApp registration checks). It mirrors InboxService
 // for the inbound side and adds outbound + audit capabilities.
 type WhatsAppService struct {
-	gateway   port.WhatsAppGateway
-	waRepo    port.WAMessageRepo
-	contacts  port.ContactRepo
-	clock     port.Clock
-	notifier  port.AdminNotifier
-	policy    port.SmartSendPolicy
+	gateway  port.WhatsAppGateway
+	waRepo   port.WAMessageRepo
+	contacts port.ContactRepo
+	clock    port.Clock
+	notifier port.AdminNotifier
+	policy   port.SmartSendPolicy
 }
 
 func NewWhatsAppService(
