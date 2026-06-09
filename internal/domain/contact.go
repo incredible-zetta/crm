@@ -35,27 +35,27 @@ func (s Stage) Valid() bool {
 
 // Contact represents an individual customer or prospect in the CRM.
 type Contact struct {
-	ID             int64
-	Email          string
-	FirstName      string
-	LastName       string
-	Company        string
-	Phone          string
-	Stage          Stage
-	Tags           []string
-	Notes          string
-	Custom         map[string]any
-	Source         string
-	UnsubCode      string      // public opt-out token (16 hex), may be empty until set
-	UnsubscribedAt *time.Time  // nil = subscribed
-	DeletedAt      *time.Time  // nil = active (soft delete)
-	EmailStatus    EmailStatus // verification verdict; empty treated as unknown
-	EmailReason    string      // short reason for the verdict
-	EmailCheckedAt *time.Time  // nil = never verified
+	ID                int64
+	Email             string
+	FirstName         string
+	LastName          string
+	Company           string
+	Phone             string
+	Stage             Stage
+	Tags              []string
+	Notes             string
+	Custom            map[string]any
+	Source            string
+	UnsubCode         string         // public opt-out token (16 hex), may be empty until set
+	UnsubscribedAt    *time.Time     // nil = subscribed
+	DeletedAt         *time.Time     // nil = active (soft delete)
+	EmailStatus       EmailStatus    // verification verdict; empty treated as unknown
+	EmailReason       string         // short reason for the verdict
+	EmailCheckedAt    *time.Time     // nil = never verified
 	WhatsAppStatus    WhatsAppStatus // WhatsApp capability verdict; empty treated as unknown
 	WhatsAppCheckedAt *time.Time     // nil = never checked
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
 }
 
 // IsUnsubscribed returns true if the contact has unsubscribed.
