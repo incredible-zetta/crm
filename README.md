@@ -27,6 +27,7 @@ Streamable HTTP (MCP SDK [`github.com/modelcontextprotocol/go-sdk`](https://gith
 | `GET /t/{code}` | public | Click tracking → 302 redirect to target |
 | `GET /o/{code}.png` | public | Open-tracking 1×1 pixel |
 | `GET /export/{id}.csv` | public | Download a generated contact export (expires ~24h) |
+| `POST /wa/webhook` | HMAC | Inbound WhatsApp messages + delivery/read receipts from the gateway (validated by `WA_WEBHOOK_SECRET`) |
 | `GET /healthz` | public | Liveness probe (200 OK) |
 
 Authenticate `/mcp` with **either** header:
@@ -38,7 +39,7 @@ X-API-Key: <MCP_API_KEY>
 
 The key check is constant-time and fail-closed. Tracking and export routes are intentionally public because email recipients open them without credentials.
 
-## Tools (38)
+## Tools (46)
 
 ### Contacts
 | Tool | Description |
@@ -96,6 +97,20 @@ The key check is constant-time and fail-closed. Tracking and export routes are i
 | `inbox_reply` | Reply from the configured sender identity |
 | `inbox_delete` | Soft-delete the local inbox copy; remote IMAP mail is not deleted |
 
+### WhatsApp
+Two-way WhatsApp channel via a [go-whatsapp-web-multidevice](https://github.com/aldinokemal/go-whatsapp-web-multidevice) gateway. Enabled only when `WA_BASE_URL` + `WA_DEVICE_ID` are set. Outbound uses WhatsApp markdown (`*bold*`, `_italic_`, `~strike~`, ` ```code``` `) — see the `whatsapp://formatting` MCP resource. Inbound replies and receipts arrive on `POST /wa/webhook`.
+
+| Tool | Description |
+|------|-------------|
+| `whatsapp_check` | Check if a contact (`id`) or `phone` is registered on WhatsApp; persists the verdict |
+| `whatsapp_audit` | Batch-check a contact segment for WhatsApp registration (skips already-checked by default) |
+| `whatsapp_send` | Send a WhatsApp message to a contact or phone; smart-send throttling + unregistered-block applied |
+| `whatsapp_list` | List stored WhatsApp messages (filter by direction/phone), paginated |
+| `whatsapp_get` | Read one stored WhatsApp message |
+| `whatsapp_reply` | Reply to an inbound message (threads via quoted message id, marks it replied) |
+| `whatsapp_mark_read` | Mark an inbound WhatsApp message read on the gateway |
+| `whatsapp_get_media` | Fetch media (proxy URL + mime, optional inline base64) for a message with an attachment |
+
 ### Ops & analytics
 | Tool | Description |
 |------|-------------|
@@ -149,6 +164,15 @@ All config comes from environment variables (EasyPanel injects them). See `.env.
 | `EMAIL_RATE_MAX` / `EMAIL_RATE_WINDOW_SEC` | no | — | Throttle outbound email to `MAX` sends per `WINDOW` seconds (e.g. `200` / `100` for Larksuite). Both must be set to enable. |
 | `VERIFY_EMAILS` | no | `false` | Verify email on contact create/update (syntax + DNS/MX + disposable/role heuristics) and persist the verdict |
 | `BLOCK_INVALID_SEND` | no | `false` | Refuse to send to contacts whose persisted email status is `invalid` |
+| `WA_BASE_URL` | no | — | WhatsApp gateway base URL. Set (with `WA_DEVICE_ID`) to enable the WhatsApp channel |
+| `WA_BASIC_AUTH` | no | — | Raw base64 of `user:pass` for gateway Basic Auth (never logged) |
+| `WA_DEVICE_ID` | no | `cds` | `x-device-id` header sent to the gateway |
+| `WA_WEBHOOK_SECRET` | no | — | HMAC-SHA256 secret validating `POST /wa/webhook` (empty = no validation; set it in prod) |
+| `WA_SEND_MAX` / `WA_SEND_WINDOW_SEC` | no | — | Token-bucket throttle: max sends per window (ban-prevention) |
+| `WA_SEND_DAILY_CAP` | no | — | Per-recipient daily send cap |
+| `WA_SEND_JITTER_MIN_MS` / `WA_SEND_JITTER_MAX_MS` | no | — | Random delay range before each send (human-like pacing) |
+| `WA_WARMUP_PER_DAY` | no | — | Global 24h send ceiling (number warm-up) |
+| `WA_BLOCK_UNREGISTERED_SEND` | no | `false` | Refuse sends to numbers verified NOT on WhatsApp |
 
 Provider selection: Mailgun is used when both `MAILGUN_DOMAIN` and `MAILGUN_API_KEY` are set, otherwise SMTP. If neither is configured the server still boots with a disabled sender that fails explicitly at send time (`email_send`/`campaign_send` return a terse error).
 
@@ -158,13 +182,15 @@ Inbox: IMAP polling is disabled unless `IMAP_HOST`, `IMAP_USER`, `IMAP_PASS`, `I
 
 Email rate limiting: set `EMAIL_RATE_MAX` and `EMAIL_RATE_WINDOW_SEC` to pace outbound delivery under a provider cap (Larksuite allows 200 messages / 100s, so `EMAIL_RATE_MAX=200` and `EMAIL_RATE_WINDOW_SEC=100`). The limiter is a token bucket applied to every send — single `email_send` and `campaign_send` alike — so a campaign loop blocks until a slot frees instead of bursting. Leave unset to send without throttling.
 
+WhatsApp: the channel is disabled unless `WA_BASE_URL` and `WA_DEVICE_ID` are set. When enabled, outbound sends pass through a smart-send wrapper (token-bucket window, per-recipient daily cap, random jitter, global warm-up ceiling) to reduce ban risk — all caps default to off, set them for real numbers. `whatsapp_check`/`whatsapp_audit` persist registration verdicts; with `WA_BLOCK_UNREGISTERED_SEND=true`, `whatsapp_send` refuses numbers known not on WhatsApp. Inbound messages and delivery/read receipts arrive at `POST /wa/webhook`, validated with HMAC-SHA256 when `WA_WEBHOOK_SECRET` is set (incoming messages are linked to known contacts by phone). See [docs/wiki/WhatsApp-Channel.md](docs/wiki/WhatsApp-Channel.md) for the full guide.
+
 Email verification: set `VERIFY_EMAILS=true` to verify addresses on contact create/update. Verification is self-hosted — RFC syntax check, DNS MX lookup (with A/AAAA fallback), and disposable/role-address heuristics — and records a verdict per contact: `valid`, `invalid`, `risky`, or `unknown`. It deliberately skips SMTP RCPT probing, which is unreliable and harms sender reputation, so `valid` means deliverable-capable, not guaranteed-inbox. Use `email_verify` for one contact and `email_audit` to sweep a segment (async by default). Set `BLOCK_INVALID_SEND=true` to refuse sending to contacts verified `invalid`.
 
 > If the DSN password contains shell metacharacters (e.g. `!`), single-quote the value.
 
 ## Database
 
-MySQL 8. Migrations are embedded in the binary and applied automatically on startup (`golang-migrate`). Tables: `contacts`, `email_templates`, `campaigns`, `tracking_links`, `email_events`, `scheduled_tasks`, `exports` (+ `schema_migrations`). Contacts, campaigns, and templates carry a `deleted_at` for soft delete; contacts also carry `unsubscribed_at` + a public `unsub_code`.
+MySQL 8. Migrations are embedded in the binary and applied automatically on startup (`golang-migrate`). Tables: `contacts`, `email_templates`, `campaigns`, `tracking_links`, `email_events`, `scheduled_tasks`, `exports`, `inbound_messages`, `inbox_cursors`, `wa_messages` (+ `schema_migrations`). `contacts` carries WhatsApp registration columns (`whatsapp_status`, `whatsapp_checked_at`). Contacts, campaigns, and templates carry a `deleted_at` for soft delete; contacts also carry `unsubscribed_at` + a public `unsub_code`.
 
 ## Run locally
 
@@ -260,10 +286,11 @@ internal/adapter/system/    real clock + crypto id generator
 internal/template/          render + link rewrite + open pixel + unsubscribe footer
 internal/scheduler/         in-process worker (claim -> execute -> mark)
 internal/mcpserver/         MCP server scaffold + auth + terse response helpers
-internal/transport/mcp/     38 thin MCP tool handlers
-internal/transport/http/    public routes (click, open pixel, export, unsubscribe, health)
+internal/adapter/whatsapp/  WhatsApp gateway client, phone normalize, WA-markdown, smart-send wrapper
+internal/transport/mcp/     46 thin MCP tool handlers
+internal/transport/http/    public routes (click, open pixel, export, unsubscribe, health, WA webhook)
 internal/config/            env config loader
-migrations/                 0001_init schema (embedded)
+migrations/                 embedded schema: 0001_init, 0002_inbox, ... 0005_whatsapp
 scripts/                    test-mcp.sh smoke test
 docs/plans/                 design + implementation plans
 ARCHITECTURE.md             the hexagon, dependency rule, how to extend

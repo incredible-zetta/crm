@@ -106,3 +106,8 @@ func (s *Store) Exports() port.ExportRepo {
 func (s *Store) Inbox() port.InboxRepo {
 	return &inboxRepo{db: s.db}
 }
+
+// WhatsApp returns a WAMessageRepo implementation.
+func (s *Store) WhatsApp() port.WAMessageRepo {
+	return &waMessageRepo{db: s.db}
+}

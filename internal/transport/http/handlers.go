@@ -37,12 +37,13 @@ type Unsubscriber interface {
 
 // Handlers serves the public routes.
 type Handlers struct {
-	Tracking ClickResolver
-	Opens    OpenRecorder
-	Exports  ExportFileResolver
-	Unsub    Unsubscriber
-	Version  string
-	BaseURL  string
+	Tracking        ClickResolver
+	Opens           OpenRecorder
+	Exports         ExportFileResolver
+	Unsub           Unsubscriber
+	WhatsAppWebhook http.Handler // optional: webhook handler for /wa/webhook
+	Version         string
+	BaseURL         string
 }
 
 // Register attaches the public routes to the mux.
@@ -54,6 +55,11 @@ func (h *Handlers) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /u/{code}", h.handleUnsubscribe)
 	mux.HandleFunc("POST /u/{code}", h.handleUnsubscribePost)
 	mux.HandleFunc("GET /healthz", h.handleHealth)
+
+	// WhatsApp webhook (if configured)
+	if h.WhatsAppWebhook != nil {
+		mux.Handle("POST /wa/webhook", h.WhatsAppWebhook)
+	}
 }
 
 func (h *Handlers) handleHome(w http.ResponseWriter, r *http.Request) {

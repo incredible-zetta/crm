@@ -223,3 +223,86 @@ func TestLoadAllValues(t *testing.T) {
 		t.Errorf("expected LogLevel to be 'debug', got %q", c.LogLevel)
 	}
 }
+
+func TestLoadWhatsAppDefaultsDisabled(t *testing.T) {
+	os.Clearenv()
+	os.Setenv("MCP_API_KEY", "k")
+	os.Setenv("DB_DSN", "dsn")
+	os.Setenv("BASE_URL", "http://x")
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.WhatsAppEnabled() {
+		t.Fatal("expected WhatsApp disabled when WA_BASE_URL/WA_DEVICE_ID missing")
+	}
+	if c.WABlockUnregistered {
+		t.Fatal("WA_BLOCK_UNREGISTERED_SEND should default false")
+	}
+	if c.WASendMax != 0 || c.WASendDailyCap != 0 || c.WAWarmupPerDay != 0 {
+		t.Fatalf("smart-send caps should default 0: %+v", c)
+	}
+}
+
+func TestLoadWhatsAppEnabled(t *testing.T) {
+	os.Clearenv()
+	os.Setenv("MCP_API_KEY", "k")
+	os.Setenv("DB_DSN", "dsn")
+	os.Setenv("BASE_URL", "http://x")
+	os.Setenv("WA_BASE_URL", "https://wa.test")
+	os.Setenv("WA_BASIC_AUTH", "dXNlcjpwYXNz")
+	os.Setenv("WA_DEVICE_ID", "cds")
+	os.Setenv("WA_WEBHOOK_SECRET", "whsec")
+	os.Setenv("WA_SEND_MAX", "10")
+	os.Setenv("WA_SEND_WINDOW_SEC", "60")
+	os.Setenv("WA_SEND_DAILY_CAP", "5")
+	os.Setenv("WA_SEND_JITTER_MIN_MS", "1000")
+	os.Setenv("WA_SEND_JITTER_MAX_MS", "3000")
+	os.Setenv("WA_WARMUP_PER_DAY", "50")
+	os.Setenv("WA_BLOCK_UNREGISTERED_SEND", "true")
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.WhatsAppEnabled() {
+		t.Fatal("expected WhatsApp enabled")
+	}
+	if c.WABaseURL != "https://wa.test" || c.WADeviceID != "cds" || c.WABasicAuth != "dXNlcjpwYXNz" || c.WAWebhookSecret != "whsec" {
+		t.Fatalf("unexpected WA config: %+v", c)
+	}
+	if c.WASendMax != 10 || c.WASendWindowSec != 60 || c.WASendDailyCap != 5 {
+		t.Fatalf("unexpected WA rate config: %+v", c)
+	}
+	if c.WAJitterMinMS != 1000 || c.WAJitterMaxMS != 3000 || c.WAWarmupPerDay != 50 {
+		t.Fatalf("unexpected WA jitter/warmup: %+v", c)
+	}
+	if !c.WABlockUnregistered {
+		t.Fatal("WA_BLOCK_UNREGISTERED_SEND=true not parsed")
+	}
+}
+
+func TestLoadWhatsAppEnabledWithoutDeviceDisabled(t *testing.T) {
+	os.Clearenv()
+	os.Setenv("MCP_API_KEY", "k")
+	os.Setenv("DB_DSN", "dsn")
+	os.Setenv("BASE_URL", "http://x")
+	os.Setenv("WA_BASE_URL", "https://wa.test")
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.WhatsAppEnabled() {
+		t.Fatal("WhatsApp must stay disabled without WA_DEVICE_ID")
+	}
+}
+
+func TestLoadInvalidWhatsAppNumbers(t *testing.T) {
+	os.Clearenv()
+	os.Setenv("MCP_API_KEY", "k")
+	os.Setenv("DB_DSN", "dsn")
+	os.Setenv("BASE_URL", "http://x")
+	os.Setenv("WA_SEND_MAX", "notanumber")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected error for invalid WA_SEND_MAX")
+	}
+}

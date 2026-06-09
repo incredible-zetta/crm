@@ -1,0 +1,36 @@
+CREATE TABLE IF NOT EXISTS wa_messages (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  message_id VARCHAR(255) NULL,
+  chat_id VARCHAR(255) NULL,
+  direction ENUM('in','out') NOT NULL,
+  phone VARCHAR(32) NOT NULL,
+  contact_id BIGINT NULL,
+  body MEDIUMTEXT,
+  media_type ENUM('','image','video','audio','document','sticker') NOT NULL DEFAULT '',
+  media_url TEXT NULL,
+  media_caption TEXT NULL,
+  status ENUM('sent','delivered','read','failed','received') NOT NULL,
+  error VARCHAR(500) NULL,
+  replied_to VARCHAR(255) NULL,
+  sent_at TIMESTAMP NULL,
+  delivered_at TIMESTAMP NULL,
+  read_at TIMESTAMP NULL,
+  received_at TIMESTAMP NULL,
+  notified_at TIMESTAMP NULL,
+  replied_at TIMESTAMP NULL,
+  deleted_at TIMESTAMP NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_wa_message_id (message_id),
+  INDEX idx_wa_phone (phone),
+  INDEX idx_wa_contact_created (contact_id, created_at),
+  INDEX idx_wa_direction (direction),
+  INDEX idx_wa_status (status),
+  INDEX idx_wa_read (read_at),
+  INDEX idx_wa_deleted (deleted_at),
+  INDEX idx_wa_notified (notified_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+ALTER TABLE contacts
+  ADD COLUMN whatsapp_status ENUM('unknown','registered','not_registered') NOT NULL DEFAULT 'unknown',
+  ADD COLUMN whatsapp_checked_at TIMESTAMP NULL,
+  ADD INDEX idx_contacts_whatsapp_status (whatsapp_status);
