@@ -83,19 +83,27 @@ The gateway must be configured to POST webhook events to your CRM:
 POST /wa/webhook
 ```
 
+The gateway envelope is `{"event": ..., "device_id": ..., "timestamp": ..., "payload": {...}}`. Legacy `{"action": ..., "data": {...}}` is also accepted.
+
 ### Event Types
 
 1. **`message`** - Inbound message from a contact
-   - Includes text body, media attachments, quoted message ID
-   - Auto-linked to known contacts by phone number
+   - Payload fields: `id`, `from` (JID), `from_name`, `chat_id`, `is_from_me`, `body`, `replied_to_id`
+   - Media arrives as a typed nested object (`image`/`video`/`audio`/`document`/`sticker`) holding `url` or `path` (+ `caption`); the caption is also folded into top-level `body`
+   - `is_from_me: true` messages are skipped (already stored on send)
+   - Auto-linked to known contacts by phone number (JID `@s.whatsapp.net` suffix stripped; `@lid` ignored — the real phone is in `from`)
 
 2. **`message.ack`** - Delivery/read receipt
-   - `type: "delivered"` - message reached recipient device
-   - `type: "read"` - recipient opened the message
+   - Payload fields: `ids` (array), `from`, `chat_id`, `receipt_type`
+   - Receipt `timestamp` is on the **envelope**, not the payload
+   - `receipt_type: "delivered"` - message reached recipient device
+   - `receipt_type: "read"` - recipient opened the message
+
+Unhandled events (reactions, presence, group, newsletter, calls) return 200 and are ignored.
 
 ### Webhook Validation
 
-If `WA_WEBHOOK_SECRET` is set, the handler validates the `X-Webhook-Signature` header (HMAC-SHA256).
+If `WA_WEBHOOK_SECRET` is set, the handler validates the signature header. The gateway sends `X-Hub-Signature-256: sha256=<hex>` (HMAC-SHA256 of the raw body); the legacy `X-Webhook-Signature` (raw hex) header is also accepted. Empty secret disables validation (not recommended in production).
 
 ## WhatsApp Markdown
 

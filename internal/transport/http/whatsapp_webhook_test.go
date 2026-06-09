@@ -117,7 +117,8 @@ func newWebhookHandler(secret string) (*WhatsAppWebhookHandler, *whFakeRepo) {
 func post(h http.Handler, body, sig string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(http.MethodPost, "/wa/webhook", strings.NewReader(body))
 	if sig != "" {
-		req.Header.Set("X-Webhook-Signature", sig)
+		// Gateway sends X-Hub-Signature-256: sha256=<hex>.
+		req.Header.Set("X-Hub-Signature-256", "sha256="+sig)
 	}
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
@@ -142,7 +143,34 @@ func TestWebhookRejectsNonPost(t *testing.T) {
 	}
 }
 
+// Real go-whatsapp-web-multidevice inbound text payload.
 func TestWebhookMessageIngested(t *testing.T) {
+	h, repo := newWebhookHandler("")
+	body := `{"device_id":"6285792071380@s.whatsapp.net","event":"message","payload":{"body":"haii","chat_id":"628123456789@s.whatsapp.net","from":"628123456789@s.whatsapp.net","from_lid":"239959873196218@lid","from_name":"Indra","id":"3EB0F0AAAFA7B83D7DCEC6","is_from_me":false,"timestamp":"2026-06-09T18:50:24Z"}}`
+	rec := post(h, body, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if repo.inserts != 1 {
+		t.Errorf("inserts = %d, want 1", repo.inserts)
+	}
+}
+
+// Image message: media nested object, caption folded into body.
+func TestWebhookMediaMessageIngested(t *testing.T) {
+	h, repo := newWebhookHandler("")
+	body := `{"event":"message","payload":{"id":"img-1","chat_id":"628123456789@s.whatsapp.net","from":"628123456789@s.whatsapp.net","from_name":"Indra","is_from_me":false,"timestamp":"2026-06-09T18:50:24Z","body":"Check this out!","image":{"url":"https://mmg.whatsapp.net/x.jpeg","caption":"Check this out!"}}}`
+	rec := post(h, body, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if repo.inserts != 1 {
+		t.Errorf("inserts = %d, want 1", repo.inserts)
+	}
+}
+
+// Backward-compat: legacy action/data envelope must still parse.
+func TestWebhookLegacyActionDataEnvelope(t *testing.T) {
 	h, repo := newWebhookHandler("")
 	body := `{"action":"message","data":{"id":"wamid-1","from":"628123456789@s.whatsapp.net","body":"halo","timestamp":"2026-06-09T10:00:00Z"}}`
 	rec := post(h, body, "")
@@ -156,19 +184,20 @@ func TestWebhookMessageIngested(t *testing.T) {
 
 func TestWebhookSkipsFromMe(t *testing.T) {
 	h, repo := newWebhookHandler("")
-	body := `{"action":"message","data":{"id":"wamid-2","from":"628123456789@s.whatsapp.net","from_me":true,"body":"echo","timestamp":"2026-06-09T10:00:00Z"}}`
+	body := `{"event":"message","payload":{"id":"wamid-2","from":"628123456789@s.whatsapp.net","is_from_me":true,"body":"echo","timestamp":"2026-06-09T10:00:00Z"}}`
 	rec := post(h, body, "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d", rec.Code)
 	}
 	if repo.inserts != 0 {
-		t.Errorf("from_me message should be skipped, inserts=%d", repo.inserts)
+		t.Errorf("is_from_me message should be skipped, inserts=%d", repo.inserts)
 	}
 }
 
+// Real ack payload: receipt_type field, timestamp on envelope (not payload).
 func TestWebhookReceiptUpdatesStatus(t *testing.T) {
 	h, repo := newWebhookHandler("")
-	body := `{"action":"message.ack","data":{"ids":["m1","m2"],"type":"read","timestamp":"2026-06-09T10:00:00Z"}}`
+	body := `{"device_id":"6285792071380@s.whatsapp.net","event":"message.ack","payload":{"chat_id":"239959873196218@lid","from":"628123456789@s.whatsapp.net","from_lid":"239959873196218@lid","ids":["m1","m2"],"receipt_type":"read"},"timestamp":"2026-06-09T18:51:23Z"}`
 	rec := post(h, body, "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d", rec.Code)
@@ -181,15 +210,28 @@ func TestWebhookReceiptUpdatesStatus(t *testing.T) {
 	}
 }
 
-func TestWebhookUnknownActionIgnored(t *testing.T) {
+// Real delivered ack from gateway.
+func TestWebhookReceiptDelivered(t *testing.T) {
 	h, repo := newWebhookHandler("")
-	body := `{"action":"presence","data":{}}`
+	body := `{"device_id":"6285792071380@s.whatsapp.net","event":"message.ack","payload":{"chat_id":"239959873196218@lid","from":"628123456789@s.whatsapp.net","ids":["3EB031839DBE61B52FB044"],"receipt_type":"delivered","receipt_type_description":"means the message was delivered to the device (but the user might not have noticed)."},"timestamp":"2026-06-09T18:51:23Z"}`
 	rec := post(h, body, "")
 	if rec.Code != http.StatusOK {
-		t.Errorf("status = %d, want 200 (unknown action ignored)", rec.Code)
+		t.Fatalf("status = %d", rec.Code)
+	}
+	if len(repo.statusCalls) != 1 || repo.statusCalls[0] != "3EB031839DBE61B52FB044:delivered" {
+		t.Errorf("status calls = %v, want [3EB031839DBE61B52FB044:delivered]", repo.statusCalls)
+	}
+}
+
+func TestWebhookUnknownActionIgnored(t *testing.T) {
+	h, repo := newWebhookHandler("")
+	body := `{"event":"chat_presence","payload":{"state":"composing"}}`
+	rec := post(h, body, "")
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200 (unknown event ignored)", rec.Code)
 	}
 	if repo.inserts != 0 || len(repo.statusCalls) != 0 {
-		t.Error("unknown action should not touch repo")
+		t.Error("unknown event should not touch repo")
 	}
 }
 
@@ -206,7 +248,7 @@ func TestWebhookInvalidJSON(t *testing.T) {
 func TestWebhookHMACValidSignatureAccepted(t *testing.T) {
 	const secret = "topsecret"
 	h, repo := newWebhookHandler(secret)
-	body := `{"action":"message","data":{"id":"sig-1","from":"628123456789@s.whatsapp.net","body":"hi","timestamp":"2026-06-09T10:00:00Z"}}`
+	body := `{"event":"message","payload":{"id":"sig-1","from":"628123456789@s.whatsapp.net","body":"hi","timestamp":"2026-06-09T10:00:00Z"}}`
 	rec := post(h, body, sign(secret, body))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("valid signature rejected: status=%d", rec.Code)
@@ -218,7 +260,7 @@ func TestWebhookHMACValidSignatureAccepted(t *testing.T) {
 
 func TestWebhookHMACMissingSignatureRejected(t *testing.T) {
 	h, repo := newWebhookHandler("topsecret")
-	body := `{"action":"message","data":{"id":"sig-2","from":"628123456789@s.whatsapp.net","body":"hi","timestamp":"2026-06-09T10:00:00Z"}}`
+	body := `{"event":"message","payload":{"id":"sig-2","from":"628123456789@s.whatsapp.net","body":"hi","timestamp":"2026-06-09T10:00:00Z"}}`
 	rec := post(h, body, "")
 	if rec.Code != http.StatusUnauthorized {
 		t.Errorf("status = %d, want 401 (missing signature)", rec.Code)
@@ -230,7 +272,7 @@ func TestWebhookHMACMissingSignatureRejected(t *testing.T) {
 
 func TestWebhookHMACInvalidSignatureRejected(t *testing.T) {
 	h, repo := newWebhookHandler("topsecret")
-	body := `{"action":"message","data":{"id":"sig-3","from":"628123456789@s.whatsapp.net","body":"hi","timestamp":"2026-06-09T10:00:00Z"}}`
+	body := `{"event":"message","payload":{"id":"sig-3","from":"628123456789@s.whatsapp.net","body":"hi","timestamp":"2026-06-09T10:00:00Z"}}`
 	rec := post(h, body, sign("wrong-secret", body))
 	if rec.Code != http.StatusUnauthorized {
 		t.Errorf("status = %d, want 401 (bad signature)", rec.Code)
@@ -243,7 +285,7 @@ func TestWebhookHMACInvalidSignatureRejected(t *testing.T) {
 func TestWebhookHMACTamperedBodyRejected(t *testing.T) {
 	const secret = "topsecret"
 	h, repo := newWebhookHandler(secret)
-	original := `{"action":"message","data":{"id":"sig-4","from":"628123456789@s.whatsapp.net","body":"hi","timestamp":"2026-06-09T10:00:00Z"}}`
+	original := `{"event":"message","payload":{"id":"sig-4","from":"628123456789@s.whatsapp.net","body":"hi","timestamp":"2026-06-09T10:00:00Z"}}`
 	tampered := strings.Replace(original, "hi", "HACKED", 1)
 	rec := post(h, tampered, sign(secret, original)) // sig for original, body tampered
 	if rec.Code != http.StatusUnauthorized {
