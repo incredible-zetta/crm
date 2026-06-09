@@ -14,6 +14,10 @@ Zetta CRM is a self-hosted MCP CRM for AI operators: contacts, templates, campai
 - [Google Cloud Run](Google-Cloud-Run)
 - [Kubernetes](Kubernetes)
 
+## Channels
+
+- [WhatsApp Channel](WhatsApp-Channel) — Two-way WhatsApp messaging via go-whatsapp-web-multidevice gateway
+
 ## Image
 
 Release image:

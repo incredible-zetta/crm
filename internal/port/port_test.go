@@ -45,6 +45,9 @@ func (r stubContactRepo) Get(ctx context.Context, id int64) (domain.Contact, err
 func (r stubContactRepo) GetByEmail(ctx context.Context, email string) (domain.Contact, error) {
 	return domain.Contact{}, nil
 }
+func (r stubContactRepo) GetByPhone(ctx context.Context, phone string) (domain.Contact, error) {
+	return domain.Contact{}, nil
+}
 func (r stubContactRepo) GetByUnsubCode(ctx context.Context, code string) (domain.Contact, error) {
 	return domain.Contact{}, nil
 }
@@ -71,6 +74,10 @@ func (r stubContactRepo) SetUnsubCode(ctx context.Context, id int64, code string
 }
 
 func (r stubContactRepo) SetEmailStatus(ctx context.Context, id int64, v domain.EmailVerification) error {
+	return nil
+}
+
+func (r stubContactRepo) SetWhatsAppStatus(ctx context.Context, id int64, v domain.WhatsAppCheck) error {
 	return nil
 }
 

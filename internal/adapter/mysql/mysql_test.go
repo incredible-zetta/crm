@@ -36,6 +36,7 @@ func getTestStore(t *testing.T) *Store {
 		_, _ = db.Exec("DELETE FROM scheduled_tasks WHERE payload LIKE '%t_mysql_%'")
 		_, _ = db.Exec("DELETE FROM inbound_messages WHERE mailbox LIKE 't_mysql_%' OR from_email LIKE 't_mysql_%'")
 		_, _ = db.Exec("DELETE FROM inbox_cursors WHERE mailbox LIKE 't_mysql_%'")
+		_, _ = db.Exec("DELETE FROM wa_messages WHERE message_id LIKE 't_mysql_%'")
 		_, _ = db.Exec("DELETE FROM exports WHERE id LIKE 't_mysql_%'")
 		db.Close()
 	})
@@ -1041,5 +1042,159 @@ func TestInboxRepo(t *testing.T) {
 	}
 	if _, err := repo.GetMessage(ctx, inserted.ID); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("expected not found after soft delete, got %v", err)
+	}
+}
+
+func TestWAMessageRepo(t *testing.T) {
+	store := getTestStore(t)
+	repo := store.WhatsApp()
+	ctx := context.Background()
+	uniq := time.Now().UnixNano()
+	phone := "628123456789"
+	outID := fmt.Sprintf("t_mysql_%d_out", uniq)
+
+	// Insert outbound.
+	sent := time.Now().UTC().Truncate(time.Second)
+	out := domain.WAMessage{
+		MessageID: outID,
+		Direction: domain.WAOutbound,
+		Phone:     phone,
+		Body:      "*hi*",
+		Status:    domain.WAStatusSent,
+		SentAt:    &sent,
+		CreatedAt: sent,
+	}
+	inserted, isNew, err := repo.Insert(ctx, out)
+	if err != nil {
+		t.Fatalf("insert outbound: %v", err)
+	}
+	if !isNew || inserted.ID == 0 {
+		t.Fatalf("expected new row, got isNew=%v id=%d", isNew, inserted.ID)
+	}
+
+	// Idempotent re-insert by message_id.
+	dup, isNew, err := repo.Insert(ctx, out)
+	if err != nil {
+		t.Fatalf("dup insert: %v", err)
+	}
+	if isNew || dup.ID != inserted.ID {
+		t.Fatalf("expected idempotent insert, got isNew=%v id=%d", isNew, dup.ID)
+	}
+
+	// Get.
+	got, err := repo.Get(ctx, inserted.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.MessageID != outID || got.Status != domain.WAStatusSent {
+		t.Fatalf("unexpected row: %+v", got)
+	}
+
+	// Status lifecycle: sent -> delivered -> read.
+	t1 := sent.Add(time.Minute)
+	if err := repo.UpdateStatus(ctx, outID, domain.WAStatusDelivered, t1); err != nil {
+		t.Fatalf("mark delivered: %v", err)
+	}
+	got, _ = repo.Get(ctx, inserted.ID)
+	if got.Status != domain.WAStatusDelivered || got.DeliveredAt == nil {
+		t.Fatalf("delivered not applied: %+v", got)
+	}
+
+	t2 := sent.Add(2 * time.Minute)
+	if err := repo.UpdateStatus(ctx, outID, domain.WAStatusRead, t2); err != nil {
+		t.Fatalf("mark read: %v", err)
+	}
+	got, _ = repo.Get(ctx, inserted.ID)
+	if got.Status != domain.WAStatusRead || got.ReadAt == nil {
+		t.Fatalf("read not applied: %+v", got)
+	}
+
+	// No-downgrade: a late "delivered" receipt must NOT revert read -> delivered.
+	if err := repo.UpdateStatus(ctx, outID, domain.WAStatusDelivered, t2.Add(time.Minute)); err != nil {
+		t.Fatalf("late delivered: %v", err)
+	}
+	got, _ = repo.Get(ctx, inserted.ID)
+	if got.Status != domain.WAStatusRead {
+		t.Fatalf("status downgraded from read to %s", got.Status)
+	}
+
+	// Counters.
+	n, err := repo.CountSentSince(ctx, phone, sent.Add(-time.Hour))
+	if err != nil {
+		t.Fatalf("count since: %v", err)
+	}
+	if n < 1 {
+		t.Fatalf("CountSentSince = %d, want >=1", n)
+	}
+	all, err := repo.CountSentSinceAll(ctx, sent.Add(-time.Hour))
+	if err != nil {
+		t.Fatalf("count all: %v", err)
+	}
+	if all < 1 {
+		t.Fatalf("CountSentSinceAll = %d, want >=1", all)
+	}
+
+	// Inbound + reply linkage.
+	inMsgID := fmt.Sprintf("t_mysql_%d_in", uniq)
+	recv := sent.Add(3 * time.Minute)
+	inbound, _, err := repo.Insert(ctx, domain.WAMessage{
+		MessageID:  inMsgID,
+		Direction:  domain.WAInbound,
+		Phone:      phone,
+		Body:       "halo",
+		Status:     domain.WAStatusReceived,
+		ReceivedAt: &recv,
+		CreatedAt:  recv,
+	})
+	if err != nil {
+		t.Fatalf("insert inbound: %v", err)
+	}
+
+	replyID := fmt.Sprintf("t_mysql_%d_reply", uniq)
+	reply, _, err := repo.Insert(ctx, domain.WAMessage{
+		MessageID: replyID, Direction: domain.WAOutbound, Phone: phone,
+		Body: "thanks", Status: domain.WAStatusSent, CreatedAt: recv,
+	})
+	if err != nil {
+		t.Fatalf("insert reply: %v", err)
+	}
+	if err := repo.SetRepliedTo(ctx, reply.ID, inMsgID); err != nil {
+		t.Fatalf("set replied_to: %v", err)
+	}
+	if err := repo.MarkReplied(ctx, inbound.ID, recv.Add(time.Minute)); err != nil {
+		t.Fatalf("mark replied: %v", err)
+	}
+
+	// MarkRead inbound.
+	rd := recv.Add(2 * time.Minute)
+	if err := repo.MarkRead(ctx, inbound.ID, &rd); err != nil {
+		t.Fatalf("mark read inbound: %v", err)
+	}
+	got, _ = repo.Get(ctx, inbound.ID)
+	if got.ReadAt == nil {
+		t.Fatalf("inbound read_at not set")
+	}
+
+	// List filter by direction.
+	page, err := repo.List(ctx, domain.WAInboundFilter{Direction: "in", Phone: phone}, port.Paging{Limit: 10})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	foundIn := false
+	for _, m := range page.Items {
+		if m.ID == inbound.ID {
+			foundIn = true
+		}
+	}
+	if !foundIn {
+		t.Fatalf("inbound message not in direction=in listing")
+	}
+
+	// SoftDelete.
+	if err := repo.SoftDelete(ctx, reply.ID); err != nil {
+		t.Fatalf("soft delete: %v", err)
+	}
+	if _, err := repo.Get(ctx, reply.ID); err == nil {
+		t.Fatalf("expected soft-deleted row to be hidden from Get")
 	}
 }

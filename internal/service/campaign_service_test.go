@@ -811,3 +811,11 @@ func TestCampaignSendMissing(t *testing.T) {
 		t.Fatalf("expected ErrNotFound, got: %v", err)
 	}
 }
+
+func (r *fakeCampaignContactRepo) GetByPhone(ctx context.Context, phone string) (domain.Contact, error) {
+	return domain.Contact{}, domain.ErrNotFound
+}
+
+func (r *fakeCampaignContactRepo) SetWhatsAppStatus(ctx context.Context, id int64, v domain.WhatsAppCheck) error {
+	return nil
+}
