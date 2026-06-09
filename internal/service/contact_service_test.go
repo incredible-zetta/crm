@@ -976,3 +976,11 @@ func TestAuditEmailsDisabled(t *testing.T) {
 		t.Fatalf("expected validation error when verifier disabled, got %v", err)
 	}
 }
+
+func (r *fakeContactRepo) GetByPhone(ctx context.Context, phone string) (domain.Contact, error) {
+	return domain.Contact{}, domain.ErrNotFound
+}
+
+func (r *fakeContactRepo) SetWhatsAppStatus(ctx context.Context, id int64, v domain.WhatsAppCheck) error {
+	return nil
+}

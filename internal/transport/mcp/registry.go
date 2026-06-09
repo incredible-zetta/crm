@@ -214,4 +214,97 @@ func Register(srv *mcp.Server, d *Deps) {
 		Name:        "inbox_delete",
 		Description: "Soft-delete a stored inbound message locally",
 	}, d.InboxDelete)
+
+	// Group 10: WhatsApp (whatsapp.go)
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "whatsapp_check",
+		Description: "Check if a phone number is registered on WhatsApp and persist the verdict on the contact",
+	}, d.WhatsAppCheck)
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "whatsapp_audit",
+		Description: "Batch-check WhatsApp registration for a segment of contacts; paginate via next_cursor",
+	}, d.WhatsAppAudit)
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "whatsapp_send",
+		Description: "Send a WhatsApp text message to a contact or phone. Body uses WhatsApp markdown (*bold*, _italic_, ~strike~, ```code```). See whatsapp://formatting resource.",
+	}, d.WhatsAppSend)
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "whatsapp_list",
+		Description: "List WhatsApp messages (inbound + outbound) with filtering",
+	}, d.WhatsAppList)
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "whatsapp_get",
+		Description: "Get a single WhatsApp message by ID",
+	}, d.WhatsAppGet)
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "whatsapp_reply",
+		Description: "Reply to an inbound WhatsApp message, linking via replied_to",
+	}, d.WhatsAppReply)
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "whatsapp_mark_read",
+		Description: "Mark an inbound WhatsApp message as read (locally + on gateway)",
+	}, d.WhatsAppMarkRead)
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "whatsapp_get_media",
+		Description: "Download media URL for a WhatsApp message with attachment",
+	}, d.WhatsAppGetMedia)
+
+	// WhatsApp formatting resource
+	srv.AddResource(&mcp.Resource{
+		URI:         "whatsapp://formatting",
+		Name:        "WhatsApp Markdown Formatting",
+		Description: "Reference guide for WhatsApp text formatting syntax",
+		MIMEType:    "text/plain",
+	}, func(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+		guide := `WhatsApp Text Formatting Guide
+================================
+
+WhatsApp uses a simplified markdown syntax. Do NOT use GitHub-flavored markdown.
+
+FORMATTING:
+  *bold*          → bold text (single asterisk, NOT double)
+  _italic_        → italic text (underscore, NOT single asterisk)
+  ~strikethrough~ → strikethrough (single tilde, NOT double)
+  ` + "```code```" + `   → monospace code (triple backticks)
+
+LISTS:
+  - item          → bulleted list (dash or asterisk at line start)
+  1. item         → numbered list
+
+NOT SUPPORTED:
+  - Headings (# Title) → renders literally, use *Title* (bold) instead
+  - Links [label](url) → renders literally, write "label (url)" instead
+  - Images ![alt](url) → not supported, use media send instead
+  - Tables → not supported
+
+CONVERSION HELPER:
+  The system auto-converts common GitHub markdown to WhatsApp format:
+    **bold**    → *bold*
+    *italic*    → _italic_
+    ~~strike~~  → ~strike~
+    # Heading   → *Heading*
+    [a](url)    → a (url)
+
+BEST PRACTICES:
+  - Keep messages concise (WhatsApp has character limits)
+  - Use line breaks (\n\n) for paragraphs
+  - Test formatting on a real WhatsApp client before bulk sends
+`
+		return &mcp.ReadResourceResult{
+			Contents: []*mcp.ResourceContents{
+				{
+					URI:      "whatsapp://formatting",
+					MIMEType: "text/plain",
+					Text:     guide,
+				},
+			},
+		}, nil
+	})
 }

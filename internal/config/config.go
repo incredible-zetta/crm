@@ -33,6 +33,18 @@ type Config struct {
 	EmailRateWindowSec   int
 	VerifyEmails         bool
 	BlockInvalidSend     bool
+	// WhatsApp channel
+	WABaseURL            string // gateway base URL, e.g. https://notification.dev.lazyindra.online
+	WABasicAuth          string // raw base64 of "user:pass" (never logged)
+	WADeviceID           string // x-device-id header, e.g. "cds"
+	WAWebhookSecret      string // HMAC-SHA256 secret for webhook validation (empty = no validation)
+	WASendMax            int    // token bucket: max sends per window
+	WASendWindowSec      int    // token bucket: window in seconds
+	WASendDailyCap       int    // per-recipient daily cap
+	WAJitterMinMS        int    // min jitter before send (ms)
+	WAJitterMaxMS        int    // max jitter before send (ms)
+	WAWarmupPerDay       int    // global warmup ceiling per 24h
+	WABlockUnregistered  bool   // refuse sends to numbers verified not on WhatsApp
 }
 
 func (c *Config) DebugEnabled() bool {
@@ -47,6 +59,11 @@ func (c *Config) InboxEnabled() bool {
 // Both the message cap and the window must be positive to take effect.
 func (c *Config) EmailRateEnabled() bool {
 	return c.EmailRateMax > 0 && c.EmailRateWindowSec > 0
+}
+
+// WhatsAppEnabled reports whether the WhatsApp channel is configured.
+func (c *Config) WhatsAppEnabled() bool {
+	return c.WABaseURL != "" && c.WADeviceID != ""
 }
 
 func boolEnv(key string, def bool) bool {
@@ -138,6 +155,56 @@ func Load() (*Config, error) {
 
 	verifyEmails := boolEnv("VERIFY_EMAILS", false)
 	blockInvalidSend := boolEnv("BLOCK_INVALID_SEND", false)
+	waBlockUnregistered := boolEnv("WA_BLOCK_UNREGISTERED_SEND", false)
+
+	waSendMax := 0
+	if v := os.Getenv("WA_SEND_MAX"); v != "" {
+		val, err := strconv.Atoi(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid WA_SEND_MAX: %w", err)
+		}
+		waSendMax = val
+	}
+	waSendWindowSec := 0
+	if v := os.Getenv("WA_SEND_WINDOW_SEC"); v != "" {
+		val, err := strconv.Atoi(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid WA_SEND_WINDOW_SEC: %w", err)
+		}
+		waSendWindowSec = val
+	}
+	waSendDailyCap := 0
+	if v := os.Getenv("WA_SEND_DAILY_CAP"); v != "" {
+		val, err := strconv.Atoi(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid WA_SEND_DAILY_CAP: %w", err)
+		}
+		waSendDailyCap = val
+	}
+	waJitterMinMS := 0
+	if v := os.Getenv("WA_SEND_JITTER_MIN_MS"); v != "" {
+		val, err := strconv.Atoi(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid WA_SEND_JITTER_MIN_MS: %w", err)
+		}
+		waJitterMinMS = val
+	}
+	waJitterMaxMS := 0
+	if v := os.Getenv("WA_SEND_JITTER_MAX_MS"); v != "" {
+		val, err := strconv.Atoi(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid WA_SEND_JITTER_MAX_MS: %w", err)
+		}
+		waJitterMaxMS = val
+	}
+	waWarmupPerDay := 0
+	if v := os.Getenv("WA_WARMUP_PER_DAY"); v != "" {
+		val, err := strconv.Atoi(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid WA_WARMUP_PER_DAY: %w", err)
+		}
+		waWarmupPerDay = val
+	}
 
 	return &Config{
 		MCPAPIKey:            mcpAPIKey,
@@ -165,5 +232,16 @@ func Load() (*Config, error) {
 		EmailRateWindowSec:   emailRateWindowSec,
 		VerifyEmails:         verifyEmails,
 		BlockInvalidSend:     blockInvalidSend,
+		WABaseURL:            os.Getenv("WA_BASE_URL"),
+		WABasicAuth:          os.Getenv("WA_BASIC_AUTH"),
+		WADeviceID:           os.Getenv("WA_DEVICE_ID"),
+		WAWebhookSecret:      os.Getenv("WA_WEBHOOK_SECRET"),
+		WASendMax:            waSendMax,
+		WASendWindowSec:      waSendWindowSec,
+		WASendDailyCap:       waSendDailyCap,
+		WAJitterMinMS:        waJitterMinMS,
+		WAJitterMaxMS:        waJitterMaxMS,
+		WAWarmupPerDay:       waWarmupPerDay,
+		WABlockUnregistered:  waBlockUnregistered,
 	}, nil
 }

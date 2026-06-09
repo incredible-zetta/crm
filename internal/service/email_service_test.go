@@ -484,3 +484,11 @@ func TestSendToContactSatisfiesMailer(t *testing.T) {
 	// verify that campaign_service.CampaignMailer compile-time assert compiles.
 	var _ CampaignMailer = svc
 }
+
+func (f *fakeContactRepo) GetByPhone(ctx context.Context, phone string) (domain.Contact, error) {
+	return domain.Contact{}, domain.ErrNotFound
+}
+
+func (f *fakeContactRepo) SetWhatsAppStatus(ctx context.Context, id int64, v domain.WhatsAppCheck) error {
+	return nil
+}

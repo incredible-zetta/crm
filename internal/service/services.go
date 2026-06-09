@@ -35,6 +35,7 @@ type Services struct {
 	Analytics *AnalyticsService
 	Tracking  *TrackingService
 	Inbox     *InboxService
+	WhatsApp  *WhatsAppService
 }
 
 // New wires every service from the provided ports and config. The wiring order

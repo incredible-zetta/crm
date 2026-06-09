@@ -52,6 +52,8 @@ type Contact struct {
 	EmailStatus    EmailStatus // verification verdict; empty treated as unknown
 	EmailReason    string      // short reason for the verdict
 	EmailCheckedAt *time.Time  // nil = never verified
+	WhatsAppStatus    WhatsAppStatus // WhatsApp capability verdict; empty treated as unknown
+	WhatsAppCheckedAt *time.Time     // nil = never checked
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 }

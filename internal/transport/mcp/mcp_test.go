@@ -1169,3 +1169,11 @@ func TestEmailVerifyDisabled(t *testing.T) {
 		t.Fatalf("expected disabled error when no verifier set")
 	}
 }
+
+func (r *fakeContactRepo) GetByPhone(ctx context.Context, phone string) (domain.Contact, error) {
+	return domain.Contact{}, domain.ErrNotFound
+}
+
+func (r *fakeContactRepo) SetWhatsAppStatus(ctx context.Context, id int64, v domain.WhatsAppCheck) error {
+	return nil
+}

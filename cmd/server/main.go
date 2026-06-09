@@ -16,6 +16,7 @@ import (
 	"github.com/incredible-zetta/crm/internal/adapter/mysql"
 	"github.com/incredible-zetta/crm/internal/adapter/system"
 	"github.com/incredible-zetta/crm/internal/adapter/verify"
+	whatsappadapter "github.com/incredible-zetta/crm/internal/adapter/whatsapp"
 	"github.com/incredible-zetta/crm/internal/config"
 	"github.com/incredible-zetta/crm/internal/inboxpoller"
 	"github.com/incredible-zetta/crm/internal/mcpserver"
@@ -122,6 +123,43 @@ func main() {
 		debugLog(debug, "inbox disabled: set IMAP_HOST, IMAP_USER, IMAP_PASS, IMAP_MAILBOX, ADMIN_NOTIFY_EMAIL to enable")
 	}
 
+	// WhatsApp channel (outbound send + inbound webhook ingest + capability audit)
+	if cfg.WhatsAppEnabled() {
+		waClient, err := whatsappadapter.New(whatsappadapter.Config{
+			BaseURL:   cfg.WABaseURL,
+			BasicAuth: cfg.WABasicAuth,
+			DeviceID:  cfg.WADeviceID,
+		})
+		if err != nil {
+			log.Fatalf("failed to create whatsapp adapter: %v", err)
+		}
+		// Wrap with smart-send policy (rate-limit + jitter + daily cap + warmup)
+		policy := whatsappadapter.SmartSendPolicy{
+			RateMax:              cfg.WASendMax,
+			RateWindow:           time.Duration(cfg.WASendWindowSec) * time.Second,
+			JitterMin:            time.Duration(cfg.WAJitterMinMS) * time.Millisecond,
+			JitterMax:            time.Duration(cfg.WAJitterMaxMS) * time.Millisecond,
+			DailyCapPerRecipient: cfg.WASendDailyCap,
+			WarmupPerDay:         cfg.WAWarmupPerDay,
+		}
+		var gw port.WhatsAppGateway = waClient
+		if policy.RateMax > 0 || policy.DailyCapPerRecipient > 0 || policy.WarmupPerDay > 0 || policy.JitterMax > 0 {
+			gw = whatsappadapter.NewSmartSender(waClient, policy, store.WhatsApp())
+			debugLog(debug, "whatsapp smart-send enabled: rate=%d/%ds cap=%d/day warmup=%d/day jitter=%d-%dms",
+				policy.RateMax, cfg.WASendWindowSec, policy.DailyCapPerRecipient, policy.WarmupPerDay,
+				cfg.WAJitterMinMS, cfg.WAJitterMaxMS)
+		}
+		svc.WhatsApp = service.NewWhatsAppService(gw, store.WhatsApp(), store.Contacts(), system.RealClock{}, nil, port.SmartSendPolicy{
+			BlockNotRegistered: cfg.WABlockUnregistered,
+			MaxPerSecond:       0, // smart-sender handles rate-limiting
+		})
+		debugLog(debug, "whatsapp channel enabled: base=%s device=%s block_unregistered=%v",
+			cfg.WABaseURL, cfg.WADeviceID, cfg.WABlockUnregistered)
+	} else {
+		svc.WhatsApp = nil
+		debugLog(debug, "whatsapp disabled: set WA_BASE_URL, WA_DEVICE_ID to enable")
+	}
+
 	// Email verification (self-hosted: syntax + DNS/MX + heuristics).
 	if cfg.VerifyEmails {
 		verifier := verify.New()
@@ -142,21 +180,26 @@ func main() {
 	})
 	mcpHandler := mcpserver.Handler(cfg.MCPAPIKey, mcpSrv)
 
-	// 7. Public HTTP transport (tracking, open pixel, export, unsubscribe, health)
+	// 7. Public HTTP transport (tracking, open pixel, export, unsubscribe, health, wa webhook)
+	var waWebhook http.Handler
+	if cfg.WhatsAppEnabled() && svc.WhatsApp != nil {
+		waWebhook = httptransport.NewWhatsAppWebhookHandler(svc.WhatsApp, cfg.WAWebhookSecret)
+	}
 	pub := &httptransport.Handlers{
-		Tracking: svc.Tracking,
-		Opens:    svc.Tracking,
-		Exports:  svc.Contact,
-		Unsub:    unsubscriberAdapter{svc.Contact},
-		Version:  version,
-		BaseURL:  cfg.BaseURL,
+		Tracking:        svc.Tracking,
+		Opens:           svc.Tracking,
+		Exports:         svc.Contact,
+		Unsub:           unsubscriberAdapter{svc.Contact},
+		WhatsAppWebhook: waWebhook,
+		Version:         version,
+		BaseURL:         cfg.BaseURL,
 	}
 
 	mux := http.NewServeMux()
 	pub.Register(mux)
 	mux.Handle("/mcp", mcpHandler)
 	mux.Handle("/mcp/", mcpHandler)
-	debugLog(debug, "registered routes: GET /{$}, GET /healthz, GET /t/{code}, GET /o/{code}, GET /export/{id}, GET /u/{code}, POST /u/{code}, /mcp, /mcp/")
+	debugLog(debug, "registered routes: GET /{$}, GET /healthz, GET /t/{code}, GET /o/{code}, GET /export/{id}, GET /u/{code}, POST /u/{code}, POST /wa/webhook, /mcp, /mcp/")
 
 	// 8. Scheduler worker -> TaskService.Execute
 	worker := &scheduler.Worker{

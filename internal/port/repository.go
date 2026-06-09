@@ -70,6 +70,9 @@ type ContactRepo interface {
 	Get(ctx context.Context, id int64) (domain.Contact, error)
 	// GetByEmail retrieves a contact by email. Excludes soft-deleted.
 	GetByEmail(ctx context.Context, email string) (domain.Contact, error)
+	// GetByPhone retrieves a contact by phone, matching common stored formats
+	// (E.164 digits, +E.164, national leading-zero). Excludes soft-deleted.
+	GetByPhone(ctx context.Context, phone string) (domain.Contact, error)
 	// GetByUnsubCode retrieves a contact by its unique opt-out/unsubscribe token.
 	GetByUnsubCode(ctx context.Context, code string) (domain.Contact, error)
 	// Update updates a contact.
@@ -88,6 +91,8 @@ type ContactRepo interface {
 	SetUnsubCode(ctx context.Context, id int64, code string) error
 	// SetEmailStatus records the email verification verdict for a contact.
 	SetEmailStatus(ctx context.Context, id int64, v domain.EmailVerification) error
+	// SetWhatsAppStatus records the WhatsApp capability verdict for a contact.
+	SetWhatsAppStatus(ctx context.Context, id int64, v domain.WhatsAppCheck) error
 }
 
 // CampaignRepo defines the database operations for campaigns.
