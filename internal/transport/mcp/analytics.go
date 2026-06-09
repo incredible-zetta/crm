@@ -28,15 +28,16 @@ type CampaignStatsIn struct {
 }
 
 type CampaignStatsOut struct {
-	CampaignID int64            `json:"campaign_id"`
-	Sent       int              `json:"sent"`
-	Delivered  int              `json:"delivered"`
-	Opened     int              `json:"opened"`
-	Clicked    int              `json:"clicked"`
-	Bounced    int              `json:"bounced"`
-	OpenRate   float64          `json:"open_rate"`
-	ClickRate  float64          `json:"click_rate"`
-	TopLinks   []map[string]any `json:"top_links"`
+	CampaignID      int64             `json:"campaign_id"`
+	Sent            int               `json:"sent"`
+	Delivered       int               `json:"delivered"`
+	Opened          int               `json:"opened"`
+	Clicked         int               `json:"clicked"`
+	Bounced         int               `json:"bounced"`
+	OpenRate        float64           `json:"open_rate"`
+	ClickRate       float64           `json:"click_rate"`
+	TopLinks        []map[string]any  `json:"top_links"`
+	TrackingSupport map[string]string `json:"tracking_support"`
 }
 
 func (d *Deps) AnalyticsOverview(ctx context.Context, req *mcp.CallToolRequest, in AnalyticsOverviewIn) (*mcp.CallToolResult, AnalyticsOverviewOut, error) {
@@ -66,7 +67,7 @@ func (d *Deps) CampaignStats(ctx context.Context, req *mcp.CallToolRequest, in C
 		return nil, CampaignStatsOut{}, fmt.Errorf("campaign_stats: %w", err)
 	}
 
-	var links []map[string]any
+	links := make([]map[string]any, 0, len(stats.TopLinks))
 	for _, l := range stats.TopLinks {
 		links = append(links, map[string]any{
 			"link_code": l.LinkCode,
@@ -75,14 +76,15 @@ func (d *Deps) CampaignStats(ctx context.Context, req *mcp.CallToolRequest, in C
 	}
 
 	return nil, CampaignStatsOut{
-		CampaignID: stats.CampaignID,
-		Sent:       stats.Sent,
-		Delivered:  stats.Delivered,
-		Opened:     stats.Opened,
-		Clicked:    stats.Clicked,
-		Bounced:    stats.Bounced,
-		OpenRate:   stats.OpenRate,
-		ClickRate:  stats.ClickRate,
-		TopLinks:   links,
+		CampaignID:      stats.CampaignID,
+		Sent:            stats.Sent,
+		Delivered:       stats.Delivered,
+		Opened:          stats.Opened,
+		Clicked:         stats.Clicked,
+		Bounced:         stats.Bounced,
+		OpenRate:        stats.OpenRate,
+		ClickRate:       stats.ClickRate,
+		TopLinks:        links,
+		TrackingSupport: stats.TrackingSupport,
 	}, nil
 }

@@ -245,6 +245,19 @@ func (r *fakeCampaignRepo) SoftDelete(ctx context.Context, id int64) error {
 	return nil
 }
 
+func (r *fakeCampaignRepo) ListDueScheduled(ctx context.Context, now time.Time, limit int) ([]domain.Campaign, error) {
+	var due []domain.Campaign
+	for _, c := range r.campaigns {
+		if c.DeletedAt != nil || c.Status != domain.CampaignScheduled || c.ScheduledAt == nil {
+			continue
+		}
+		if !c.ScheduledAt.After(now) {
+			due = append(due, c)
+		}
+	}
+	return due, nil
+}
+
 type fakeTemplateRepo struct {
 	templates map[int64]domain.Template
 	nextID    int64
@@ -358,6 +371,21 @@ func (r *fakeTaskRepo) Cancel(ctx context.Context, id int64) error {
 	t.Status = domain.TaskCancelled
 	r.tasks[id] = t
 	return nil
+}
+
+func (r *fakeTaskRepo) HasActiveCampaignTask(ctx context.Context, campaignID int64) (bool, error) {
+	for _, t := range r.tasks {
+		if t.Kind != domain.TaskCampaign || (t.Status != domain.TaskPending && t.Status != domain.TaskRunning) {
+			continue
+		}
+		if cid, ok := t.Payload["campaign_id"].(int64); ok && cid == campaignID {
+			return true, nil
+		}
+		if cid, ok := t.Payload["campaign_id"].(float64); ok && int64(cid) == campaignID {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 type fakeEventRepo struct {
