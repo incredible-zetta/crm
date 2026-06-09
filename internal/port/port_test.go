@@ -106,6 +106,9 @@ func (r stubCampaignRepo) SetStats(ctx context.Context, id int64, stats map[stri
 func (r stubCampaignRepo) SoftDelete(ctx context.Context, id int64) error {
 	return nil
 }
+func (r stubCampaignRepo) ListDueScheduled(ctx context.Context, now time.Time, limit int) ([]domain.Campaign, error) {
+	return nil, nil
+}
 
 var _ port.CampaignRepo = stubCampaignRepo{}
 
@@ -151,6 +154,9 @@ func (r stubTaskRepo) MarkFailed(ctx context.Context, id int64, errMsg string) e
 }
 func (r stubTaskRepo) Cancel(ctx context.Context, id int64) error {
 	return nil
+}
+func (r stubTaskRepo) HasActiveCampaignTask(ctx context.Context, campaignID int64) (bool, error) {
+	return false, nil
 }
 
 var _ port.TaskRepo = stubTaskRepo{}

@@ -111,6 +111,8 @@ type CampaignRepo interface {
 	SetStats(ctx context.Context, id int64, stats map[string]any) error
 	// SoftDelete marks a campaign as deleted (sets deleted_at).
 	SoftDelete(ctx context.Context, id int64) error
+	// ListDueScheduled returns campaigns with status=scheduled and scheduled_at <= now.
+	ListDueScheduled(ctx context.Context, now time.Time, limit int) ([]domain.Campaign, error)
 }
 
 // TemplateRepo defines the database operations for email templates.
@@ -144,6 +146,8 @@ type TaskRepo interface {
 	MarkFailed(ctx context.Context, id int64, errMsg string) error
 	// Cancel cancels a task, transitioning its status to cancelled if it was pending.
 	Cancel(ctx context.Context, id int64) error
+	// HasActiveCampaignTask reports whether a campaign has a pending or running send task.
+	HasActiveCampaignTask(ctx context.Context, campaignID int64) (bool, error)
 }
 
 // EventRepo defines operations for tracking email events and analytics.

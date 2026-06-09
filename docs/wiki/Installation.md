@@ -2,13 +2,18 @@
 
 Zetta CRM runs as one container plus one MySQL 8 database.
 
-Published images are pushed on release tags to GitHub Container Registry:
+Published images are pushed to GitHub Container Registry:
 
 ```bash
+# release (production)
 ghcr.io/incredible-zetta/crm:v0.0.1-beta
+
+# master pre-release (auto-built on every merge to master)
+ghcr.io/incredible-zetta/crm:master
+ghcr.io/incredible-zetta/crm:master-<short-sha>
 ```
 
-Use tag-pinned images in production. Use `latest` only if you create that tag yourself.
+Use release tags in production. Use `master` or `master-<short-sha>` to test changes before a tagged release.
 
 ## Required environment
 

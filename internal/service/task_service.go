@@ -33,6 +33,18 @@ func (s *TaskService) SetContact(c *ContactService) {
 	s.contact = c
 }
 
+// ScheduleCampaignSend enqueues a campaign send unless one is already active.
+func (s *TaskService) ScheduleCampaignSend(ctx context.Context, campaignID int64, runAt time.Time) (int64, error) {
+	active, err := s.repo.HasActiveCampaignTask(ctx, campaignID)
+	if err != nil {
+		return 0, err
+	}
+	if active {
+		return 0, fmt.Errorf("campaign already has an active send task: %w", domain.ErrConflict)
+	}
+	return s.Schedule(ctx, string(domain.TaskCampaign), map[string]any{"campaign_id": campaignID}, runAt)
+}
+
 // Schedule validates and inserts a new scheduled background task.
 func (s *TaskService) Schedule(ctx context.Context, kind string, payload map[string]any, runAt time.Time) (id int64, err error) {
 	if !domain.TaskKind(kind).Valid() {
