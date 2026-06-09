@@ -51,9 +51,9 @@ func (r *whFakeRepo) UpdateStatus(ctx context.Context, messageID string, status 
 	r.statusCalls = append(r.statusCalls, messageID+":"+string(status))
 	return nil
 }
-func (r *whFakeRepo) MarkRead(ctx context.Context, id int64, at *time.Time) error     { return nil }
-func (r *whFakeRepo) MarkReplied(ctx context.Context, id int64, at time.Time) error   { return nil }
-func (r *whFakeRepo) MarkNotified(ctx context.Context, id int64, at time.Time) error  { return nil }
+func (r *whFakeRepo) MarkRead(ctx context.Context, id int64, at *time.Time) error    { return nil }
+func (r *whFakeRepo) MarkReplied(ctx context.Context, id int64, at time.Time) error  { return nil }
+func (r *whFakeRepo) MarkNotified(ctx context.Context, id int64, at time.Time) error { return nil }
 func (r *whFakeRepo) SetRepliedTo(ctx context.Context, outID int64, inMsgID string) error {
 	return nil
 }
