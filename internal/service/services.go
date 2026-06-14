@@ -21,6 +21,7 @@ type Repos struct {
 	Tracking  port.TrackingRepo
 	Exports   port.ExportRepo
 	Inbox     port.InboxRepo
+	Threads   port.ThreadsRepo
 }
 
 // Services is the assembled use-case layer. It is the single entry point the
@@ -37,6 +38,7 @@ type Services struct {
 	Tracking      *TrackingService
 	Inbox         *InboxService
 	WhatsApp      *WhatsAppService
+	Threads       *ThreadsService
 }
 
 // New wires every service from the provided ports and config. The wiring order
