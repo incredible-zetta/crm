@@ -108,13 +108,13 @@ The key check is constant-time and fail-closed. Tracking and export routes are i
 | `inbox_delete` | Soft-delete the local inbox copy; remote IMAP mail is not deleted |
 
 ### Threads
-Hybrid Threads channel via Meta Threads Graph API. Enabled when `THREADS_ACCESS_TOKEN` is set. Optional env: `THREADS_USER_ID` (default `me`) and `THREADS_API_VERSION` (default `v1.0`). Live calls remain source of truth; posts/replies/mentions and audit events are cached in MySQL with raw Graph JSON for future API changes.
+Hybrid Threads channel via Meta Threads Graph API. Enabled when `THREADS_ACCESS_TOKEN` is set. Optional env: `THREADS_USER_ID` (default `me`) and `THREADS_API_VERSION` (default `v1.0`). Live calls remain source of truth; posts/replies/mentions and audit events are cached in MySQL with raw Graph JSON for future API changes. Publishing supports official `topic_tag` (1-50 chars, disallow `.` and `&`); see `threads://publishing` resource.
 
 | Tool | Description |
 |------|-------------|
 | `threads_profile` | Fetch configured Threads profile |
 | `threads_list` | List live Threads posts and cache them |
-| `threads_publish` | Publish text/image/video post and cache result |
+| `threads_publish` | Publish text/image/video post with optional `topic_tag` and cache result |
 | `threads_delete` | Delete live post and soft-delete cached row |
 | `threads_insights` | Fetch user-level or media-level insights |
 | `threads_replies` | List live replies for a post and cache them |

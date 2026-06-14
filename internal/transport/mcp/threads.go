@@ -50,6 +50,7 @@ type ThreadsPostOut struct {
 	Permalink        string `json:"permalink,omitempty"`
 	Timestamp        string `json:"timestamp,omitempty"`
 	Username         string `json:"username,omitempty"`
+	TopicTag         string `json:"topic_tag,omitempty"`
 	IsQuotePost      bool   `json:"is_quote_post,omitempty"`
 }
 
@@ -68,6 +69,7 @@ type ThreadsPublishIn struct {
 	Text     string `json:"text,omitempty"`
 	ImageURL string `json:"image_url,omitempty"`
 	VideoURL string `json:"video_url,omitempty"`
+	TopicTag string `json:"topic_tag,omitempty" jsonschema:"Optional Threads topic tag, 1-50 chars; disallows . and &"`
 }
 
 type ThreadsPublishOut struct {
@@ -82,7 +84,7 @@ func (d *Deps) ThreadsPublish(ctx context.Context, req *mcp.CallToolRequest, in 
 	if in.Text == "" && in.ImageURL == "" && in.VideoURL == "" {
 		return mcpserver.Err("validation", "text, image_url, or video_url required"), ThreadsPublishOut{}, nil
 	}
-	res, err := d.Svc.Threads.Publish(ctx, port.ThreadsPublishInput{Text: in.Text, ImageURL: in.ImageURL, VideoURL: in.VideoURL})
+	res, err := d.Svc.Threads.Publish(ctx, port.ThreadsPublishInput{Text: in.Text, ImageURL: in.ImageURL, VideoURL: in.VideoURL, TopicTag: in.TopicTag})
 	if err != nil {
 		return nil, ThreadsPublishOut{}, fmt.Errorf("threads_publish: %w", err)
 	}
@@ -343,7 +345,7 @@ func toThreadsPostOuts(items []domain.ThreadsPost) []ThreadsPostOut {
 }
 
 func toThreadsPostOut(p domain.ThreadsPost) ThreadsPostOut {
-	out := ThreadsPostOut{ID: p.ID, ThreadsID: p.ThreadsID, MediaProductType: p.MediaProductType, MediaType: p.MediaType, Text: p.Text, Permalink: p.Permalink, Username: p.Username, IsQuotePost: p.IsQuotePost}
+	out := ThreadsPostOut{ID: p.ID, ThreadsID: p.ThreadsID, MediaProductType: p.MediaProductType, MediaType: p.MediaType, Text: p.Text, Permalink: p.Permalink, Username: p.Username, TopicTag: p.TopicTag, IsQuotePost: p.IsQuotePost}
 	if p.Timestamp != nil {
 		out.Timestamp = p.Timestamp.Format(time.RFC3339)
 	}
