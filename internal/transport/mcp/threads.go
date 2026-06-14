@@ -225,9 +225,16 @@ func (d *Deps) ThreadsMentions(ctx context.Context, req *mcp.CallToolRequest, in
 }
 
 type ThreadsSearchIn struct {
-	Query  string `json:"query"`
-	Limit  int    `json:"limit,omitempty"`
-	Cursor string `json:"cursor,omitempty"`
+	Query          string `json:"query"`
+	SearchType     string `json:"search_type,omitempty" jsonschema:"TOP (default) or RECENT"`
+	SearchMode     string `json:"search_mode,omitempty" jsonschema:"KEYWORD (default) or TAG for topic tag search"`
+	MediaType      string `json:"media_type,omitempty" jsonschema:"TEXT, IMAGE, or VIDEO"`
+	AuthorUsername string `json:"author_username,omitempty" jsonschema:"Exact username filter, with or without @"`
+	Since          string `json:"since,omitempty" jsonschema:"Unix timestamp or parseable date/time"`
+	Until          string `json:"until,omitempty" jsonschema:"Unix timestamp or parseable date/time"`
+	Fields         string `json:"fields,omitempty" jsonschema:"Comma-separated fields; default includes id,text,media_type,permalink,timestamp,username,has_replies,is_quote_post,is_reply,topic_tag"`
+	Limit          int    `json:"limit,omitempty"`
+	Cursor         string `json:"cursor,omitempty"`
 }
 
 type ThreadsSearchOut struct {
@@ -241,7 +248,7 @@ func (d *Deps) ThreadsSearch(ctx context.Context, req *mcp.CallToolRequest, in T
 	if in.Query == "" {
 		return mcpserver.Err("validation", "query required"), ThreadsSearchOut{}, nil
 	}
-	out, err := d.Svc.Threads.Search(ctx, in.Query, in.Limit, in.Cursor)
+	out, err := d.Svc.Threads.Search(ctx, port.ThreadsSearchInput{Query: in.Query, SearchType: in.SearchType, SearchMode: in.SearchMode, MediaType: in.MediaType, AuthorUsername: in.AuthorUsername, Since: in.Since, Until: in.Until, Fields: in.Fields, Limit: in.Limit, Cursor: in.Cursor})
 	if err != nil {
 		return nil, ThreadsSearchOut{}, fmt.Errorf("threads_search: %w", err)
 	}
@@ -274,6 +281,39 @@ func (d *Deps) ThreadsListCached(ctx context.Context, req *mcp.CallToolRequest, 
 type ThreadsGetCachedIn struct {
 	ID        int64  `json:"id,omitempty"`
 	ThreadsID string `json:"threads_id,omitempty"`
+}
+
+type ThreadsTokenIn struct {
+	AccessToken string `json:"access_token,omitempty" jsonschema:"Optional token override. Defaults to THREADS_ACCESS_TOKEN. Returned token is sensitive."`
+}
+
+type ThreadsTokenOut struct {
+	AccessToken string `json:"access_token,omitempty"`
+	TokenType   string `json:"token_type,omitempty"`
+	ExpiresIn   int64  `json:"expires_in,omitempty"`
+	ExpiresAt   string `json:"expires_at,omitempty"`
+}
+
+func (d *Deps) ThreadsTokenExchange(ctx context.Context, req *mcp.CallToolRequest, in ThreadsTokenIn) (*mcp.CallToolResult, ThreadsTokenOut, error) {
+	if d.Svc.Threads == nil {
+		return mcpserver.Err("disabled", "threads channel not configured"), ThreadsTokenOut{}, nil
+	}
+	out, err := d.Svc.Threads.ExchangeToken(ctx, in.AccessToken)
+	if err != nil {
+		return nil, ThreadsTokenOut{}, fmt.Errorf("threads_token_exchange: %w", err)
+	}
+	return nil, toThreadsTokenOut(out), nil
+}
+
+func (d *Deps) ThreadsTokenRefresh(ctx context.Context, req *mcp.CallToolRequest, in ThreadsTokenIn) (*mcp.CallToolResult, ThreadsTokenOut, error) {
+	if d.Svc.Threads == nil {
+		return mcpserver.Err("disabled", "threads channel not configured"), ThreadsTokenOut{}, nil
+	}
+	out, err := d.Svc.Threads.RefreshToken(ctx, in.AccessToken)
+	if err != nil {
+		return nil, ThreadsTokenOut{}, fmt.Errorf("threads_token_refresh: %w", err)
+	}
+	return nil, toThreadsTokenOut(out), nil
 }
 
 func (d *Deps) ThreadsGetCached(ctx context.Context, req *mcp.CallToolRequest, in ThreadsGetCachedIn) (*mcp.CallToolResult, ThreadsPostOut, error) {
@@ -348,6 +388,14 @@ func toThreadsPostOut(p domain.ThreadsPost) ThreadsPostOut {
 	out := ThreadsPostOut{ID: p.ID, ThreadsID: p.ThreadsID, MediaProductType: p.MediaProductType, MediaType: p.MediaType, Text: p.Text, Permalink: p.Permalink, Username: p.Username, TopicTag: p.TopicTag, IsQuotePost: p.IsQuotePost}
 	if p.Timestamp != nil {
 		out.Timestamp = p.Timestamp.Format(time.RFC3339)
+	}
+	return out
+}
+
+func toThreadsTokenOut(t port.ThreadsTokenResult) ThreadsTokenOut {
+	out := ThreadsTokenOut{AccessToken: t.AccessToken, TokenType: t.TokenType, ExpiresIn: t.ExpiresIn}
+	if t.ExpiresIn > 0 {
+		out.ExpiresAt = time.Now().Add(time.Duration(t.ExpiresIn) * time.Second).Format(time.RFC3339)
 	}
 	return out
 }

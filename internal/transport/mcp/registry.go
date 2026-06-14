@@ -266,7 +266,9 @@ func Register(srv *mcp.Server, d *Deps) {
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_reply", Description: "Reply to a Threads post"}, d.ThreadsReply)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_reply_quota", Description: "Fetch Threads reply publishing quota usage"}, d.ThreadsReplyQuota)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_mentions", Description: "List live Threads mentions and cache them locally"}, d.ThreadsMentions)
-	mcp.AddTool(srv, &mcp.Tool{Name: "threads_search", Description: "Search Threads via keyword search endpoint"}, d.ThreadsSearch)
+	mcp.AddTool(srv, &mcp.Tool{Name: "threads_search", Description: "Search Threads via keyword search endpoint; supports TOP/RECENT, KEYWORD/TAG, media type, author username, time range, and fields"}, d.ThreadsSearch)
+	mcp.AddTool(srv, &mcp.Tool{Name: "threads_token_exchange", Description: "Exchange a short-lived Threads token for a long-lived token. Returns sensitive access_token."}, d.ThreadsTokenExchange)
+	mcp.AddTool(srv, &mcp.Tool{Name: "threads_token_refresh", Description: "Refresh a long-lived Threads token before expiry. Returns sensitive access_token."}, d.ThreadsTokenRefresh)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_list_cached", Description: "List cached Threads posts from MySQL"}, d.ThreadsListCached)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_get_cached", Description: "Get one cached Threads post by local id or threads_id"}, d.ThreadsGetCached)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_history", Description: "List Threads channel audit events"}, d.ThreadsHistory)
@@ -339,7 +341,32 @@ TOOLS:
   threads_reply         Reply to a Threads post
   threads_reply_quota   Check reply publishing quota before automation
   threads_replies       Read replies for a post
-  threads_search        Keyword search for post IDs
+  threads_search        Keyword/topic search for post IDs
+  threads_token_exchange Exchange short-lived token for long-lived token
+  threads_token_refresh Refresh long-lived token before expiry
+
+TOKEN LIFECYCLE:
+  Graph-generated tokens may be valid for API calls but not refreshable.
+  First exchange short-lived token:
+    threads_token_exchange
+  Then store returned access_token as THREADS_ACCESS_TOKEN.
+  Refresh long-lived token before expiry:
+    threads_token_refresh
+  Refresh requires an unexpired long-lived token.
+
+SEARCH:
+  threads_search supports:
+  - search_type: TOP (default) or RECENT
+  - search_mode: KEYWORD (default) or TAG
+  - media_type: TEXT, IMAGE, VIDEO
+  - author_username: exact username without @
+  - since/until time filters
+  - fields override
+
+  Default fields: id,text,media_type,permalink,timestamp,username,has_replies,is_quote_post,is_reply,topic_tag
+
+  If app lacks approved threads_keyword_search permission, public search may only return posts owned by authenticated user.
+  In that case use author_username for owned content discovery.
 
 TOPIC TAGS:
   Use topic_tag on threads_publish to set the official Threads topic.

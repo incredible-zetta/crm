@@ -49,7 +49,7 @@ The key check is constant-time and fail-closed. Tracking and export routes are i
 - **Threads:** hybrid Meta Threads channel with live publish/delete/search/replies/insights plus MySQL cache/audit and reply quota checks.
 - **Ops:** health check, embedded migrations, CSV exports, Docker/EasyPanel-ready single-port deploy.
 
-## Tools (60)
+## Tools (62)
 
 ### Contacts
 | Tool | Description |
@@ -121,7 +121,9 @@ Hybrid Threads channel via Meta Threads Graph API. Enabled when `THREADS_ACCESS_
 | `threads_reply` | Reply to a Threads post |
 | `threads_reply_quota` | Fetch reply publishing quota usage |
 | `threads_mentions` | List live mentions and cache them |
-| `threads_search` | Keyword search via Threads API |
+| `threads_search` | Keyword/topic search via Threads API with TOP/RECENT, KEYWORD/TAG, media type, author, time range, and fields |
+| `threads_token_exchange` | Exchange a short-lived Threads token for a long-lived token |
+| `threads_token_refresh` | Refresh a long-lived Threads token before expiry |
 | `threads_list_cached` | List cached Threads posts |
 | `threads_get_cached` | Get cached Threads post by local id or Threads id |
 | `threads_history` | List Threads audit events |
@@ -195,6 +197,7 @@ All config comes from environment variables (EasyPanel injects them). See `.env.
 | `VERIFY_EMAILS` | no | `false` | Verify email on contact create/update (syntax + DNS/MX + disposable/role heuristics) and persist the verdict |
 | `BLOCK_INVALID_SEND` | no | `false` | Refuse to send to contacts whose persisted email status is `invalid` |
 | `THREADS_ACCESS_TOKEN` | no | — | Threads Graph API token. Set to enable Threads channel; never log/commit it |
+| `THREADS_APP_SECRET` | no | — | Threads app secret, required only for `threads_token_exchange`; never log/commit it |
 | `THREADS_USER_ID` | no | `me` | Threads user ID for profile/list/publish/reply endpoints |
 | `THREADS_API_VERSION` | no | `v1.0` | Threads Graph API version |
 | `WA_BASE_URL` | no | — | WhatsApp gateway base URL. Set (with `WA_DEVICE_ID`) to enable the WhatsApp channel |
@@ -215,7 +218,7 @@ Inbox: IMAP polling is disabled unless `IMAP_HOST`, `IMAP_USER`, `IMAP_PASS`, `I
 
 Email rate limiting: set `EMAIL_RATE_MAX` and `EMAIL_RATE_WINDOW_SEC` to pace outbound delivery under a provider cap (Larksuite allows 200 messages / 100s, so `EMAIL_RATE_MAX=200` and `EMAIL_RATE_WINDOW_SEC=100`). The limiter is a token bucket applied to every send — single `email_send` and `campaign_send` alike — so a campaign loop blocks until a slot frees instead of bursting. Leave unset to send without throttling.
 
-Threads: the channel is disabled unless `THREADS_ACCESS_TOKEN` is set. Required scopes depend on the tool: `threads_basic`, `threads_content_publish`, `threads_manage_replies`, `threads_read_replies`, `threads_manage_insights`, `threads_manage_mentions`, `threads_keyword_search`, `threads_profile_discovery`, and `threads_delete` cover the full tool set. Reply publishing uses Meta's two-step flow: create a reply container via `POST /{user_id}/threads` with `reply_to_id`, then publish via `POST /{user_id}/threads_publish`. Check `threads_reply_quota` before automation; the API reports `reply_quota_usage` and `reply_config`. See [docs/wiki/Threads-Channel.md](docs/wiki/Threads-Channel.md) for examples and live verification notes.
+Threads: the channel is disabled unless `THREADS_ACCESS_TOKEN` is set. Required scopes depend on the tool: `threads_basic`, `threads_content_publish`, `threads_manage_replies`, `threads_read_replies`, `threads_manage_insights`, `threads_manage_mentions`, `threads_keyword_search`, `threads_profile_discovery`, and `threads_delete` cover the full tool set. Reply publishing uses Meta's two-step flow: create a reply container via `POST /{user_id}/threads` with `reply_to_id`, then publish via `POST /{user_id}/threads_publish`. Search supports `TOP`/`RECENT`, `KEYWORD`/`TAG`, media type, author username, time range, and fields; public search may require approved `threads_keyword_search`, otherwise results can be limited to authenticated user's posts. Graph-generated short-lived tokens can be exchanged with `threads_token_exchange` and long-lived tokens refreshed with `threads_token_refresh`. Check `threads_reply_quota` before automation; the API reports `reply_quota_usage` and `reply_config`. See [docs/wiki/Threads-Channel.md](docs/wiki/Threads-Channel.md) for examples and live verification notes.
 
 WhatsApp: the channel is disabled unless `WA_BASE_URL` and `WA_DEVICE_ID` are set. When enabled, outbound sends pass through a smart-send wrapper (token-bucket window, per-recipient daily cap, random jitter, global warm-up ceiling) to reduce ban risk — all caps default to off, set them for real numbers. `whatsapp_check`/`whatsapp_audit` persist registration verdicts; with `WA_BLOCK_UNREGISTERED_SEND=true`, `whatsapp_send` refuses numbers known not on WhatsApp. Inbound messages and delivery/read receipts arrive at `POST /wa/webhook`, validated with HMAC-SHA256 when `WA_WEBHOOK_SECRET` is set (incoming messages are linked to known contacts by phone). See [docs/wiki/WhatsApp-Channel.md](docs/wiki/WhatsApp-Channel.md) for the full guide.
 

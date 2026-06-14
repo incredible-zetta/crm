@@ -19,6 +19,7 @@ const defaultBaseURL = "https://graph.threads.net"
 
 type Config struct {
 	AccessToken string
+	AppSecret   string
 	UserID      string
 	APIVersion  string
 	BaseURL     string
@@ -254,13 +255,35 @@ func (c *Client) Mentions(ctx context.Context, limit int, cursor string) ([]doma
 	return items, page.Paging.Cursors.After, nil
 }
 
-func (c *Client) Search(ctx context.Context, query string, limit int, cursor string) (map[string]any, []byte, error) {
-	if limit <= 0 {
-		limit = 10
+func (c *Client) Search(ctx context.Context, in port.ThreadsSearchInput) (map[string]any, []byte, error) {
+	if in.Limit <= 0 {
+		in.Limit = 10
 	}
-	q := url.Values{"q": {query}, "limit": {fmt.Sprint(limit)}}
-	if cursor != "" {
-		q.Set("after", cursor)
+	fields := in.Fields
+	if fields == "" {
+		fields = "id,text,media_type,permalink,timestamp,username,has_replies,is_quote_post,is_reply,topic_tag"
+	}
+	q := url.Values{"q": {in.Query}, "limit": {fmt.Sprint(in.Limit)}, "fields": {fields}}
+	if in.SearchType != "" {
+		q.Set("search_type", strings.ToUpper(in.SearchType))
+	}
+	if in.SearchMode != "" {
+		q.Set("search_mode", strings.ToUpper(in.SearchMode))
+	}
+	if in.MediaType != "" {
+		q.Set("media_type", strings.ToUpper(in.MediaType))
+	}
+	if in.AuthorUsername != "" {
+		q.Set("author_username", strings.TrimPrefix(in.AuthorUsername, "@"))
+	}
+	if in.Since != "" {
+		q.Set("since", in.Since)
+	}
+	if in.Until != "" {
+		q.Set("until", in.Until)
+	}
+	if in.Cursor != "" {
+		q.Set("after", in.Cursor)
 	}
 	raw, err := c.get(ctx, "/keyword_search", q)
 	if err != nil {
@@ -271,6 +294,53 @@ func (c *Client) Search(ctx context.Context, query string, limit int, cursor str
 		return nil, raw, err
 	}
 	return out, raw, nil
+}
+
+func (c *Client) ExchangeToken(ctx context.Context, accessToken string) (port.ThreadsTokenResult, error) {
+	if accessToken == "" {
+		accessToken = c.cfg.AccessToken
+	}
+	if c.cfg.AppSecret == "" {
+		return port.ThreadsTokenResult{}, fmt.Errorf("threads app secret required")
+	}
+	return c.tokenRequest(ctx, "/access_token", url.Values{"grant_type": {"th_exchange_token"}, "client_secret": {c.cfg.AppSecret}, "access_token": {accessToken}})
+}
+
+func (c *Client) RefreshToken(ctx context.Context, accessToken string) (port.ThreadsTokenResult, error) {
+	if accessToken == "" {
+		accessToken = c.cfg.AccessToken
+	}
+	return c.tokenRequest(ctx, "/refresh_access_token", url.Values{"grant_type": {"th_refresh_token"}, "access_token": {accessToken}})
+}
+
+func (c *Client) tokenRequest(ctx context.Context, path string, q url.Values) (port.ThreadsTokenResult, error) {
+	u, err := url.Parse(c.base + path)
+	if err != nil {
+		return port.ThreadsTokenResult{}, err
+	}
+	u.RawQuery = q.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return port.ThreadsTokenResult{}, err
+	}
+	res, err := c.http.Do(req)
+	if err != nil {
+		return port.ThreadsTokenResult{}, err
+	}
+	defer res.Body.Close()
+	raw, err := io.ReadAll(io.LimitReader(res.Body, 4<<20))
+	if err != nil {
+		return port.ThreadsTokenResult{}, err
+	}
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		return port.ThreadsTokenResult{}, fmt.Errorf("threads API %d: %s", res.StatusCode, strings.TrimSpace(string(raw)))
+	}
+	var out port.ThreadsTokenResult
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return port.ThreadsTokenResult{}, err
+	}
+	out.RawJSON = raw
+	return out, nil
 }
 
 func (c *Client) fetchPost(ctx context.Context, id string) (domain.ThreadsPost, []byte, error) {
