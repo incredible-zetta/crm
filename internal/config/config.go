@@ -45,6 +45,10 @@ type Config struct {
 	WAJitterMaxMS       int    // max jitter before send (ms)
 	WAWarmupPerDay      int    // global warmup ceiling per 24h
 	WABlockUnregistered bool   // refuse sends to numbers verified not on WhatsApp
+	// Threads channel
+	ThreadsAccessToken string // Graph API access token (never logged)
+	ThreadsUserID      string // Threads user id, defaults to "me"
+	ThreadsAPIVersion  string // Graph API version, defaults to v1.0
 }
 
 func (c *Config) DebugEnabled() bool {
@@ -64,6 +68,11 @@ func (c *Config) EmailRateEnabled() bool {
 // WhatsAppEnabled reports whether the WhatsApp channel is configured.
 func (c *Config) WhatsAppEnabled() bool {
 	return c.WABaseURL != "" && c.WADeviceID != ""
+}
+
+// ThreadsEnabled reports whether the Threads channel is configured.
+func (c *Config) ThreadsEnabled() bool {
+	return c.ThreadsAccessToken != ""
 }
 
 func boolEnv(key string, def bool) bool {
@@ -206,6 +215,15 @@ func Load() (*Config, error) {
 		waWarmupPerDay = val
 	}
 
+	threadsUserID := os.Getenv("THREADS_USER_ID")
+	if threadsUserID == "" {
+		threadsUserID = "me"
+	}
+	threadsAPIVersion := os.Getenv("THREADS_API_VERSION")
+	if threadsAPIVersion == "" {
+		threadsAPIVersion = "v1.0"
+	}
+
 	return &Config{
 		MCPAPIKey:            mcpAPIKey,
 		DBDSN:                dbDSN,
@@ -243,5 +261,8 @@ func Load() (*Config, error) {
 		WAJitterMaxMS:        waJitterMaxMS,
 		WAWarmupPerDay:       waWarmupPerDay,
 		WABlockUnregistered:  waBlockUnregistered,
+		ThreadsAccessToken:   os.Getenv("THREADS_ACCESS_TOKEN"),
+		ThreadsUserID:        threadsUserID,
+		ThreadsAPIVersion:    threadsAPIVersion,
 	}, nil
 }

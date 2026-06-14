@@ -15,6 +15,7 @@ import (
 	imapadapter "github.com/incredible-zetta/crm/internal/adapter/imap"
 	"github.com/incredible-zetta/crm/internal/adapter/mysql"
 	"github.com/incredible-zetta/crm/internal/adapter/system"
+	threadsadapter "github.com/incredible-zetta/crm/internal/adapter/threads"
 	"github.com/incredible-zetta/crm/internal/adapter/verify"
 	whatsappadapter "github.com/incredible-zetta/crm/internal/adapter/whatsapp"
 	"github.com/incredible-zetta/crm/internal/config"
@@ -108,6 +109,7 @@ func main() {
 			Tracking:  store.Tracking(),
 			Exports:   store.Exports(),
 			Inbox:     store.Inbox(),
+			Threads:   store.Threads(),
 		},
 		sender,
 		system.RealClock{},
@@ -158,6 +160,23 @@ func main() {
 	} else {
 		svc.WhatsApp = nil
 		debugLog(debug, "whatsapp disabled: set WA_BASE_URL, WA_DEVICE_ID to enable")
+	}
+
+	// Threads channel (live Graph API + local cache/audit)
+	if cfg.ThreadsEnabled() {
+		threadsClient, err := threadsadapter.New(threadsadapter.Config{
+			AccessToken: cfg.ThreadsAccessToken,
+			UserID:      cfg.ThreadsUserID,
+			APIVersion:  cfg.ThreadsAPIVersion,
+		})
+		if err != nil {
+			log.Fatalf("failed to create threads adapter: %v", err)
+		}
+		svc.Threads = service.NewThreadsService(threadsClient, store.Threads())
+		debugLog(debug, "threads channel enabled: user_id=%s api_version=%s", cfg.ThreadsUserID, cfg.ThreadsAPIVersion)
+	} else {
+		svc.Threads = nil
+		debugLog(debug, "threads disabled: set THREADS_ACCESS_TOKEN to enable")
 	}
 
 	// Email verification (self-hosted: syntax + DNS/MX + heuristics).
