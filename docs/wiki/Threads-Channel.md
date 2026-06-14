@@ -1,0 +1,209 @@
+# Threads Channel
+
+Hybrid Threads integration: live Meta Threads Graph API calls plus MySQL cache/audit.
+
+## Enable
+
+```env
+THREADS_ACCESS_TOKEN=...
+THREADS_USER_ID=me
+THREADS_API_VERSION=v1.0
+```
+
+Never commit real tokens. Required scopes for the full tool set:
+
+- `threads_basic`
+- `threads_content_publish`
+- `threads_delete`
+- `threads_keyword_search`
+- `threads_manage_insights`
+- `threads_manage_mentions`
+- `threads_manage_replies`
+- `threads_profile_discovery`
+- `threads_read_replies`
+
+## Tools
+
+| Tool | Purpose |
+|------|---------|
+| `threads_profile` | Fetch configured profile |
+| `threads_list` | List live posts and cache them |
+| `threads_publish` | Publish text/image/video post |
+| `threads_delete` | Delete live post and soft-delete cache row |
+| `threads_insights` | Fetch media or user insights |
+| `threads_replies` | Read replies for a post |
+| `threads_reply` | Publish a reply to a post |
+| `threads_reply_quota` | Check reply quota usage |
+| `threads_mentions` | Read mentions |
+| `threads_search` | Keyword search |
+| `threads_list_cached` | List cached posts |
+| `threads_get_cached` | Get cached post |
+| `threads_history` | List audit events |
+| `threads_delete_cached` | Soft-delete cache row only |
+
+## MCP examples
+
+### Profile
+
+```json
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"threads_profile","arguments":{}}}
+```
+
+### Publish text
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/call",
+  "params": {
+    "name": "threads_publish",
+    "arguments": {
+      "text": "Hello from ZettaCRM"
+    }
+  }
+}
+```
+
+### Publish image
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "threads_publish",
+    "arguments": {
+      "text": "Hello saya ZettaCRM",
+      "image_url": "https://example.com/image.png"
+    }
+  }
+}
+```
+
+### Reply to a post
+
+`threads_reply` uses Meta's two-step flow internally:
+
+1. `POST /{threads-user-id}/threads` with `reply_to_id`
+2. `POST /{threads-user-id}/threads_publish` with `creation_id`
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 4,
+  "method": "tools/call",
+  "params": {
+    "name": "threads_reply",
+    "arguments": {
+      "threads_id": "17848812657686460",
+      "text": "Setuju. Vibe coding oke kalau tetap ada taste, review, dan konteks engineering-nya."
+    }
+  }
+}
+```
+
+### Check reply quota
+
+```json
+{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"threads_reply_quota","arguments":{}}}
+```
+
+Expected API shape:
+
+```json
+{
+  "data": [
+    {
+      "reply_quota_usage": 2,
+      "reply_config": {
+        "quota_total": 1000,
+        "quota_duration": 86400
+      }
+    }
+  ]
+}
+```
+
+### Search
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 6,
+  "method": "tools/call",
+  "params": {
+    "name": "threads_search",
+    "arguments": {
+      "query": "Vibe Coding",
+      "limit": 5
+    }
+  }
+}
+```
+
+### Read replies
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 7,
+  "method": "tools/call",
+  "params": {
+    "name": "threads_replies",
+    "arguments": {
+      "threads_id": "17848812657686460",
+      "limit": 10
+    }
+  }
+}
+```
+
+### Delete live post
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 8,
+  "method": "tools/call",
+  "params": {
+    "name": "threads_delete",
+    "arguments": {
+      "threads_id": "18185104660387893"
+    }
+  }
+}
+```
+
+## Live verification notes
+
+Verified with real Threads token on 2026-06-14:
+
+- profile read
+- post list
+- keyword search
+- text publish
+- image publish
+- live delete
+- fetch after delete failure
+- reply publish via corrected two-step flow
+- read replies on own posts
+- owned replies list via `/{user_id}/replies`
+- media insights
+- user insights
+- reply quota
+- mentions endpoint returning valid empty list
+
+Not verified: video publishing, because it would create a real video post and waits for media processing.
+
+## Cache/audit
+
+Live API remains source of truth. MySQL cache stores typed columns plus `raw_json` in:
+
+- `threads_posts`
+- `threads_replies`
+- `threads_mentions`
+- `threads_audit_events`
+
+Cached delete is soft delete (`deleted_at`) unless live delete is requested.
