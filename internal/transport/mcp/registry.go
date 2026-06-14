@@ -323,4 +323,49 @@ BEST PRACTICES:
 			},
 		}, nil
 	})
+
+	// Threads publishing resource
+	srv.AddResource(&mcp.Resource{
+		URI:         "threads://publishing",
+		Name:        "Threads Publishing Guide",
+		Description: "Reference guide for Threads publish, replies, topic tags, and quotas",
+		MIMEType:    "text/plain",
+	}, func(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+		guide := `Threads Publishing Guide
+========================
+
+TOOLS:
+  threads_publish       Publish text/image/video post
+  threads_reply         Reply to a Threads post
+  threads_reply_quota   Check reply publishing quota before automation
+  threads_replies       Read replies for a post
+  threads_search        Keyword search for post IDs
+
+TOPIC TAGS:
+  Use topic_tag on threads_publish to set the official Threads topic.
+  Example: {"text":"Hello", "topic_tag":"AI Threads"}
+
+RULES:
+  - One topic tag per post.
+  - Length: 1-50 characters.
+  - Disallowed characters: . and &
+  - Prefer topic_tag over embedding #topic in text.
+  - Inline #topic fallback exists for backward compatibility, but is not preferred.
+
+REPLY FLOW:
+  Threads replies use Meta's two-step container flow internally:
+  1. POST /{threads-user-id}/threads with reply_to_id
+  2. POST /{threads-user-id}/threads_publish with creation_id
+
+QUOTA:
+  Call threads_reply_quota before automated replies.
+  API returns reply_quota_usage and reply_config with quota_total and quota_duration.
+
+NOTES:
+  - Live API is source of truth; MySQL stores cache/audit with raw_json.
+  - Published post updates are not supported by current API behavior.
+  - Permalink alone may not resolve to media ID; prefer list/search/mentions/replies to get IDs.
+`
+		return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{URI: "threads://publishing", MIMEType: "text/plain", Text: guide}}}, nil
+	})
 }
