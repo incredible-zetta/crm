@@ -6,7 +6,7 @@
 
 **Self-hosted CRM for AI operators.**
 
-A Go [Model Context Protocol](https://modelcontextprotocol.io) server that gives any AI agent a full CRM: contacts, email (SMTP or Mailgun), marketing campaigns, click/open tracking, an in-process scheduler, templates, and analytics. Single binary, single MySQL database, single Docker image. Built for one-port deployment on EasyPanel.
+A Go [Model Context Protocol](https://modelcontextprotocol.io) server that gives any AI agent a full CRM: contacts, email (SMTP or Mailgun), marketing campaigns, click/open tracking, inbound inbox, WhatsApp, Threads publishing/replies, scheduling, templates, and analytics. Single binary, single MySQL database, single Docker image. Built for one-port deployment on EasyPanel.
 
 <sub>A partnership between <b>Incredible Zetta</b> and <a href="https://github.com/cds-id">Ciptadusa (CDS)</a></sub>
 
@@ -39,7 +39,17 @@ X-API-Key: <MCP_API_KEY>
 
 The key check is constant-time and fail-closed. Tracking and export routes are intentionally public because email recipients open them without credentials.
 
-## Tools (46)
+## Features
+
+- **CRM core:** contacts, imports/exports, bulk updates, pipeline stages, soft delete, and GDPR purge.
+- **Email:** SMTP/Mailgun send, templates, merge rendering, unsubscribe compliance, open/click tracking, and email verification.
+- **Campaigns:** segmented campaign creation, queued/background sends, scheduling, stats, and top-link analytics.
+- **Inbox:** IMAP inbound reply sync, stored snippets/full bodies, read/unread, reply, and local delete.
+- **WhatsApp:** two-way gateway integration, registration audit, smart-send throttling, inbound webhooks, read receipts, media lookup.
+- **Threads:** hybrid Meta Threads channel with live publish/delete/search/replies/insights plus MySQL cache/audit and reply quota checks.
+- **Ops:** health check, embedded migrations, CSV exports, Docker/EasyPanel-ready single-port deploy.
+
+## Tools (60)
 
 ### Contacts
 | Tool | Description |
@@ -215,7 +225,7 @@ Email verification: set `VERIFY_EMAILS=true` to verify addresses on contact crea
 
 ## Database
 
-MySQL 8. Migrations are embedded in the binary and applied automatically on startup (`golang-migrate`). Tables: `contacts`, `email_templates`, `campaigns`, `tracking_links`, `email_events`, `scheduled_tasks`, `exports`, `inbound_messages`, `inbox_cursors`, `wa_messages` (+ `schema_migrations`). `contacts` carries WhatsApp registration columns (`whatsapp_status`, `whatsapp_checked_at`). Contacts, campaigns, and templates carry a `deleted_at` for soft delete; contacts also carry `unsubscribed_at` + a public `unsub_code`.
+MySQL 8. Migrations are embedded in the binary and applied automatically on startup (`golang-migrate`). Tables: `contacts`, `email_templates`, `campaigns`, `tracking_links`, `email_events`, `scheduled_tasks`, `exports`, `inbound_messages`, `inbox_cursors`, `wa_messages`, `threads_posts`, `threads_replies`, `threads_mentions`, `threads_audit_events` (+ `schema_migrations`). `contacts` carries WhatsApp registration columns (`whatsapp_status`, `whatsapp_checked_at`). Contacts, campaigns, and templates carry a `deleted_at` for soft delete; contacts also carry `unsubscribed_at` + a public `unsub_code`. Threads rows keep typed columns plus `raw_json` for Graph API drift.
 
 ## Run locally
 

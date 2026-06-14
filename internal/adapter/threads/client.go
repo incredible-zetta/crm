@@ -332,7 +332,7 @@ func (c *Client) do(ctx context.Context, method, path string, q url.Values, form
 		if e, ok := body["error"].(map[string]any); ok && e["message"] != nil {
 			msg = fmt.Sprint(e["message"])
 		}
-		return nil, fmt.Errorf("Threads API %d: %s", res.StatusCode, msg)
+		return nil, fmt.Errorf("threads API %d: %s", res.StatusCode, msg)
 	}
 	return raw, nil
 }
