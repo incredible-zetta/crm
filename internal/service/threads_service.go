@@ -114,9 +114,21 @@ func (s *ThreadsService) Mentions(ctx context.Context, limit int, cursor string)
 	return items, next, nil
 }
 
-func (s *ThreadsService) Search(ctx context.Context, query string, limit int, cursor string) (map[string]any, error) {
-	out, raw, err := s.gateway.Search(ctx, query, limit, cursor)
-	s.audit(ctx, "search", query, err, raw)
+func (s *ThreadsService) Search(ctx context.Context, in port.ThreadsSearchInput) (map[string]any, error) {
+	out, raw, err := s.gateway.Search(ctx, in)
+	s.audit(ctx, "search", in.Query, err, raw)
+	return out, err
+}
+
+func (s *ThreadsService) ExchangeToken(ctx context.Context, accessToken string) (port.ThreadsTokenResult, error) {
+	out, err := s.gateway.ExchangeToken(ctx, accessToken)
+	s.audit(ctx, "token_exchange", "", err, nil)
+	return out, err
+}
+
+func (s *ThreadsService) RefreshToken(ctx context.Context, accessToken string) (port.ThreadsTokenResult, error) {
+	out, err := s.gateway.RefreshToken(ctx, accessToken)
+	s.audit(ctx, "token_refresh", "", err, nil)
 	return out, err
 }
 

@@ -47,6 +47,7 @@ type Config struct {
 	WABlockUnregistered bool   // refuse sends to numbers verified not on WhatsApp
 	// Threads channel
 	ThreadsAccessToken string // Graph API access token (never logged)
+	ThreadsAppSecret   string // app secret for token exchange (never logged)
 	ThreadsUserID      string // Threads user id, defaults to "me"
 	ThreadsAPIVersion  string // Graph API version, defaults to v1.0
 }
@@ -262,6 +263,7 @@ func Load() (*Config, error) {
 		WAWarmupPerDay:       waWarmupPerDay,
 		WABlockUnregistered:  waBlockUnregistered,
 		ThreadsAccessToken:   os.Getenv("THREADS_ACCESS_TOKEN"),
+		ThreadsAppSecret:     os.Getenv("THREADS_APP_SECRET"),
 		ThreadsUserID:        threadsUserID,
 		ThreadsAPIVersion:    threadsAPIVersion,
 	}, nil

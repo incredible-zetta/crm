@@ -35,7 +35,9 @@ Never commit real tokens. Required scopes for the full tool set:
 | `threads_reply` | Publish a reply to a post |
 | `threads_reply_quota` | Check reply quota usage |
 | `threads_mentions` | Read mentions |
-| `threads_search` | Keyword search |
+| `threads_search` | Keyword/topic search with filters |
+| `threads_token_exchange` | Exchange short-lived token for long-lived token |
+| `threads_token_refresh` | Refresh long-lived token before expiry |
 | `threads_list_cached` | List cached posts |
 | `threads_get_cached` | Get cached post |
 | `threads_history` | List audit events |
@@ -144,12 +146,41 @@ Expected API shape:
   "params": {
     "name": "threads_search",
     "arguments": {
-      "query": "Vibe Coding",
+      "query": "CRM",
+      "search_type": "RECENT",
+      "author_username": "callmelords",
       "limit": 5
     }
   }
 }
 ```
+
+Search parameters:
+
+- `search_type`: `TOP` (default) or `RECENT`
+- `search_mode`: `KEYWORD` (default) or `TAG`
+- `media_type`: `TEXT`, `IMAGE`, or `VIDEO`
+- `author_username`: exact username without `@`
+- `since` / `until`: Unix timestamp or parseable date/time
+- `fields`: comma-separated response fields; default includes `topic_tag`
+
+Public search may require approved `threads_keyword_search`. Without approval the API can return only the authenticated user's posts, so use `author_username` for reliable owned-content discovery.
+
+### Token exchange
+
+```json
+{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"threads_token_exchange","arguments":{}}}
+```
+
+Graph-generated tokens can be valid for API calls but not refreshable. Exchange first, store the returned `access_token` as `THREADS_ACCESS_TOKEN`, then refresh before expiry. Requires `THREADS_APP_SECRET`.
+
+### Token refresh
+
+```json
+{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"threads_token_refresh","arguments":{}}}
+```
+
+Requires an unexpired long-lived token.
 
 ### Read replies
 
