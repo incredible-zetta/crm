@@ -111,3 +111,8 @@ func (s *Store) Inbox() port.InboxRepo {
 func (s *Store) WhatsApp() port.WAMessageRepo {
 	return &waMessageRepo{db: s.db}
 }
+
+// Threads returns a ThreadsRepo implementation.
+func (s *Store) Threads() port.ThreadsRepo {
+	return &threadsRepo{db: s.db}
+}

@@ -256,6 +256,22 @@ func Register(srv *mcp.Server, d *Deps) {
 		Description: "Download media URL for a WhatsApp message with attachment",
 	}, d.WhatsAppGetMedia)
 
+	// Group 11: Threads (threads.go)
+	mcp.AddTool(srv, &mcp.Tool{Name: "threads_profile", Description: "Fetch Threads profile for configured user"}, d.ThreadsProfile)
+	mcp.AddTool(srv, &mcp.Tool{Name: "threads_list", Description: "List live Threads posts and cache them locally"}, d.ThreadsList)
+	mcp.AddTool(srv, &mcp.Tool{Name: "threads_publish", Description: "Publish a Threads text/image/video post and cache it locally"}, d.ThreadsPublish)
+	mcp.AddTool(srv, &mcp.Tool{Name: "threads_delete", Description: "Delete a live Threads post by threads_id and soft-delete cached row"}, d.ThreadsDelete)
+	mcp.AddTool(srv, &mcp.Tool{Name: "threads_insights", Description: "Fetch user-level or media-level Threads insights"}, d.ThreadsInsights)
+	mcp.AddTool(srv, &mcp.Tool{Name: "threads_replies", Description: "List live replies for a Threads post and cache them locally"}, d.ThreadsReplies)
+	mcp.AddTool(srv, &mcp.Tool{Name: "threads_reply", Description: "Reply to a Threads post"}, d.ThreadsReply)
+	mcp.AddTool(srv, &mcp.Tool{Name: "threads_reply_quota", Description: "Fetch Threads reply publishing quota usage"}, d.ThreadsReplyQuota)
+	mcp.AddTool(srv, &mcp.Tool{Name: "threads_mentions", Description: "List live Threads mentions and cache them locally"}, d.ThreadsMentions)
+	mcp.AddTool(srv, &mcp.Tool{Name: "threads_search", Description: "Search Threads via keyword search endpoint"}, d.ThreadsSearch)
+	mcp.AddTool(srv, &mcp.Tool{Name: "threads_list_cached", Description: "List cached Threads posts from MySQL"}, d.ThreadsListCached)
+	mcp.AddTool(srv, &mcp.Tool{Name: "threads_get_cached", Description: "Get one cached Threads post by local id or threads_id"}, d.ThreadsGetCached)
+	mcp.AddTool(srv, &mcp.Tool{Name: "threads_history", Description: "List Threads channel audit events"}, d.ThreadsHistory)
+	mcp.AddTool(srv, &mcp.Tool{Name: "threads_delete_cached", Description: "Soft-delete only the cached Threads post"}, d.ThreadsDeleteCached)
+
 	// WhatsApp formatting resource
 	srv.AddResource(&mcp.Resource{
 		URI:         "whatsapp://formatting",
