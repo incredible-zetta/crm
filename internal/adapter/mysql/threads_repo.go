@@ -15,15 +15,15 @@ type threadsRepo struct{ db *sql.DB }
 var _ port.ThreadsRepo = (*threadsRepo)(nil)
 
 func threadsPostSelectSQL() string {
-	return `SELECT id, threads_id, media_product_type, media_type, text, permalink, timestamp, username, is_quote_post, raw_json, deleted_at, created_at, updated_at FROM threads_posts`
+	return `SELECT id, threads_id, media_product_type, media_type, text, permalink, timestamp, username, topic_tag, is_quote_post, raw_json, deleted_at, created_at, updated_at FROM threads_posts`
 }
 
 func (r *threadsRepo) UpsertPost(ctx context.Context, post domain.ThreadsPost) (domain.ThreadsPost, error) {
 	_, err := r.db.ExecContext(ctx, `INSERT INTO threads_posts
-		(threads_id, media_product_type, media_type, text, permalink, timestamp, username, is_quote_post, raw_json)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON DUPLICATE KEY UPDATE media_product_type=VALUES(media_product_type), media_type=VALUES(media_type), text=VALUES(text), permalink=VALUES(permalink), timestamp=VALUES(timestamp), username=VALUES(username), is_quote_post=VALUES(is_quote_post), raw_json=VALUES(raw_json), deleted_at=NULL`,
-		post.ThreadsID, post.MediaProductType, post.MediaType, post.Text, post.Permalink, toNullTime(post.Timestamp), post.Username, post.IsQuotePost, toNullJSON(post.RawJSON))
+		(threads_id, media_product_type, media_type, text, permalink, timestamp, username, topic_tag, is_quote_post, raw_json)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON DUPLICATE KEY UPDATE media_product_type=VALUES(media_product_type), media_type=VALUES(media_type), text=VALUES(text), permalink=VALUES(permalink), timestamp=VALUES(timestamp), username=VALUES(username), topic_tag=VALUES(topic_tag), is_quote_post=VALUES(is_quote_post), raw_json=VALUES(raw_json), deleted_at=NULL`,
+		post.ThreadsID, post.MediaProductType, post.MediaType, post.Text, post.Permalink, toNullTime(post.Timestamp), post.Username, toNullString(post.TopicTag), post.IsQuotePost, toNullJSON(post.RawJSON))
 	if err != nil {
 		return domain.ThreadsPost{}, fmt.Errorf("upsert threads post: %w", err)
 	}
@@ -182,10 +182,10 @@ func (r *threadsRepo) scanPost(row rowScanner) (domain.ThreadsPost, error) {
 
 func scanThreadsPost(scanner rowScanner) (domain.ThreadsPost, error) {
 	var post domain.ThreadsPost
-	var mediaProductType, mediaType, text, permalink, username sql.NullString
+	var mediaProductType, mediaType, text, permalink, username, topicTag sql.NullString
 	var ts, deletedAt sql.NullTime
 	var raw []byte
-	if err := scanner.Scan(&post.ID, &post.ThreadsID, &mediaProductType, &mediaType, &text, &permalink, &ts, &username, &post.IsQuotePost, &raw, &deletedAt, &post.CreatedAt, &post.UpdatedAt); err != nil {
+	if err := scanner.Scan(&post.ID, &post.ThreadsID, &mediaProductType, &mediaType, &text, &permalink, &ts, &username, &topicTag, &post.IsQuotePost, &raw, &deletedAt, &post.CreatedAt, &post.UpdatedAt); err != nil {
 		return domain.ThreadsPost{}, err
 	}
 	post.MediaProductType = mediaProductType.String
@@ -194,6 +194,7 @@ func scanThreadsPost(scanner rowScanner) (domain.ThreadsPost, error) {
 	post.Permalink = permalink.String
 	post.Timestamp = fromNullTime(ts)
 	post.Username = username.String
+	post.TopicTag = topicTag.String
 	post.RawJSON = raw
 	post.DeletedAt = fromNullTime(deletedAt)
 	return post, nil

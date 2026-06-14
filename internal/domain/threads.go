@@ -11,6 +11,7 @@ type ThreadsPost struct {
 	Permalink        string
 	Timestamp        *time.Time
 	Username         string
+	TopicTag         string
 	IsQuotePost      bool
 	RawJSON          []byte
 	DeletedAt        *time.Time
