@@ -28,7 +28,7 @@ Never commit real tokens. Required scopes for the full tool set:
 |------|---------|
 | `threads_profile` | Fetch configured profile |
 | `threads_list` | List live posts and cache them |
-| `threads_publish` | Publish text/image/video post |
+| `threads_publish` | Publish text/image/video post with optional `topic_tag` |
 | `threads_delete` | Delete live post and soft-delete cache row |
 | `threads_insights` | Fetch media or user insights |
 | `threads_replies` | Read replies for a post |
@@ -49,7 +49,7 @@ Never commit real tokens. Required scopes for the full tool set:
 {"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"threads_profile","arguments":{}}}
 ```
 
-### Publish text
+### Publish text with topic tag
 
 ```json
 {
@@ -59,11 +59,19 @@ Never commit real tokens. Required scopes for the full tool set:
   "params": {
     "name": "threads_publish",
     "arguments": {
-      "text": "Hello from ZettaCRM"
+      "text": "Hello from ZettaCRM",
+      "topic_tag": "AI Threads"
     }
   }
 }
 ```
+
+`topic_tag` rules:
+
+- length 1-50 characters
+- disallow `.` and `&`
+- one topic tag per post
+- preferred over inline `#topic` in text
 
 ### Publish image
 
@@ -176,6 +184,10 @@ Expected API shape:
 }
 ```
 
+## MCP resource
+
+Read `threads://publishing` for agent-facing guidance on publishing, replies, topic tags, quotas, and known API limits.
+
 ## Live verification notes
 
 Verified with real Threads token on 2026-06-14:
@@ -184,6 +196,7 @@ Verified with real Threads token on 2026-06-14:
 - post list
 - keyword search
 - text publish
+- text publish with `topic_tag` (`AI Threads`) then delete
 - image publish
 - live delete
 - fetch after delete failure

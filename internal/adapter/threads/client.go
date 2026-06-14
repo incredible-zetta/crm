@@ -65,7 +65,7 @@ func (c *Client) List(ctx context.Context, limit int, cursor string) ([]domain.T
 	if limit <= 0 {
 		limit = 10
 	}
-	q := url.Values{"fields": {"id,media_product_type,media_type,text,permalink,timestamp,username,is_quote_post"}, "limit": {fmt.Sprint(limit)}}
+	q := url.Values{"fields": {"id,media_product_type,media_type,text,permalink,timestamp,username,topic_tag,is_quote_post"}, "limit": {fmt.Sprint(limit)}}
 	if cursor != "" {
 		q.Set("after", cursor)
 	}
@@ -103,6 +103,9 @@ func (c *Client) Publish(ctx context.Context, in port.ThreadsPublishInput) (port
 	}
 	if in.VideoURL != "" {
 		body.Set("video_url", in.VideoURL)
+	}
+	if in.TopicTag != "" {
+		body.Set("topic_tag", in.TopicTag)
 	}
 	containerRaw, err := c.post(ctx, "/"+c.userID+"/threads", body)
 	if err != nil {
@@ -271,7 +274,7 @@ func (c *Client) Search(ctx context.Context, query string, limit int, cursor str
 }
 
 func (c *Client) fetchPost(ctx context.Context, id string) (domain.ThreadsPost, []byte, error) {
-	raw, err := c.get(ctx, "/"+id, url.Values{"fields": {"id,media_product_type,media_type,text,permalink,timestamp,username,is_quote_post"}})
+	raw, err := c.get(ctx, "/"+id, url.Values{"fields": {"id,media_product_type,media_type,text,permalink,timestamp,username,topic_tag,is_quote_post"}})
 	if err != nil {
 		return domain.ThreadsPost{}, nil, err
 	}
@@ -354,11 +357,12 @@ type postDTO struct {
 	Permalink        string `json:"permalink"`
 	Timestamp        string `json:"timestamp"`
 	Username         string `json:"username"`
+	TopicTag         string `json:"topic_tag"`
 	IsQuotePost      bool   `json:"is_quote_post"`
 }
 
 func (p postDTO) domain(raw []byte) domain.ThreadsPost {
-	return domain.ThreadsPost{ThreadsID: p.ID, MediaProductType: p.MediaProductType, MediaType: p.MediaType, Text: p.Text, Permalink: p.Permalink, Timestamp: parseTimePtr(p.Timestamp), Username: p.Username, IsQuotePost: p.IsQuotePost, RawJSON: raw}
+	return domain.ThreadsPost{ThreadsID: p.ID, MediaProductType: p.MediaProductType, MediaType: p.MediaType, Text: p.Text, Permalink: p.Permalink, Timestamp: parseTimePtr(p.Timestamp), Username: p.Username, TopicTag: p.TopicTag, IsQuotePost: p.IsQuotePost, RawJSON: raw}
 }
 
 type replyDTO struct {

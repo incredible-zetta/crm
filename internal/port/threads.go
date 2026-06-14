@@ -23,6 +23,7 @@ type ThreadsPublishInput struct {
 	Text     string
 	ImageURL string
 	VideoURL string
+	TopicTag string
 }
 
 type ThreadsPublishResult struct {
