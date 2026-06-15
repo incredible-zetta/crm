@@ -102,9 +102,9 @@ func TestThreadsReplyTreeNestedHierarchy(t *testing.T) {
 	if !out.AlreadyReplied || len(out.MyReplies) != 1 || out.MyReplies[0].ReplyID != "mine1" {
 		t.Fatalf("expected my reply mine1, got %+v", out.MyReplies)
 	}
-	// top level: aliff + aqil
-	if len(out.Items) != 2 {
-		t.Fatalf("expected 2 top-level replies, got %d", len(out.Items))
+	// Flat depth-first list: aliff, mine1, bal, aqil.
+	if len(out.Items) != 4 {
+		t.Fatalf("expected 4 flat reply nodes, got %d", len(out.Items))
 	}
 	var aliff, aqil *ThreadsReplyNodeOut
 	for i := range out.Items {
@@ -118,18 +118,27 @@ func TestThreadsReplyTreeNestedHierarchy(t *testing.T) {
 	if aliff == nil || aqil == nil {
 		t.Fatalf("missing top-level nodes: %+v", out.Items)
 	}
-	if aliff.Depth != 1 || len(aliff.Children) != 1 || aliff.Children[0].ReplyID != "mine1" {
-		t.Fatalf("expected aliff -> mine1, got %+v", aliff)
+	// Flat depth-first order: aliff(1) -> mine1(2) -> bal(3), then aqil(1).
+	depth := make(map[string]int)
+	node := map[string]ThreadsReplyNodeOut{}
+	for _, n := range out.Items {
+		depth[n.ReplyID] = n.Depth
+		node[n.ReplyID] = n
 	}
-	mine := aliff.Children[0]
-	if !mine.IsMine || mine.Depth != 2 || len(mine.Children) != 1 || mine.Children[0].ReplyID != "bal" {
-		t.Fatalf("expected mine1 -> bal nested, got %+v", mine)
+	if depth["aliff"] != 1 || depth["mine1"] != 2 || depth["bal"] != 3 || depth["aqil"] != 1 {
+		t.Fatalf("unexpected depths: %+v", depth)
 	}
-	if !mine.Children[0].NeedsReply {
+	if node["mine1"].ParentID != "aliff" || node["bal"].ParentID != "mine1" {
+		t.Fatalf("unexpected parent links: %+v", out.Items)
+	}
+	if !node["mine1"].IsMine {
+		t.Fatal("expected mine1 is_mine")
+	}
+	if !node["bal"].NeedsReply {
 		t.Fatal("expected bal (reply to my reply) flagged needs_reply")
 	}
-	if !aqil.NeedsReply || aqil.IsMine {
-		t.Fatalf("expected aqil needs_reply and not mine, got %+v", aqil)
+	if !node["aqil"].NeedsReply || node["aqil"].IsMine {
+		t.Fatalf("expected aqil needs_reply and not mine, got %+v", node["aqil"])
 	}
 	if out.NeedsReplyCount != 2 {
 		t.Fatalf("expected needs_reply_count=2 (aqil + bal), got %d", out.NeedsReplyCount)
@@ -167,4 +176,13 @@ func TestThreadsHistoryRawJSONReturnsJSONObjectNotByteArray(t *testing.T) {
 	if len(got.Items) != 1 || got.Items[0].RawJSON["action"] != "replies" {
 		t.Fatalf("expected raw_json object action=replies, got %s", string(b))
 	}
+}
+
+// TestRegisterBuildsAllToolSchemas mirrors server boot: AddTool generates an
+// output schema per tool and panics on unsupported shapes (e.g. self-
+// referential structs). This guards against the threads_reply_tree schema
+// cycle regression.
+func TestRegisterBuildsAllToolSchemas(t *testing.T) {
+	srv := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil)
+	Register(srv, &Deps{Svc: &service.Services{}})
 }
