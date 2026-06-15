@@ -87,6 +87,18 @@ func (s *ThreadsService) Replies(ctx context.Context, mediaID string, limit int,
 	return items, next, nil
 }
 
+func (s *ThreadsService) Conversation(ctx context.Context, mediaID string, limit int, cursor string) ([]domain.ThreadsReply, string, error) {
+	items, next, err := s.gateway.Conversation(ctx, mediaID, limit, cursor)
+	s.audit(ctx, "conversation", mediaID, err, nil)
+	if err != nil {
+		return nil, "", err
+	}
+	for _, item := range items {
+		_, _ = s.repo.UpsertReply(ctx, item)
+	}
+	return items, next, nil
+}
+
 func (s *ThreadsService) Reply(ctx context.Context, mediaID, text string) (string, error) {
 	id, raw, err := s.gateway.Reply(ctx, mediaID, text)
 	s.audit(ctx, "reply", mediaID, err, raw)
@@ -114,9 +126,21 @@ func (s *ThreadsService) Mentions(ctx context.Context, limit int, cursor string)
 	return items, next, nil
 }
 
-func (s *ThreadsService) Search(ctx context.Context, query string, limit int, cursor string) (map[string]any, error) {
-	out, raw, err := s.gateway.Search(ctx, query, limit, cursor)
-	s.audit(ctx, "search", query, err, raw)
+func (s *ThreadsService) Search(ctx context.Context, in port.ThreadsSearchInput) (map[string]any, error) {
+	out, raw, err := s.gateway.Search(ctx, in)
+	s.audit(ctx, "search", in.Query, err, raw)
+	return out, err
+}
+
+func (s *ThreadsService) ExchangeToken(ctx context.Context, accessToken string) (port.ThreadsTokenResult, error) {
+	out, err := s.gateway.ExchangeToken(ctx, accessToken)
+	s.audit(ctx, "token_exchange", "", err, nil)
+	return out, err
+}
+
+func (s *ThreadsService) RefreshToken(ctx context.Context, accessToken string) (port.ThreadsTokenResult, error) {
+	out, err := s.gateway.RefreshToken(ctx, accessToken)
+	s.audit(ctx, "token_refresh", "", err, nil)
 	return out, err
 }
 
