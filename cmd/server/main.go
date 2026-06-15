@@ -166,6 +166,7 @@ func main() {
 	if cfg.ThreadsEnabled() {
 		threadsClient, err := threadsadapter.New(threadsadapter.Config{
 			AccessToken: cfg.ThreadsAccessToken,
+			AppSecret:   cfg.ThreadsAppSecret,
 			UserID:      cfg.ThreadsUserID,
 			APIVersion:  cfg.ThreadsAPIVersion,
 		})

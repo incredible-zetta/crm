@@ -32,10 +32,13 @@ Never commit real tokens. Required scopes for the full tool set:
 | `threads_delete` | Delete live post and soft-delete cache row |
 | `threads_insights` | Fetch media or user insights |
 | `threads_replies` | Read replies for a post |
-| `threads_reply` | Publish a reply to a post |
+| `threads_reply_tree` | Nested reply conversation tree (is_mine/needs_reply) |
+| `threads_reply` | Publish a reply to a post or comment |
 | `threads_reply_quota` | Check reply quota usage |
 | `threads_mentions` | Read mentions |
-| `threads_search` | Keyword search |
+| `threads_search` | Keyword/topic search with filters |
+| `threads_token_exchange` | Exchange short-lived token for long-lived token |
+| `threads_token_refresh` | Refresh long-lived token before expiry |
 | `threads_list_cached` | List cached posts |
 | `threads_get_cached` | Get cached post |
 | `threads_history` | List audit events |
@@ -144,12 +147,41 @@ Expected API shape:
   "params": {
     "name": "threads_search",
     "arguments": {
-      "query": "Vibe Coding",
+      "query": "CRM",
+      "search_type": "RECENT",
+      "author_username": "callmelords",
       "limit": 5
     }
   }
 }
 ```
+
+Search parameters:
+
+- `search_type`: `TOP` (default) or `RECENT`
+- `search_mode`: `KEYWORD` (default) or `TAG`
+- `media_type`: `TEXT`, `IMAGE`, or `VIDEO`
+- `author_username`: exact username without `@`
+- `since` / `until`: Unix timestamp or parseable date/time
+- `fields`: comma-separated response fields; default includes `topic_tag`
+
+Public search may require approved `threads_keyword_search`. Without approval the API can return only the authenticated user's posts, so use `author_username` for reliable owned-content discovery.
+
+### Token exchange
+
+```json
+{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"threads_token_exchange","arguments":{}}}
+```
+
+Graph-generated tokens can be valid for API calls but not refreshable. Exchange first, store the returned `access_token` as `THREADS_ACCESS_TOKEN`, then refresh before expiry. Requires `THREADS_APP_SECRET`.
+
+### Token refresh
+
+```json
+{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"threads_token_refresh","arguments":{}}}
+```
+
+Requires an unexpired long-lived token.
 
 ### Read replies
 
@@ -163,6 +195,48 @@ Expected API shape:
     "arguments": {
       "threads_id": "17848812657686460",
       "limit": 10
+    }
+  }
+}
+```
+
+### Reply conversation tree
+
+`threads_reply_tree` returns the full nested reply conversation for a post via the
+Threads `/{id}/conversation` endpoint. Each node carries `is_mine` (authored by
+the configured account), `needs_reply` (another user's comment with no reply from
+you beneath it), `depth`, and nested `children`. Top-level fields include
+`already_replied`, `needs_reply_count`, and `my_replies`.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 10,
+  "method": "tools/call",
+  "params": {
+    "name": "threads_reply_tree",
+    "arguments": {
+      "threads_id": "18593061424004322",
+      "limit": 50
+    }
+  }
+}
+```
+
+Reply targeting: to answer a **comment**, pass that comment's `reply_id` to
+`threads_reply`, not the root post id. Passing the post id posts a top-level
+reply on your own post instead of answering the commenter.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 11,
+  "method": "tools/call",
+  "params": {
+    "name": "threads_reply",
+    "arguments": {
+      "reply_id": "<comment reply_id from threads_reply_tree>",
+      "text": "Thanks for the question — ..."
     }
   }
 }

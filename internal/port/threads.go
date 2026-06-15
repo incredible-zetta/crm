@@ -13,10 +13,13 @@ type ThreadsGateway interface {
 	Delete(ctx context.Context, mediaID string) error
 	Insights(ctx context.Context, mediaID string) ([]domain.ThreadsInsight, []byte, error)
 	Replies(ctx context.Context, mediaID string, limit int, cursor string) ([]domain.ThreadsReply, string, error)
+	Conversation(ctx context.Context, mediaID string, limit int, cursor string) ([]domain.ThreadsReply, string, error)
 	Reply(ctx context.Context, mediaID, text string) (string, []byte, error)
 	ReplyQuota(ctx context.Context) (map[string]any, []byte, error)
 	Mentions(ctx context.Context, limit int, cursor string) ([]domain.ThreadsMention, string, error)
-	Search(ctx context.Context, query string, limit int, cursor string) (map[string]any, []byte, error)
+	Search(ctx context.Context, in ThreadsSearchInput) (map[string]any, []byte, error)
+	ExchangeToken(ctx context.Context, accessToken string) (ThreadsTokenResult, error)
+	RefreshToken(ctx context.Context, accessToken string) (ThreadsTokenResult, error)
 }
 
 type ThreadsPublishInput struct {
@@ -30,6 +33,26 @@ type ThreadsPublishResult struct {
 	ContainerID string
 	Post        domain.ThreadsPost
 	RawJSON     []byte
+}
+
+type ThreadsSearchInput struct {
+	Query          string
+	SearchType     string
+	SearchMode     string
+	MediaType      string
+	AuthorUsername string
+	Since          string
+	Until          string
+	Fields         string
+	Limit          int
+	Cursor         string
+}
+
+type ThreadsTokenResult struct {
+	AccessToken string `json:"access_token,omitempty"`
+	TokenType   string `json:"token_type,omitempty"`
+	ExpiresIn   int64  `json:"expires_in,omitempty"`
+	RawJSON     []byte `json:"-"`
 }
 
 type ThreadsRepo interface {

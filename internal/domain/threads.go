@@ -23,10 +23,12 @@ type ThreadsReply struct {
 	ID         int64
 	ReplyID    string
 	PostID     string
+	ParentID   string
 	Text       string
 	Username   string
 	Timestamp  *time.Time
 	HideStatus string
+	HasReplies bool
 	RawJSON    []byte
 	CreatedAt  time.Time
 }
