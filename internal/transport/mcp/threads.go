@@ -162,11 +162,10 @@ type ThreadsReplyTreeItemOut struct {
 
 type ThreadsReplyNodeOut struct {
 	ThreadsReplyItemOut
-	ParentID   string                `json:"parent_id,omitempty"`
-	Depth      int                   `json:"depth"`
-	IsMine     bool                  `json:"is_mine"`
-	NeedsReply bool                  `json:"needs_reply"`
-	Children   []ThreadsReplyNodeOut `json:"children,omitempty"`
+	ParentID   string `json:"parent_id,omitempty"`
+	Depth      int    `json:"depth"`
+	IsMine     bool   `json:"is_mine"`
+	NeedsReply bool   `json:"needs_reply"`
 }
 
 type ThreadsReplyTreeOut struct {
@@ -216,63 +215,68 @@ func (d *Deps) ThreadsReplyTree(ctx context.Context, req *mcp.CallToolRequest, i
 	me := profile.Username
 	out := ThreadsReplyTreeOut{ThreadsID: in.ThreadsID, AuthenticatedAs: me, NextCursor: next}
 
-	// Build node map keyed by reply id.
-	nodes := make(map[string]*ThreadsReplyNodeOut, len(items))
+	// Index replies by id and remember input order.
+	type rec struct {
+		item     domain.ThreadsReply
+		isMine   bool
+		parentID string
+	}
+	byID := make(map[string]rec, len(items))
 	order := make([]string, 0, len(items))
+	children := make(map[string][]string)
 	for _, item := range items {
-		node := &ThreadsReplyNodeOut{
-			ThreadsReplyItemOut: toThreadsReplyOut(item),
-			ParentID:            item.ParentID,
-			IsMine:              me != "" && item.Username == me,
-		}
-		nodes[item.ReplyID] = node
+		isMine := me != "" && item.Username == me
+		byID[item.ReplyID] = rec{item: item, isMine: isMine, parentID: item.ParentID}
 		order = append(order, item.ReplyID)
-		if node.IsMine {
+		children[item.ParentID] = append(children[item.ParentID], item.ReplyID)
+		if isMine {
 			out.AlreadyReplied = true
-			out.MyReplies = append(out.MyReplies, ThreadsReplyTreeItemOut{ThreadsReplyItemOut: node.ThreadsReplyItemOut, ParentID: node.ParentID, IsMine: true})
+			out.MyReplies = append(out.MyReplies, ThreadsReplyTreeItemOut{ThreadsReplyItemOut: toThreadsReplyOut(item), ParentID: item.ParentID, IsMine: true})
 		}
 	}
 
-	// Track which nodes have a child authored by me (so we know if I answered them).
+	// A comment is answered if it has a direct child authored by me.
 	hasMyChild := make(map[string]bool)
 	for _, id := range order {
-		n := nodes[id]
-		if n.IsMine && n.ParentID != "" {
-			hasMyChild[n.ParentID] = true
+		r := byID[id]
+		if r.isMine && r.parentID != "" {
+			hasMyChild[r.parentID] = true
 		}
 	}
 
-	// Determine roots: parent is the post itself or not present in the set.
-	var roots []*ThreadsReplyNodeOut
+	// Roots: parent is the post itself or not present in the result set.
+	var roots []string
 	for _, id := range order {
-		n := nodes[id]
-		if _, ok := nodes[n.ParentID]; ok && n.ParentID != "" {
+		r := byID[id]
+		if _, ok := byID[r.parentID]; ok && r.parentID != "" {
 			continue
 		}
-		roots = append(roots, n)
+		roots = append(roots, id)
 	}
 
-	// Build nested tree recursively, assigning depth + needs_reply flags.
-	var build func(id string, depth int) ThreadsReplyNodeOut
-	build = func(id string, depth int) ThreadsReplyNodeOut {
-		n := *nodes[id]
-		n.Depth = depth
-		n.NeedsReply = !n.IsMine && !hasMyChild[id]
-		if n.NeedsReply {
+	// Flatten depth-first into a parent_id/depth ordered list (schema-safe; the
+	// caller reconstructs the tree from parent_id + depth). Avoids a self-
+	// referential Children field, which the MCP schema generator rejects.
+	var walk func(id string, depth int)
+	walk = func(id string, depth int) {
+		r := byID[id]
+		node := ThreadsReplyNodeOut{
+			ThreadsReplyItemOut: toThreadsReplyOut(r.item),
+			ParentID:            r.parentID,
+			Depth:               depth,
+			IsMine:              r.isMine,
+			NeedsReply:          !r.isMine && !hasMyChild[id],
+		}
+		if node.NeedsReply {
 			out.NeedsReplyCount++
 		}
-		var kids []ThreadsReplyNodeOut
-		for _, cid := range order {
-			if nodes[cid].ParentID == id {
-				kids = append(kids, build(cid, depth+1))
-			}
+		out.Items = append(out.Items, node)
+		for _, cid := range children[id] {
+			walk(cid, depth+1)
 		}
-		n.Children = kids
-		return n
 	}
-
-	for _, r := range roots {
-		out.Items = append(out.Items, build(r.ReplyID, 1))
+	for _, id := range roots {
+		walk(id, 1)
 	}
 	return nil, out, nil
 }
