@@ -87,6 +87,18 @@ func (s *ThreadsService) Replies(ctx context.Context, mediaID string, limit int,
 	return items, next, nil
 }
 
+func (s *ThreadsService) Conversation(ctx context.Context, mediaID string, limit int, cursor string) ([]domain.ThreadsReply, string, error) {
+	items, next, err := s.gateway.Conversation(ctx, mediaID, limit, cursor)
+	s.audit(ctx, "conversation", mediaID, err, nil)
+	if err != nil {
+		return nil, "", err
+	}
+	for _, item := range items {
+		_, _ = s.repo.UpsertReply(ctx, item)
+	}
+	return items, next, nil
+}
+
 func (s *ThreadsService) Reply(ctx context.Context, mediaID, text string) (string, error) {
 	id, raw, err := s.gateway.Reply(ctx, mediaID, text)
 	s.audit(ctx, "reply", mediaID, err, raw)

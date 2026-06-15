@@ -191,6 +191,29 @@ func (c *Client) Replies(ctx context.Context, mediaID string, limit int, cursor 
 	return items, page.Paging.Cursors.After, nil
 }
 
+func (c *Client) Conversation(ctx context.Context, mediaID string, limit int, cursor string) ([]domain.ThreadsReply, string, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	q := url.Values{"fields": {"id,text,username,timestamp,hide_status,replied_to,root_post,is_reply,has_replies"}, "limit": {fmt.Sprint(limit)}}
+	if cursor != "" {
+		q.Set("after", cursor)
+	}
+	raw, err := c.get(ctx, "/"+mediaID+"/conversation", q)
+	if err != nil {
+		return nil, "", err
+	}
+	var page graphPage[replyDTO]
+	if err := json.Unmarshal(raw, &page); err != nil {
+		return nil, "", err
+	}
+	items := make([]domain.ThreadsReply, 0, len(page.Data))
+	for _, r := range page.Data {
+		items = append(items, r.domain(mediaID, rawJSON(r)))
+	}
+	return items, page.Paging.Cursors.After, nil
+}
+
 func (c *Client) Reply(ctx context.Context, mediaID, text string) (string, []byte, error) {
 	containerRaw, err := c.post(ctx, "/"+c.userID+"/threads", url.Values{"media_type": {"TEXT"}, "text": {text}, "reply_to_id": {mediaID}})
 	if err != nil {
@@ -441,10 +464,18 @@ type replyDTO struct {
 	Username   string `json:"username"`
 	Timestamp  string `json:"timestamp"`
 	HideStatus string `json:"hide_status"`
+	HasReplies bool   `json:"has_replies"`
+	RepliedTo  *struct {
+		ID string `json:"id"`
+	} `json:"replied_to"`
 }
 
 func (r replyDTO) domain(postID string, raw []byte) domain.ThreadsReply {
-	return domain.ThreadsReply{ReplyID: r.ID, PostID: postID, Text: r.Text, Username: r.Username, Timestamp: parseTimePtr(r.Timestamp), HideStatus: r.HideStatus, RawJSON: raw}
+	parentID := ""
+	if r.RepliedTo != nil {
+		parentID = r.RepliedTo.ID
+	}
+	return domain.ThreadsReply{ReplyID: r.ID, PostID: postID, ParentID: parentID, Text: r.Text, Username: r.Username, Timestamp: parseTimePtr(r.Timestamp), HideStatus: r.HideStatus, HasReplies: r.HasReplies, RawJSON: raw}
 }
 
 type mentionDTO struct {
