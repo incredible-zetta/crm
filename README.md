@@ -49,7 +49,7 @@ The key check is constant-time and fail-closed. Tracking and export routes are i
 - **Threads:** hybrid Meta Threads channel with live publish/delete/search/replies/insights plus MySQL cache/audit and reply quota checks.
 - **Ops:** health check, embedded migrations, CSV exports, Docker/EasyPanel-ready single-port deploy.
 
-## Tools (62)
+## Tools (63)
 
 ### Contacts
 | Tool | Description |
@@ -118,7 +118,8 @@ Hybrid Threads channel via Meta Threads Graph API. Enabled when `THREADS_ACCESS_
 | `threads_delete` | Delete live post and soft-delete cached row |
 | `threads_insights` | Fetch user-level or media-level insights |
 | `threads_replies` | List live replies for a post and cache them |
-| `threads_reply` | Reply to a Threads post |
+| `threads_reply_tree` | Nested reply conversation tree with `is_mine`/`needs_reply` flags |
+| `threads_reply` | Reply to a Threads post or a specific comment (`reply_id`) |
 | `threads_reply_quota` | Fetch reply publishing quota usage |
 | `threads_mentions` | List live mentions and cache them |
 | `threads_search` | Keyword/topic search via Threads API with TOP/RECENT, KEYWORD/TAG, media type, author, time range, and fields |

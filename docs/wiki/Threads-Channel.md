@@ -32,7 +32,8 @@ Never commit real tokens. Required scopes for the full tool set:
 | `threads_delete` | Delete live post and soft-delete cache row |
 | `threads_insights` | Fetch media or user insights |
 | `threads_replies` | Read replies for a post |
-| `threads_reply` | Publish a reply to a post |
+| `threads_reply_tree` | Nested reply conversation tree (is_mine/needs_reply) |
+| `threads_reply` | Publish a reply to a post or comment |
 | `threads_reply_quota` | Check reply quota usage |
 | `threads_mentions` | Read mentions |
 | `threads_search` | Keyword/topic search with filters |
@@ -194,6 +195,48 @@ Requires an unexpired long-lived token.
     "arguments": {
       "threads_id": "17848812657686460",
       "limit": 10
+    }
+  }
+}
+```
+
+### Reply conversation tree
+
+`threads_reply_tree` returns the full nested reply conversation for a post via the
+Threads `/{id}/conversation` endpoint. Each node carries `is_mine` (authored by
+the configured account), `needs_reply` (another user's comment with no reply from
+you beneath it), `depth`, and nested `children`. Top-level fields include
+`already_replied`, `needs_reply_count`, and `my_replies`.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 10,
+  "method": "tools/call",
+  "params": {
+    "name": "threads_reply_tree",
+    "arguments": {
+      "threads_id": "18593061424004322",
+      "limit": 50
+    }
+  }
+}
+```
+
+Reply targeting: to answer a **comment**, pass that comment's `reply_id` to
+`threads_reply`, not the root post id. Passing the post id posts a top-level
+reply on your own post instead of answering the commenter.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 11,
+  "method": "tools/call",
+  "params": {
+    "name": "threads_reply",
+    "arguments": {
+      "reply_id": "<comment reply_id from threads_reply_tree>",
+      "text": "Thanks for the question — ..."
     }
   }
 }

@@ -263,7 +263,8 @@ func Register(srv *mcp.Server, d *Deps) {
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_delete", Description: "Delete a live Threads post by threads_id and soft-delete cached row"}, d.ThreadsDelete)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_insights", Description: "Fetch user-level or media-level Threads insights"}, d.ThreadsInsights)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_replies", Description: "List live replies for a Threads post and cache them locally"}, d.ThreadsReplies)
-	mcp.AddTool(srv, &mcp.Tool{Name: "threads_reply", Description: "Reply to a Threads post"}, d.ThreadsReply)
+	mcp.AddTool(srv, &mcp.Tool{Name: "threads_reply_tree", Description: "Show a post's full reply conversation as a nested tree. Each node has reply_id, username, is_mine, depth, needs_reply (someone else's comment you have not answered) and children. Use this before replying to find the exact comment reply_id to respond to and to avoid duplicate replies."}, d.ThreadsReplyTree)
+	mcp.AddTool(srv, &mcp.Tool{Name: "threads_reply", Description: "Reply UNDER a target. To reply to a user's COMMENT, pass that comment's reply_id (from threads_reply_tree/threads_replies). Passing the root post id replies to your own post instead of the comment. One root post can hold replies to the post and replies to other comments; choose the target id deliberately."}, d.ThreadsReply)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_reply_quota", Description: "Fetch Threads reply publishing quota usage"}, d.ThreadsReplyQuota)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_mentions", Description: "List live Threads mentions and cache them locally"}, d.ThreadsMentions)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_search", Description: "Search Threads via keyword search endpoint; supports TOP/RECENT, KEYWORD/TAG, media type, author username, time range, and fields"}, d.ThreadsSearch)
@@ -338,12 +339,27 @@ BEST PRACTICES:
 
 TOOLS:
   threads_publish       Publish text/image/video post
-  threads_reply         Reply to a Threads post
+  threads_reply         Reply UNDER a target id (post or comment)
+  threads_reply_tree    Nested reply conversation with is_mine + needs_reply flags
   threads_reply_quota   Check reply publishing quota before automation
-  threads_replies       Read replies for a post
+  threads_replies       Read direct (one-level) replies for a post
   threads_search        Keyword/topic search for post IDs
   threads_token_exchange Exchange short-lived token for long-lived token
   threads_token_refresh Refresh long-lived token before expiry
+
+REPLY TARGETING (IMPORTANT):
+  threads_reply replies UNDER the id you pass.
+  - To reply to the ROOT POST: pass the post id.
+  - To reply to someone's COMMENT: pass that comment's reply_id, NOT the post id.
+  Passing the post id when you meant a comment will post a top-level reply on
+  your own post instead of answering the commenter.
+  Recommended flow to answer comments on your post:
+    1. threads_reply_tree { threads_id: <post_id> }
+    2. Pick nodes where needs_reply=true and is_mine=false.
+    3. threads_reply { reply_id: <that node's reply_id>, text: "..." }
+  Tree fields: is_mine (authored by you), needs_reply (other user's comment you
+  have not answered), depth, children (nested replies), already_replied,
+  needs_reply_count.
 
 TOKEN LIFECYCLE:
   Graph-generated tokens may be valid for API calls but not refreshable.
@@ -381,8 +397,9 @@ RULES:
 
 REPLY FLOW:
   Threads replies use Meta's two-step container flow internally:
-  1. POST /{threads-user-id}/threads with reply_to_id
+  1. POST /{threads-user-id}/threads with reply_to_id=<target id>
   2. POST /{threads-user-id}/threads_publish with creation_id
+  reply_to_id is the target you pass to threads_reply (post id OR comment reply_id).
 
 QUOTA:
   Call threads_reply_quota before automated replies.

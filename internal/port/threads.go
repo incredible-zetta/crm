@@ -13,6 +13,7 @@ type ThreadsGateway interface {
 	Delete(ctx context.Context, mediaID string) error
 	Insights(ctx context.Context, mediaID string) ([]domain.ThreadsInsight, []byte, error)
 	Replies(ctx context.Context, mediaID string, limit int, cursor string) ([]domain.ThreadsReply, string, error)
+	Conversation(ctx context.Context, mediaID string, limit int, cursor string) ([]domain.ThreadsReply, string, error)
 	Reply(ctx context.Context, mediaID, text string) (string, []byte, error)
 	ReplyQuota(ctx context.Context) (map[string]any, []byte, error)
 	Mentions(ctx context.Context, limit int, cursor string) ([]domain.ThreadsMention, string, error)
