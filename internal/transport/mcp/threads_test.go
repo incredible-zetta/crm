@@ -40,6 +40,9 @@ func (f fakeThreadsGateway) Conversation(context.Context, string, int, string) (
 func (fakeThreadsGateway) Reply(context.Context, string, string) (string, []byte, error) {
 	return "", nil, nil
 }
+func (fakeThreadsGateway) ManageReply(context.Context, string, bool) ([]byte, error) {
+	return nil, nil
+}
 func (fakeThreadsGateway) ReplyQuota(context.Context) (map[string]any, []byte, error) {
 	return nil, nil, nil
 }
@@ -54,6 +57,21 @@ func (fakeThreadsGateway) ExchangeToken(context.Context, string) (port.ThreadsTo
 }
 func (fakeThreadsGateway) RefreshToken(context.Context, string) (port.ThreadsTokenResult, error) {
 	return port.ThreadsTokenResult{}, nil
+}
+
+// recordingThreadsGateway captures ManageReply args for moderation tests.
+type recordingThreadsGateway struct {
+	fakeThreadsGateway
+	calledReplyID string
+	calledHide    bool
+	calls         int
+}
+
+func (r *recordingThreadsGateway) ManageReply(_ context.Context, replyID string, hide bool) ([]byte, error) {
+	r.calledReplyID = replyID
+	r.calledHide = hide
+	r.calls++
+	return []byte(`{"success":true}`), nil
 }
 
 type fakeThreadsRepo struct{ audit []domain.ThreadsAuditEvent }
@@ -185,4 +203,41 @@ func TestThreadsHistoryRawJSONReturnsJSONObjectNotByteArray(t *testing.T) {
 func TestRegisterBuildsAllToolSchemas(t *testing.T) {
 	srv := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil)
 	Register(srv, &Deps{Svc: &service.Services{}})
+}
+
+func TestThreadsReplyHideUnhideCallGatewayWithFlag(t *testing.T) {
+	gw := &recordingThreadsGateway{}
+	d := &Deps{Svc: &service.Services{Threads: service.NewThreadsService(gw, fakeThreadsRepo{})}}
+
+	if _, out, err := d.ThreadsReplyHide(context.Background(), &mcp.CallToolRequest{}, ThreadsManageReplyIn{ReplyID: "r1"}); err != nil || !out.OK {
+		t.Fatalf("hide: err=%v ok=%v", err, out.OK)
+	}
+	if gw.calledReplyID != "r1" || !gw.calledHide {
+		t.Fatalf("hide: expected (r1,true), got (%q,%v)", gw.calledReplyID, gw.calledHide)
+	}
+
+	if _, out, err := d.ThreadsReplyUnhide(context.Background(), &mcp.CallToolRequest{}, ThreadsManageReplyIn{ReplyID: "r2"}); err != nil || !out.OK {
+		t.Fatalf("unhide: err=%v ok=%v", err, out.OK)
+	}
+	if gw.calledReplyID != "r2" || gw.calledHide {
+		t.Fatalf("unhide: expected (r2,false), got (%q,%v)", gw.calledReplyID, gw.calledHide)
+	}
+	if gw.calls != 2 {
+		t.Fatalf("expected 2 gateway calls, got %d", gw.calls)
+	}
+}
+
+func TestThreadsReplyHideRequiresReplyID(t *testing.T) {
+	gw := &recordingThreadsGateway{}
+	d := &Deps{Svc: &service.Services{Threads: service.NewThreadsService(gw, fakeThreadsRepo{})}}
+	res, _, err := d.ThreadsReplyHide(context.Background(), &mcp.CallToolRequest{}, ThreadsManageReplyIn{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res == nil || !res.IsError {
+		t.Fatalf("expected validation error result, got %+v", res)
+	}
+	if gw.calls != 0 {
+		t.Fatalf("gateway should not be called on validation failure, got %d", gw.calls)
+	}
 }
