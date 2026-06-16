@@ -59,12 +59,22 @@ func (fakeThreadsGateway) RefreshToken(context.Context, string) (port.ThreadsTok
 	return port.ThreadsTokenResult{}, nil
 }
 
-// recordingThreadsGateway captures ManageReply args for moderation tests.
+// recordingThreadsGateway captures ManageReply and Reply args for tests.
 type recordingThreadsGateway struct {
 	fakeThreadsGateway
 	calledReplyID string
 	calledHide    bool
 	calls         int
+	replyTarget   string
+	replyText     string
+	replyCalls    int
+}
+
+func (r *recordingThreadsGateway) Reply(_ context.Context, mediaID, text string) (string, []byte, error) {
+	r.replyTarget = mediaID
+	r.replyText = text
+	r.replyCalls++
+	return "newreply", nil, nil
 }
 
 func (r *recordingThreadsGateway) ManageReply(_ context.Context, replyID string, hide bool) ([]byte, error) {
@@ -239,5 +249,43 @@ func TestThreadsReplyHideRequiresReplyID(t *testing.T) {
 	}
 	if gw.calls != 0 {
 		t.Fatalf("gateway should not be called on validation failure, got %d", gw.calls)
+	}
+}
+
+func TestThreadsReplyPrefersReplyIDOverThreadsID(t *testing.T) {
+	gw := &recordingThreadsGateway{}
+	d := &Deps{Svc: &service.Services{Threads: service.NewThreadsService(gw, fakeThreadsRepo{})}}
+
+	// AI passes both the root post id and the target comment id. The reply must
+	// nest under the comment (reply_id), not the post root (threads_id).
+	_, out, err := d.ThreadsReply(context.Background(), &mcp.CallToolRequest{}, ThreadsReplyIn{
+		ThreadsID: "post_root_id",
+		ReplyID:   "comment_id",
+		Text:      "nested answer",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.ReplyID != "newreply" {
+		t.Fatalf("expected reply id newreply, got %q", out.ReplyID)
+	}
+	if gw.replyTarget != "comment_id" {
+		t.Fatalf("expected reply target comment_id, got %q", gw.replyTarget)
+	}
+}
+
+func TestThreadsReplyFallsBackToThreadsID(t *testing.T) {
+	gw := &recordingThreadsGateway{}
+	d := &Deps{Svc: &service.Services{Threads: service.NewThreadsService(gw, fakeThreadsRepo{})}}
+
+	_, _, err := d.ThreadsReply(context.Background(), &mcp.CallToolRequest{}, ThreadsReplyIn{
+		ThreadsID: "post_root_id",
+		Text:      "top-level reply",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gw.replyTarget != "post_root_id" {
+		t.Fatalf("expected reply target post_root_id, got %q", gw.replyTarget)
 	}
 }
