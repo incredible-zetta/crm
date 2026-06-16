@@ -357,6 +357,9 @@ REPLY TARGETING (IMPORTANT):
   - To reply to someone's COMMENT: pass that comment's reply_id, NOT the post id.
   Passing the post id when you meant a comment will post a top-level reply on
   your own post instead of answering the commenter.
+  When replying to a comment, pass ONLY reply_id. If you pass both reply_id and
+  threads_id, reply_id wins (the reply nests under the comment); do not rely on
+  threads_id to target a comment.
   Recommended flow to answer comments on your post:
     1. threads_reply_tree { threads_id: <post_id> }
     2. Pick nodes where needs_reply=true and is_mine=false.
