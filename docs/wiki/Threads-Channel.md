@@ -34,6 +34,8 @@ Never commit real tokens. Required scopes for the full tool set:
 | `threads_replies` | Read replies for a post |
 | `threads_reply_tree` | Nested reply conversation tree (is_mine/needs_reply) |
 | `threads_reply` | Publish a reply to a post or comment |
+| `threads_reply_hide` | Hide (moderate) a reply/comment on your post |
+| `threads_reply_unhide` | Unhide a previously hidden reply on your post |
 | `threads_reply_quota` | Check reply quota usage |
 | `threads_mentions` | Read mentions |
 | `threads_search` | Keyword/topic search with filters |
@@ -237,6 +239,39 @@ reply on your own post instead of answering the commenter.
     "arguments": {
       "reply_id": "<comment reply_id from threads_reply_tree>",
       "text": "Thanks for the question — ..."
+    }
+  }
+}
+```
+
+### Edit / delete / moderate limitations
+
+The Threads Graph API has no edit endpoint. You **cannot update** a post or a
+reply once published — to change content you delete and re-create.
+
+| Want to | API supports | Tool |
+|---------|--------------|------|
+| Edit a post | No | — (delete + re-publish) |
+| Edit a reply/comment | No | — (delete + re-reply) |
+| Delete your own post | Yes | `threads_delete` |
+| Delete someone's comment on your post | No (no API) | use hide instead |
+| Hide an unwanted reply on your post | Yes | `threads_reply_hide` |
+| Unhide it | Yes | `threads_reply_unhide` |
+| Hide replies on other people's posts | No | — |
+
+Hiding is the moderation primitive Threads exposes (`hide_status` on a reply).
+It requires the `threads_manage_replies` scope and only works on replies under
+your own posts.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 12,
+  "method": "tools/call",
+  "params": {
+    "name": "threads_reply_hide",
+    "arguments": {
+      "reply_id": "<comment reply_id from threads_reply_tree>"
     }
   }
 }

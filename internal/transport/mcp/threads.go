@@ -309,6 +309,36 @@ func (d *Deps) ThreadsReply(ctx context.Context, req *mcp.CallToolRequest, in Th
 	return nil, ThreadsReplyOut{ReplyID: id}, nil
 }
 
+type ThreadsManageReplyIn struct {
+	ReplyID string `json:"reply_id" jsonschema:"The reply/comment id to moderate (from threads_reply_tree/threads_replies items). Must be a reply on YOUR post; you cannot hide replies on other people's posts."`
+}
+
+func (d *Deps) ThreadsReplyHide(ctx context.Context, req *mcp.CallToolRequest, in ThreadsManageReplyIn) (*mcp.CallToolResult, ThreadsOKOut, error) {
+	if d.Svc.Threads == nil {
+		return mcpserver.Err("disabled", "threads channel not configured"), ThreadsOKOut{}, nil
+	}
+	if in.ReplyID == "" {
+		return mcpserver.Err("validation", "reply_id required"), ThreadsOKOut{}, nil
+	}
+	if err := d.Svc.Threads.HideReply(ctx, in.ReplyID); err != nil {
+		return nil, ThreadsOKOut{}, fmt.Errorf("threads_reply_hide: %w", err)
+	}
+	return nil, ThreadsOKOut{OK: true}, nil
+}
+
+func (d *Deps) ThreadsReplyUnhide(ctx context.Context, req *mcp.CallToolRequest, in ThreadsManageReplyIn) (*mcp.CallToolResult, ThreadsOKOut, error) {
+	if d.Svc.Threads == nil {
+		return mcpserver.Err("disabled", "threads channel not configured"), ThreadsOKOut{}, nil
+	}
+	if in.ReplyID == "" {
+		return mcpserver.Err("validation", "reply_id required"), ThreadsOKOut{}, nil
+	}
+	if err := d.Svc.Threads.UnhideReply(ctx, in.ReplyID); err != nil {
+		return nil, ThreadsOKOut{}, fmt.Errorf("threads_reply_unhide: %w", err)
+	}
+	return nil, ThreadsOKOut{OK: true}, nil
+}
+
 type ThreadsReplyQuotaOut struct {
 	Result map[string]any `json:"result"`
 }
