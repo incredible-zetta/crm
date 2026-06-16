@@ -243,6 +243,13 @@ func (c *Client) Reply(ctx context.Context, mediaID, text string) (string, []byt
 	return published.ID, raw, nil
 }
 
+func (c *Client) ManageReply(ctx context.Context, replyID string, hide bool) ([]byte, error) {
+	if replyID == "" {
+		return nil, fmt.Errorf("reply id required")
+	}
+	return c.post(ctx, "/"+replyID+"/manage_reply", url.Values{"hide": {fmt.Sprint(hide)}})
+}
+
 func (c *Client) ReplyQuota(ctx context.Context) (map[string]any, []byte, error) {
 	raw, err := c.get(ctx, "/"+c.userID+"/threads_publishing_limit", url.Values{"fields": {"reply_quota_usage,reply_config"}})
 	if err != nil {
