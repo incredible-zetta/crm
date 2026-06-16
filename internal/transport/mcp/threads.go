@@ -282,8 +282,8 @@ func (d *Deps) ThreadsReplyTree(ctx context.Context, req *mcp.CallToolRequest, i
 }
 
 type ThreadsReplyIn struct {
-	ThreadsID string `json:"threads_id,omitempty" jsonschema:"Target id to reply UNDER. To reply to someone's COMMENT, pass that comment's reply_id (from threads_reply_tree/threads_replies items), NOT the root post id. Passing the root post id replies to your own post, not the comment."`
-	ReplyID   string `json:"reply_id,omitempty" jsonschema:"Alias of threads_id. The reply/comment id to respond to. Prefer this when replying to a comment in a thread."`
+	ThreadsID string `json:"threads_id,omitempty" jsonschema:"Target id to reply UNDER. To reply to someone's COMMENT, pass that comment's reply_id (from threads_reply_tree/threads_replies items), NOT the root post id. Passing the root post id replies to your own post, not the comment. If both reply_id and threads_id are set, reply_id wins."`
+	ReplyID   string `json:"reply_id,omitempty" jsonschema:"The reply/comment id to respond to (from threads_reply_tree/threads_replies items). Prefer this when replying to a comment in a thread. Takes precedence over threads_id when both are provided, so a nested reply lands under the comment instead of at the post root."`
 	Text      string `json:"text" jsonschema:"Reply body text"`
 }
 
@@ -295,9 +295,13 @@ func (d *Deps) ThreadsReply(ctx context.Context, req *mcp.CallToolRequest, in Th
 	if d.Svc.Threads == nil {
 		return mcpserver.Err("disabled", "threads channel not configured"), ThreadsReplyOut{}, nil
 	}
-	target := in.ThreadsID
+	// reply_id is the more specific target (a comment). When both are set, it
+	// must win so a reply nests under the comment instead of the post root.
+	// Passing the root post id in threads_id alongside a comment reply_id was
+	// flattening replies to depth 1.
+	target := in.ReplyID
 	if target == "" {
-		target = in.ReplyID
+		target = in.ThreadsID
 	}
 	if target == "" || in.Text == "" {
 		return mcpserver.Err("validation", "threads_id (or reply_id) and text required"), ThreadsReplyOut{}, nil
