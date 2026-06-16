@@ -108,6 +108,24 @@ func (s *ThreadsService) Reply(ctx context.Context, mediaID, text string) (strin
 	return id, err
 }
 
+func (s *ThreadsService) HideReply(ctx context.Context, replyID string) error {
+	return s.manageReply(ctx, replyID, true)
+}
+
+func (s *ThreadsService) UnhideReply(ctx context.Context, replyID string) error {
+	return s.manageReply(ctx, replyID, false)
+}
+
+func (s *ThreadsService) manageReply(ctx context.Context, replyID string, hide bool) error {
+	action := "reply_unhide"
+	if hide {
+		action = "reply_hide"
+	}
+	raw, err := s.gateway.ManageReply(ctx, replyID, hide)
+	s.audit(ctx, action, replyID, err, raw)
+	return err
+}
+
 func (s *ThreadsService) ReplyQuota(ctx context.Context) (map[string]any, error) {
 	out, raw, err := s.gateway.ReplyQuota(ctx)
 	s.audit(ctx, "reply_quota", "", err, raw)

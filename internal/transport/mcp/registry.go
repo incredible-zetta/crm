@@ -265,6 +265,8 @@ func Register(srv *mcp.Server, d *Deps) {
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_replies", Description: "List live replies for a Threads post and cache them locally"}, d.ThreadsReplies)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_reply_tree", Description: "Show a post's full reply conversation as a nested tree. Each node has reply_id, username, is_mine, depth, needs_reply (someone else's comment you have not answered) and children. Use this before replying to find the exact comment reply_id to respond to and to avoid duplicate replies."}, d.ThreadsReplyTree)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_reply", Description: "Reply UNDER a target. To reply to a user's COMMENT, pass that comment's reply_id (from threads_reply_tree/threads_replies). Passing the root post id replies to your own post instead of the comment. One root post can hold replies to the post and replies to other comments; choose the target id deliberately."}, d.ThreadsReply)
+	mcp.AddTool(srv, &mcp.Tool{Name: "threads_reply_hide", Description: "Hide (moderate) a reply/comment on YOUR Threads post by reply_id. Threads has no delete-comment API; hiding is how you remove an unwanted reply from your post. Cannot hide replies on other people's posts. Requires threads_manage_replies scope."}, d.ThreadsReplyHide)
+	mcp.AddTool(srv, &mcp.Tool{Name: "threads_reply_unhide", Description: "Unhide a previously hidden reply/comment on your Threads post by reply_id. Requires threads_manage_replies scope."}, d.ThreadsReplyUnhide)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_reply_quota", Description: "Fetch Threads reply publishing quota usage"}, d.ThreadsReplyQuota)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_mentions", Description: "List live Threads mentions and cache them locally"}, d.ThreadsMentions)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_search", Description: "Search Threads via keyword search endpoint; supports TOP/RECENT, KEYWORD/TAG, media type, author username, time range, and fields"}, d.ThreadsSearch)
@@ -340,6 +342,8 @@ BEST PRACTICES:
 TOOLS:
   threads_publish       Publish text/image/video post
   threads_reply         Reply UNDER a target id (post or comment)
+  threads_reply_hide    Hide (moderate) a reply/comment on your post
+  threads_reply_unhide  Unhide a previously hidden reply on your post
   threads_reply_tree    Nested reply conversation with is_mine + needs_reply flags
   threads_reply_quota   Check reply publishing quota before automation
   threads_replies       Read direct (one-level) replies for a post
@@ -407,6 +411,14 @@ QUOTA:
 
 NOTES:
   - Live API is source of truth; MySQL stores cache/audit with raw_json.
+  - EDITING IS NOT SUPPORTED: the Threads API has no update/edit endpoint for
+    posts OR replies. To change content you must delete and re-create.
+  - DELETE: threads_delete removes your own POST (and soft-deletes the cache row).
+    There is no API to delete someone else's comment on your post.
+  - MODERATE COMMENTS: to remove an unwanted reply on YOUR post, use
+    threads_reply_hide (and threads_reply_unhide to reverse). Hiding is the only
+    way to take down a reply you do not own; it requires threads_manage_replies.
+    You cannot hide replies on other people's posts.
   - Published post updates are not supported by current API behavior.
   - Permalink alone may not resolve to media ID; prefer list/search/mentions/replies to get IDs.
 `
