@@ -185,6 +185,16 @@ func main() {
 	// Threads cookie-only discovery (x-threads-utils binary). Independent of the
 	// Graph API channel: needs THREADS_DISCOVERY_BIN + THREADS_COOKIES_FILE.
 	if cfg.ThreadsDiscoveryEnabled() {
+		// Auto-download the binary when it is missing and a GitHub token is set
+		// (the release repo is private). No-op when the binary already exists.
+		if err := threadsdisc.EnsureBinary(context.Background(), threadsdisc.FetchConfig{
+			Token: cfg.GHToken,
+			Repo:  cfg.ThreadsDiscoveryRepo,
+			Tag:   cfg.ThreadsDiscoveryTag,
+			Dest:  cfg.ThreadsDiscoveryBin,
+		}); err != nil {
+			log.Fatalf("failed to provision threads discovery binary: %v", err)
+		}
 		discovery, err := threadsdisc.New(threadsdisc.Config{BinPath: cfg.ThreadsDiscoveryBin})
 		if err != nil {
 			log.Fatalf("failed to create threads discovery runner: %v", err)
