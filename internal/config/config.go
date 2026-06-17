@@ -46,10 +46,10 @@ type Config struct {
 	WAWarmupPerDay      int    // global warmup ceiling per 24h
 	WABlockUnregistered bool   // refuse sends to numbers verified not on WhatsApp
 	// Threads channel
-	ThreadsAccessToken string // Graph API access token (never logged)
-	ThreadsAppSecret   string // app secret for token exchange (never logged)
-	ThreadsUserID      string // Threads user id, defaults to "me"
-	ThreadsAPIVersion  string // Graph API version, defaults to v1.0
+	ThreadsAccessToken  string // Graph API access token (never logged)
+	ThreadsAppSecret    string // app secret for token exchange (never logged)
+	ThreadsUserID       string // Threads user id, defaults to "me"
+	ThreadsAPIVersion   string // Graph API version, defaults to v1.0
 	ThreadsDiscoveryBin string // path to x-threads-utils cookie-only discovery binary (empty = disabled)
 	ThreadsCookiesFile  string // path to Netscape cookie file for cookie-only discovery (empty = disabled)
 }
