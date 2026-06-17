@@ -8,6 +8,7 @@ import (
 
 type ThreadsGateway interface {
 	Profile(ctx context.Context) (domain.ThreadsProfile, []byte, error)
+	ProfileLookup(ctx context.Context, username string) (domain.ThreadsPublicProfile, []byte, error)
 	List(ctx context.Context, limit int, cursor string) ([]domain.ThreadsPost, string, error)
 	Publish(ctx context.Context, in ThreadsPublishInput) (ThreadsPublishResult, error)
 	Delete(ctx context.Context, mediaID string) error
