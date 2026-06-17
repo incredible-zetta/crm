@@ -30,7 +30,8 @@ Never commit real tokens. Required scopes for the full tool set:
 | `threads_list` | List live posts and cache them |
 | `threads_publish` | Publish text/image/video post with optional `topic_tag` |
 | `threads_delete` | Delete live post and soft-delete cache row |
-| `threads_insights` | Fetch media or user insights |
+| `threads_insights` | Fetch user-level or media-level insights |
+| `threads_follower_demographics` | Aggregate follower demographics (country/city/age/gender); needs ≥100 followers |
 | `threads_replies` | Read replies for a post |
 | `threads_reply_tree` | Nested reply conversation tree (is_mine/needs_reply) |
 | `threads_reply` | Publish a reply to a post or comment |

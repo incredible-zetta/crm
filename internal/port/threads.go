@@ -12,6 +12,7 @@ type ThreadsGateway interface {
 	Publish(ctx context.Context, in ThreadsPublishInput) (ThreadsPublishResult, error)
 	Delete(ctx context.Context, mediaID string) error
 	Insights(ctx context.Context, mediaID string) ([]domain.ThreadsInsight, []byte, error)
+	FollowerDemographics(ctx context.Context, breakdown string) (map[string]any, []byte, error)
 	Replies(ctx context.Context, mediaID string, limit int, cursor string) ([]domain.ThreadsReply, string, error)
 	Conversation(ctx context.Context, mediaID string, limit int, cursor string) ([]domain.ThreadsReply, string, error)
 	Reply(ctx context.Context, mediaID, text string) (string, []byte, error)
