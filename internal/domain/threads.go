@@ -45,11 +45,12 @@ type ThreadsMention struct {
 }
 
 type ThreadsProfile struct {
-	ID         string `json:"id,omitempty"`
-	Username   string `json:"username,omitempty"`
-	Name       string `json:"name,omitempty"`
-	PictureURL string `json:"threads_profile_picture_url,omitempty"`
-	Biography  string `json:"threads_biography,omitempty"`
+	ID             string `json:"id,omitempty"`
+	Username       string `json:"username,omitempty"`
+	Name           string `json:"name,omitempty"`
+	PictureURL     string `json:"threads_profile_picture_url,omitempty"`
+	Biography      string `json:"threads_biography,omitempty"`
+	FollowersCount *int64 `json:"followers_count,omitempty"`
 }
 
 type ThreadsInsight struct {

@@ -257,11 +257,12 @@ func Register(srv *mcp.Server, d *Deps) {
 	}, d.WhatsAppGetMedia)
 
 	// Group 11: Threads (threads.go)
-	mcp.AddTool(srv, &mcp.Tool{Name: "threads_profile", Description: "Fetch Threads profile for configured user"}, d.ThreadsProfile)
+	mcp.AddTool(srv, &mcp.Tool{Name: "threads_profile", Description: "Fetch Threads profile for configured user, including followers_count (best-effort from user insights; omitted on brand-new accounts or without insights scope)"}, d.ThreadsProfile)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_list", Description: "List live Threads posts and cache them locally"}, d.ThreadsList)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_publish", Description: "Publish a Threads text/image/video post and cache it locally"}, d.ThreadsPublish)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_delete", Description: "Delete a live Threads post by threads_id and soft-delete cached row"}, d.ThreadsDelete)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_insights", Description: "Fetch user-level or media-level Threads insights"}, d.ThreadsInsights)
+	mcp.AddTool(srv, &mcp.Tool{Name: "threads_follower_demographics", Description: "Fetch aggregate follower demographics (country/city/age/gender) for the configured user. Requires the profile to have at least 100 followers. Returns aggregate buckets only — the Threads API does not expose a list of individual followers or any following data."}, d.ThreadsFollowerDemographics)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_replies", Description: "List live replies for a Threads post and cache them locally"}, d.ThreadsReplies)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_reply_tree", Description: "Show a post's full reply conversation as a nested tree. Each node has reply_id, username, is_mine, depth, needs_reply (someone else's comment you have not answered) and children. Use this before replying to find the exact comment reply_id to respond to and to avoid duplicate replies."}, d.ThreadsReplyTree)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_reply", Description: "Reply UNDER a target. To reply to a user's COMMENT, pass that comment's reply_id (from threads_reply_tree/threads_replies). Passing the root post id replies to your own post instead of the comment. One root post can hold replies to the post and replies to other comments; choose the target id deliberately."}, d.ThreadsReply)
@@ -422,6 +423,11 @@ NOTES:
     threads_reply_hide (and threads_reply_unhide to reverse). Hiding is the only
     way to take down a reply you do not own; it requires threads_manage_replies.
     You cannot hide replies on other people's posts.
+  - FOLLOWERS/FOLLOWING: only the follower COUNT is available. threads_profile
+    returns followers_count (best-effort from user insights) and
+    threads_follower_demographics returns aggregate country/city/age/gender
+    buckets (needs >=100 followers). There is NO API for a list of followers, a
+    following count, a following list, or any other user's follower data.
   - Published post updates are not supported by current API behavior.
   - Permalink alone may not resolve to media ID; prefer list/search/mentions/replies to get IDs.
 `

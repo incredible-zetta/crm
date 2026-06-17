@@ -133,6 +133,25 @@ func (d *Deps) ThreadsInsights(ctx context.Context, req *mcp.CallToolRequest, in
 	return nil, ThreadsInsightsOut{Items: items}, nil
 }
 
+type ThreadsFollowerDemographicsIn struct {
+	Breakdown string `json:"breakdown,omitempty" jsonschema:"Demographic breakdown dimension: country (default), city, age, or gender. Requires the profile to have at least 100 followers."`
+}
+
+type ThreadsFollowerDemographicsOut struct {
+	Result map[string]any `json:"result"`
+}
+
+func (d *Deps) ThreadsFollowerDemographics(ctx context.Context, req *mcp.CallToolRequest, in ThreadsFollowerDemographicsIn) (*mcp.CallToolResult, ThreadsFollowerDemographicsOut, error) {
+	if d.Svc.Threads == nil {
+		return mcpserver.Err("disabled", "threads channel not configured"), ThreadsFollowerDemographicsOut{}, nil
+	}
+	out, err := d.Svc.Threads.FollowerDemographics(ctx, in.Breakdown)
+	if err != nil {
+		return nil, ThreadsFollowerDemographicsOut{}, fmt.Errorf("threads_follower_demographics: %w", err)
+	}
+	return nil, ThreadsFollowerDemographicsOut{Result: out}, nil
+}
+
 type ThreadsRepliesIn struct {
 	ThreadsID string `json:"threads_id"`
 	Limit     int    `json:"limit,omitempty"`
