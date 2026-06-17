@@ -272,6 +272,7 @@ func Register(srv *mcp.Server, d *Deps) {
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_reply_quota", Description: "Fetch Threads reply publishing quota usage"}, d.ThreadsReplyQuota)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_mentions", Description: "List live Threads mentions and cache them locally"}, d.ThreadsMentions)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_search", Description: "Search Threads via keyword search endpoint; supports TOP/RECENT, KEYWORD/TAG, media type, author username, time range, and fields"}, d.ThreadsSearch)
+	mcp.AddTool(srv, &mcp.Tool{Name: "threads_discover", Description: "Cookie-only discovery of PUBLIC Threads posts by topic (separate from the Graph API). mode=posts returns structured JSON (pk, code, username, caption, like_count); mode=viral/latest return engagement-ranked or newest-first text. IDs returned are web IDs, NOT valid on the Graph API; only username bridges the two paths. Needs THREADS_DISCOVERY_BIN + THREADS_COOKIES_FILE."}, d.ThreadsDiscover)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_token_exchange", Description: "Exchange a short-lived Threads token for a long-lived token. Returns sensitive access_token."}, d.ThreadsTokenExchange)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_token_refresh", Description: "Refresh a long-lived Threads token before expiry. Returns sensitive access_token."}, d.ThreadsTokenRefresh)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_list_cached", Description: "List cached Threads posts from MySQL"}, d.ThreadsListCached)

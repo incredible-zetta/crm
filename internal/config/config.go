@@ -50,6 +50,8 @@ type Config struct {
 	ThreadsAppSecret   string // app secret for token exchange (never logged)
 	ThreadsUserID      string // Threads user id, defaults to "me"
 	ThreadsAPIVersion  string // Graph API version, defaults to v1.0
+	ThreadsDiscoveryBin string // path to x-threads-utils cookie-only discovery binary (empty = disabled)
+	ThreadsCookiesFile  string // path to Netscape cookie file for cookie-only discovery (empty = disabled)
 }
 
 func (c *Config) DebugEnabled() bool {
@@ -74,6 +76,13 @@ func (c *Config) WhatsAppEnabled() bool {
 // ThreadsEnabled reports whether the Threads channel is configured.
 func (c *Config) ThreadsEnabled() bool {
 	return c.ThreadsAccessToken != ""
+}
+
+// ThreadsDiscoveryEnabled reports whether the cookie-only discovery binary is
+// configured. Independent of the Graph API channel. Needs both the binary and
+// a cookie file.
+func (c *Config) ThreadsDiscoveryEnabled() bool {
+	return c.ThreadsDiscoveryBin != "" && c.ThreadsCookiesFile != ""
 }
 
 func boolEnv(key string, def bool) bool {
@@ -266,5 +275,7 @@ func Load() (*Config, error) {
 		ThreadsAppSecret:     os.Getenv("THREADS_APP_SECRET"),
 		ThreadsUserID:        threadsUserID,
 		ThreadsAPIVersion:    threadsAPIVersion,
+		ThreadsDiscoveryBin:  os.Getenv("THREADS_DISCOVERY_BIN"),
+		ThreadsCookiesFile:   os.Getenv("THREADS_COOKIES_FILE"),
 	}, nil
 }
