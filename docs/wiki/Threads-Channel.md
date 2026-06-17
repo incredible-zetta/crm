@@ -8,6 +8,9 @@ Hybrid Threads integration: live Meta Threads Graph API calls plus MySQL cache/a
 THREADS_ACCESS_TOKEN=...
 THREADS_USER_ID=me
 THREADS_API_VERSION=v1.0
+# cookie-only discovery (optional, separate path — no token):
+THREADS_DISCOVERY_BIN=/opt/threads/threads
+THREADS_COOKIES_FILE=/opt/threads/www.threads.com_cookies.txt
 ```
 
 Never commit real tokens. Required scopes for the full tool set:
@@ -41,6 +44,7 @@ Never commit real tokens. Required scopes for the full tool set:
 | `threads_reply_quota` | Check reply quota usage |
 | `threads_mentions` | Read mentions |
 | `threads_search` | Keyword/topic search with filters |
+| `threads_discover` | Cookie-only discovery of PUBLIC posts by topic (no token); `mode=posts`/`viral`/`latest` |
 | `threads_token_exchange` | Exchange short-lived token for long-lived token |
 | `threads_token_refresh` | Refresh long-lived token before expiry |
 | `threads_list_cached` | List cached posts |
@@ -331,3 +335,96 @@ Live API remains source of truth. MySQL cache stores typed columns plus `raw_jso
 - `threads_audit_events`
 
 Cached delete is soft delete (`deleted_at`) unless live delete is requested.
+
+## Cookie-only discovery (`threads_discover`)
+
+`threads_discover` is a **separate path** from the Graph API tools. It reads
+PUBLIC posts of any account for AI-agent research/training using a logged-in
+browser session cookie — no access token. Backed by the
+[x-threads-utils](https://github.com/incredible-zetta/x-threads-utils) binary,
+which embeds the GraphQL query catalog and scrapes dynamic tokens from
+threads.com using only the cookie.
+
+### Setup
+
+1. Download the `threads` binary for your OS/arch from the
+   [releases page](https://github.com/incredible-zetta/x-threads-utils/releases)
+   and extract it.
+2. Export a Netscape cookie file for a logged-in `www.threads.com` session
+   (use a browser "cookies.txt" extension). Needs `sessionid`, `ds_user_id`,
+   `csrftoken`, `mid`, `ig_did`, `rur`.
+3. Set env:
+
+   ```env
+   THREADS_DISCOVERY_BIN=/opt/threads/threads
+   THREADS_COOKIES_FILE=/opt/threads/www.threads.com_cookies.txt
+   ```
+
+The server reads the cookie file at call time and never exposes it to the agent.
+The channel is enabled only when **both** vars are set; it is independent of
+`THREADS_ACCESS_TOKEN`.
+
+### Modes
+
+| `mode` | Output | Reliability |
+|--------|--------|-------------|
+| `posts` (default) | structured JSON: `pk`, `code`, `username`, `user_pk`, `full_name`, `caption`, `like_count`, `taken_at` | server-rendered HTML scrape — reliable |
+| `viral` | engagement-ranked text (♥ likes + 💬 replies, ranked) | reliable |
+| `latest` | newest-first text (by `taken_at`) | reliable |
+
+### Example
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 20,
+  "method": "tools/call",
+  "params": {
+    "name": "threads_discover",
+    "arguments": { "query": "software engineering", "mode": "posts" }
+  }
+}
+```
+
+Returns:
+
+```json
+{
+  "mode": "posts",
+  "posts": [
+    {
+      "pk": "3920530655558173937",
+      "code": "DZohdv_kwTx",
+      "username": "singgihmardianto",
+      "user_pk": "77471145058",
+      "full_name": "Singgih Mardianto",
+      "caption": "My first thread post ...",
+      "like_count": 4,
+      "taken_at": "2026-06-15T..."
+    }
+  ]
+}
+```
+
+### IDs do NOT cross to the Graph API
+
+The `pk`/`code` returned here are **web IDs** and are not valid on the official
+Graph API (passing a discovery `pk` as a Graph node returns `code 100 — object
+does not exist`). Only the `username` string bridges the two paths.
+
+To enrich a discovered username with official follower/engagement counts you
+would call `threads_profile_lookup`, but that needs Meta-approved
+`threads_profile_discovery`. As of 2026-06-17, arbitrary handles return
+`code 10 — Application does not have permission` (only allow-listed profiles like
+`meta` resolve); broader access requires Meta App Review. Until then,
+`threads_discover` is the engagement source for arbitrary public accounts.
+
+### Caveats
+
+- `mode=posts` JSON exposes `like_count` only. Reply/repost/quote counts are
+  shown in the `viral`/`latest` **text** output (the binary does not emit them
+  as JSON fields).
+- GraphQL-backed discovery commands (`search-users`, etc.) need a current
+  `doc_id` that rotates per Threads build; the reliable cookie-only commands
+  (`search-posts`, `viral`, `latest`) are the ones surfaced here.
+- The cookie file holds a live authenticated session — gitignored, never commit.
