@@ -46,12 +46,15 @@ type Config struct {
 	WAWarmupPerDay      int    // global warmup ceiling per 24h
 	WABlockUnregistered bool   // refuse sends to numbers verified not on WhatsApp
 	// Threads channel
-	ThreadsAccessToken  string // Graph API access token (never logged)
-	ThreadsAppSecret    string // app secret for token exchange (never logged)
-	ThreadsUserID       string // Threads user id, defaults to "me"
-	ThreadsAPIVersion   string // Graph API version, defaults to v1.0
-	ThreadsDiscoveryBin string // path to x-threads-utils cookie-only discovery binary (empty = disabled)
-	ThreadsCookiesFile  string // path to Netscape cookie file for cookie-only discovery (empty = disabled)
+	ThreadsAccessToken   string // Graph API access token (never logged)
+	ThreadsAppSecret     string // app secret for token exchange (never logged)
+	ThreadsUserID        string // Threads user id, defaults to "me"
+	ThreadsAPIVersion    string // Graph API version, defaults to v1.0
+	ThreadsDiscoveryBin  string // path to x-threads-utils cookie-only discovery binary (empty = disabled)
+	ThreadsCookiesFile   string // path to Netscape cookie file for cookie-only discovery (empty = disabled)
+	GHToken              string // GitHub token to auto-download the discovery binary when missing (never logged)
+	ThreadsDiscoveryRepo string // owner/name of the discovery binary release repo (optional override)
+	ThreadsDiscoveryTag  string // release tag to download (optional, default latest)
 }
 
 func (c *Config) DebugEnabled() bool {
@@ -83,6 +86,15 @@ func (c *Config) ThreadsEnabled() bool {
 // a cookie file.
 func (c *Config) ThreadsDiscoveryEnabled() bool {
 	return c.ThreadsDiscoveryBin != "" && c.ThreadsCookiesFile != ""
+}
+
+func firstEnv(keys ...string) string {
+	for _, k := range keys {
+		if v := strings.TrimSpace(os.Getenv(k)); v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 func boolEnv(key string, def bool) bool {
@@ -277,5 +289,8 @@ func Load() (*Config, error) {
 		ThreadsAPIVersion:    threadsAPIVersion,
 		ThreadsDiscoveryBin:  os.Getenv("THREADS_DISCOVERY_BIN"),
 		ThreadsCookiesFile:   os.Getenv("THREADS_COOKIES_FILE"),
+		GHToken:              firstEnv("GH_TOKEN", "GITHUB_TOKEN"),
+		ThreadsDiscoveryRepo: os.Getenv("THREADS_DISCOVERY_REPO"),
+		ThreadsDiscoveryTag:  os.Getenv("THREADS_DISCOVERY_TAG"),
 	}, nil
 }
