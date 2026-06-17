@@ -72,6 +72,22 @@ type ThreadsPublicProfile struct {
 	RawJSON       []byte `json:"-"`
 }
 
+// ThreadsDiscoveredPost is a post surfaced by the cookie-only discovery binary
+// (x-threads-utils search-posts/viral/latest). It is a separate path from the
+// official Graph API: no access token, web-scraped from a logged-in session.
+type ThreadsDiscoveredPost struct {
+	PK        string `json:"pk"`
+	Code      string `json:"code"`
+	Caption   string `json:"Caption"`
+	LikeCount int    `json:"like_count"`
+	TakenAt   int64  `json:"taken_at"`
+	User      struct {
+		PK       string `json:"pk"`
+		Username string `json:"username"`
+		FullName string `json:"full_name"`
+	} `json:"user"`
+}
+
 type ThreadsInsight struct {
 	Name     string `json:"name"`
 	Value    any    `json:"value,omitempty"`
