@@ -492,8 +492,15 @@ func (c *Client) do(ctx context.Context, method, path string, q url.Values, form
 		var body map[string]any
 		_ = json.Unmarshal(raw, &body)
 		msg := res.Status
-		if e, ok := body["error"].(map[string]any); ok && e["message"] != nil {
-			msg = fmt.Sprint(e["message"])
+		if e, ok := body["error"].(map[string]any); ok {
+			// Prefer Meta's human-readable reason (error_user_msg) over the terse
+			// "message" (e.g. follower_demographics on <100 followers returns
+			// message="Invalid operation" but error_user_msg explains the cause).
+			if um, ok := e["error_user_msg"].(string); ok && um != "" {
+				msg = um
+			} else if m, ok := e["message"].(string); ok && m != "" {
+				msg = m
+			}
 		}
 		return nil, fmt.Errorf("threads API %d: %s", res.StatusCode, msg)
 	}

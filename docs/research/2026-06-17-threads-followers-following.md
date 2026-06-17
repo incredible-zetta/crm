@@ -105,3 +105,16 @@ Graph-API MCP.
 ## Live verification TODO (needs real token)
 - `threads_insights` (no media id) → confirm `followers_count` present.
 - `follower_demographics` with `breakdown=country` on an account with ≥100 followers.
+
+## Live verification result (2026-06-17, @callmelords token)
+- `GET /me/threads_insights?metric=followers_count` → **200**, `total_value.value = 99`. Follower count works.
+- `GET /me/threads_insights?metric=follower_demographics&breakdown=country` → **400**
+  `OAuthException code 801 / subcode 4279032`,
+  `error_user_msg`: "Anda tidak dapat memuat insight demografi pengikut … kurang dari 100 pengikut."
+- Adding `metric_type=total_value` → **same 801** (metric_type is NOT required/at fault).
+- Omitting `breakdown` → **400 code 100/4279040** (breakdown required) — confirms our breakdown handling is correct.
+
+**Conclusion:** the tool, endpoint, and params are correct. The 400 is purely the
+Meta ≥100-follower gate (account is at 99). No code bug. Improvement made: the
+Threads client error now surfaces Meta's `error_user_msg` instead of the terse
+`message` ("Invalid operation"), so callers see the real reason.

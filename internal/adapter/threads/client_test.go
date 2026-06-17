@@ -109,3 +109,19 @@ func TestFollowerDemographicsRejectsBadBreakdown(t *testing.T) {
 		t.Fatal("expected error for invalid breakdown")
 	}
 }
+
+func TestErrorPrefersUserMessage(t *testing.T) {
+	c, srv := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":{"message":"Invalid operation","error_user_msg":"You cannot load follower demographics for a user with fewer than 100 followers."}}`))
+	})
+	defer srv.Close()
+
+	_, _, err := c.FollowerDemographics(context.Background(), "country")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "fewer than 100 followers") {
+		t.Fatalf("expected human-readable reason, got: %v", err)
+	}
+}
