@@ -258,6 +258,7 @@ func Register(srv *mcp.Server, d *Deps) {
 
 	// Group 11: Threads (threads.go)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_profile", Description: "Fetch Threads profile for configured user, including followers_count (best-effort from user insights; omitted on brand-new accounts or without insights scope)"}, d.ThreadsProfile)
+	mcp.AddTool(srv, &mcp.Tool{Name: "threads_profile_lookup", Description: "Look up any PUBLIC Threads profile by username (profile discovery). Returns name, biography, picture, is_verified and public counters including follower_count, likes_count, quotes_count, replies_count, reposts_count, views_count. No 100-follower gate. Does NOT return a following count or follower/following lists (the API does not expose them). Requires threads_profile_discovery scope."}, d.ThreadsProfileLookup)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_list", Description: "List live Threads posts and cache them locally"}, d.ThreadsList)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_publish", Description: "Publish a Threads text/image/video post and cache it locally"}, d.ThreadsPublish)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_delete", Description: "Delete a live Threads post by threads_id and soft-delete cached row"}, d.ThreadsDelete)
@@ -423,11 +424,13 @@ NOTES:
     threads_reply_hide (and threads_reply_unhide to reverse). Hiding is the only
     way to take down a reply you do not own; it requires threads_manage_replies.
     You cannot hide replies on other people's posts.
-  - FOLLOWERS/FOLLOWING: only the follower COUNT is available. threads_profile
-    returns followers_count (best-effort from user insights) and
+  - FOLLOWERS/FOLLOWING: follower COUNT is available, follower/following LISTS
+    are not. Your own account: threads_profile returns followers_count and
     threads_follower_demographics returns aggregate country/city/age/gender
-    buckets (needs >=100 followers). There is NO API for a list of followers, a
-    following count, a following list, or any other user's follower data.
+    buckets (needs >=100 followers). ANY public user: threads_profile_lookup
+    returns follower_count plus likes/quotes/replies/reposts/views counts with
+    no follower gate. There is NO API for a list of followers, a following
+    count, a following list, or accounts a user follows.
   - Published post updates are not supported by current API behavior.
   - Permalink alone may not resolve to media ID; prefer list/search/mentions/replies to get IDs.
 `

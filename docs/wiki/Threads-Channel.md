@@ -27,6 +27,7 @@ Never commit real tokens. Required scopes for the full tool set:
 | Tool | Purpose |
 |------|---------|
 | `threads_profile` | Fetch configured profile |
+| `threads_profile_lookup` | Look up any public profile by username (follower_count + engagement counts); needs `threads_profile_discovery` |
 | `threads_list` | List live posts and cache them |
 | `threads_publish` | Publish text/image/video post with optional `topic_tag` |
 | `threads_delete` | Delete live post and soft-delete cache row |
