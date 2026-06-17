@@ -113,6 +113,7 @@ Hybrid Threads channel via Meta Threads Graph API. Enabled when `THREADS_ACCESS_
 | Tool | Description |
 |------|-------------|
 | `threads_profile` | Fetch configured Threads profile |
+| `threads_profile_lookup` | Look up any public profile by username (name, bio, verified, follower_count + engagement counts); needs `threads_profile_discovery` |
 | `threads_list` | List live Threads posts and cache them |
 | `threads_publish` | Publish text/image/video post with optional `topic_tag` and cache result |
 | `threads_delete` | Delete live post and soft-delete cached row |

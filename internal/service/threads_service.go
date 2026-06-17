@@ -24,6 +24,12 @@ func (s *ThreadsService) Profile(ctx context.Context) (domain.ThreadsProfile, er
 	return p, err
 }
 
+func (s *ThreadsService) ProfileLookup(ctx context.Context, username string) (domain.ThreadsPublicProfile, error) {
+	p, raw, err := s.gateway.ProfileLookup(ctx, username)
+	s.audit(ctx, "profile_lookup", username, err, raw)
+	return p, err
+}
+
 func (s *ThreadsService) List(ctx context.Context, limit int, cursor string) ([]domain.ThreadsPost, string, error) {
 	posts, next, err := s.gateway.List(ctx, limit, cursor)
 	s.audit(ctx, "list", "", err, nil)

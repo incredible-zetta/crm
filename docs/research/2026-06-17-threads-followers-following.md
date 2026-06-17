@@ -9,11 +9,12 @@ Question: Can the Threads channel return **followers** and **following** for a p
 | Want | Official Threads Graph API | Verdict |
 |------|----------------------------|---------|
 | Follower **count** (your own account) | `followers_count` user-insight metric | ✅ supported |
+| Follower **count** (any public user) | `follower_count` via `/profile_lookup` (profile discovery) | ✅ supported (no 100-follower gate; subject to app data-access tier) |
 | Follower **demographics** (country/city/age/gender) | `follower_demographics` metric (needs ≥100 followers) | ✅ supported (aggregate only) |
 | **List** of followers (who follows you) | none | ❌ not supported |
 | **Following** count (accounts you follow) | none | ❌ not supported |
 | **List** of accounts you follow | none | ❌ not supported |
-| Followers/following for **other** users | none | ❌ not supported |
+| Public profile info for other users | `/profile_lookup` (name, bio, verified, engagement counts) | ✅ supported (profile discovery) |
 
 Bottom line: the official API gives you your own **follower count** (and aggregate
 demographics) as an insight metric. There is **no** following count, **no** follower
@@ -118,3 +119,21 @@ Graph-API MCP.
 Meta ≥100-follower gate (account is at 99). No code bug. Improvement made: the
 Threads client error now surfaces Meta's `error_user_msg` instead of the terse
 `message` ("Invalid operation"), so callers see the real reason.
+
+## Profile discovery (`/profile_lookup`) — added 2026-06-17
+
+Live testing revealed the `threads_profile_discovery` scope endpoint
+`GET /profile_lookup?username=<handle>` returns a public profile for ANY user,
+including **follower_count** with **no 100-follower gate**. Confirmed valid fields
+(probed live):
+`username, name, biography, profile_picture_url, is_verified, follower_count,
+likes_count, quotes_count, replies_count, reposts_count, views_count`.
+There is no `id`, no following count (confirms following is unavailable).
+
+Live results (@callmelords token):
+- `username=meta` → **200**, follower_count 1,710,677 + engagement counts.
+- `username=callmelords`/`zuck` → **400 code 10 / 4279067** "Application does not
+  have permission for this action" — broader profile discovery needs Meta app
+  review (data-access tier), not a code bug.
+
+Shipped as MCP tool `threads_profile_lookup`.

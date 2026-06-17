@@ -19,11 +19,12 @@ type ThreadsLimitCursorIn struct {
 }
 
 type ThreadsProfileOut struct {
-	ID         string `json:"id,omitempty"`
-	Username   string `json:"username,omitempty"`
-	Name       string `json:"name,omitempty"`
-	PictureURL string `json:"picture_url,omitempty"`
-	Biography  string `json:"biography,omitempty"`
+	ID             string `json:"id,omitempty"`
+	Username       string `json:"username,omitempty"`
+	Name           string `json:"name,omitempty"`
+	PictureURL     string `json:"picture_url,omitempty"`
+	Biography      string `json:"biography,omitempty"`
+	FollowersCount *int64 `json:"followers_count,omitempty"`
 }
 
 func (d *Deps) ThreadsProfile(ctx context.Context, req *mcp.CallToolRequest, in struct{}) (*mcp.CallToolResult, ThreadsProfileOut, error) {
@@ -34,7 +35,51 @@ func (d *Deps) ThreadsProfile(ctx context.Context, req *mcp.CallToolRequest, in 
 	if err != nil {
 		return nil, ThreadsProfileOut{}, fmt.Errorf("threads_profile: %w", err)
 	}
-	return nil, ThreadsProfileOut{ID: p.ID, Username: p.Username, Name: p.Name, PictureURL: p.PictureURL, Biography: p.Biography}, nil
+	return nil, ThreadsProfileOut{ID: p.ID, Username: p.Username, Name: p.Name, PictureURL: p.PictureURL, Biography: p.Biography, FollowersCount: p.FollowersCount}, nil
+}
+
+type ThreadsProfileLookupIn struct {
+	Username string `json:"username" jsonschema:"Exact Threads handle to look up (with or without @). Public profiles only."`
+}
+
+type ThreadsPublicProfileOut struct {
+	Username      string `json:"username,omitempty"`
+	Name          string `json:"name,omitempty"`
+	Biography     string `json:"biography,omitempty"`
+	PictureURL    string `json:"picture_url,omitempty"`
+	IsVerified    *bool  `json:"is_verified,omitempty"`
+	FollowerCount *int64 `json:"follower_count,omitempty"`
+	LikesCount    *int64 `json:"likes_count,omitempty"`
+	QuotesCount   *int64 `json:"quotes_count,omitempty"`
+	RepliesCount  *int64 `json:"replies_count,omitempty"`
+	RepostsCount  *int64 `json:"reposts_count,omitempty"`
+	ViewsCount    *int64 `json:"views_count,omitempty"`
+}
+
+func (d *Deps) ThreadsProfileLookup(ctx context.Context, req *mcp.CallToolRequest, in ThreadsProfileLookupIn) (*mcp.CallToolResult, ThreadsPublicProfileOut, error) {
+	if d.Svc.Threads == nil {
+		return mcpserver.Err("disabled", "threads channel not configured"), ThreadsPublicProfileOut{}, nil
+	}
+	if in.Username == "" {
+		return mcpserver.Err("validation", "username required"), ThreadsPublicProfileOut{}, nil
+	}
+	p, err := d.Svc.Threads.ProfileLookup(ctx, in.Username)
+	if err != nil {
+		return nil, ThreadsPublicProfileOut{}, fmt.Errorf("threads_profile_lookup: %w", err)
+	}
+	return nil, ThreadsPublicProfileOut{
+		Username:      p.Username,
+		Name:          p.Name,
+		Biography:     p.Biography,
+		PictureURL:    p.PictureURL,
+		IsVerified:    p.IsVerified,
+		FollowerCount: p.FollowerCount,
+		LikesCount:    p.LikesCount,
+		QuotesCount:   p.QuotesCount,
+		RepliesCount:  p.RepliesCount,
+		RepostsCount:  p.RepostsCount,
+		ViewsCount:    p.ViewsCount,
+	}, nil
 }
 
 type ThreadsListOut struct {

@@ -21,6 +21,9 @@ type fakeThreadsGateway struct {
 func (f fakeThreadsGateway) Profile(context.Context) (domain.ThreadsProfile, []byte, error) {
 	return f.profile, nil, nil
 }
+func (fakeThreadsGateway) ProfileLookup(context.Context, string) (domain.ThreadsPublicProfile, []byte, error) {
+	return domain.ThreadsPublicProfile{}, nil, nil
+}
 func (fakeThreadsGateway) List(context.Context, int, string) ([]domain.ThreadsPost, string, error) {
 	return nil, "", nil
 }
