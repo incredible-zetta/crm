@@ -95,6 +95,30 @@ func (c *Client) followersCount(ctx context.Context) (int64, bool) {
 	return 0, false
 }
 
+const profileLookupFields = "username,name,biography,profile_picture_url,is_verified,follower_count,likes_count,quotes_count,replies_count,reposts_count,views_count"
+
+// ProfileLookup fetches a public profile by username via the profile-discovery
+// endpoint (/profile_lookup). Requires the threads_profile_discovery scope.
+// Unlike the authenticated profile, this returns engagement counters and
+// follower_count for any public user; it does NOT return an id or any following
+// count (the API does not expose accounts a user follows).
+func (c *Client) ProfileLookup(ctx context.Context, username string) (domain.ThreadsPublicProfile, []byte, error) {
+	username = strings.TrimPrefix(strings.TrimSpace(username), "@")
+	if username == "" {
+		return domain.ThreadsPublicProfile{}, nil, fmt.Errorf("username required")
+	}
+	raw, err := c.get(ctx, "/profile_lookup", url.Values{"username": {username}, "fields": {profileLookupFields}})
+	if err != nil {
+		return domain.ThreadsPublicProfile{}, nil, err
+	}
+	var p domain.ThreadsPublicProfile
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return domain.ThreadsPublicProfile{}, raw, err
+	}
+	p.RawJSON = raw
+	return p, raw, nil
+}
+
 func (c *Client) List(ctx context.Context, limit int, cursor string) ([]domain.ThreadsPost, string, error) {
 	if limit <= 0 {
 		limit = 10

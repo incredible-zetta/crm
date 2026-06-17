@@ -53,6 +53,25 @@ type ThreadsProfile struct {
 	FollowersCount *int64 `json:"followers_count,omitempty"`
 }
 
+// ThreadsPublicProfile is a public profile fetched by username via the Threads
+// profile-discovery endpoint (/profile_lookup). Field set differs from the
+// authenticated profile: it has engagement counters and follower_count but no
+// id, no following count (the API does not expose accounts a user follows).
+type ThreadsPublicProfile struct {
+	Username      string `json:"username,omitempty"`
+	Name          string `json:"name,omitempty"`
+	Biography     string `json:"biography,omitempty"`
+	PictureURL    string `json:"profile_picture_url,omitempty"`
+	IsVerified    *bool  `json:"is_verified,omitempty"`
+	FollowerCount *int64 `json:"follower_count,omitempty"`
+	LikesCount    *int64 `json:"likes_count,omitempty"`
+	QuotesCount   *int64 `json:"quotes_count,omitempty"`
+	RepliesCount  *int64 `json:"replies_count,omitempty"`
+	RepostsCount  *int64 `json:"reposts_count,omitempty"`
+	ViewsCount    *int64 `json:"views_count,omitempty"`
+	RawJSON       []byte `json:"-"`
+}
+
 type ThreadsInsight struct {
 	Name     string `json:"name"`
 	Value    any    `json:"value,omitempty"`

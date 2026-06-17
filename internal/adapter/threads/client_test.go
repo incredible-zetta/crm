@@ -125,3 +125,41 @@ func TestErrorPrefersUserMessage(t *testing.T) {
 		t.Fatalf("expected human-readable reason, got: %v", err)
 	}
 }
+
+func TestProfileLookupParsesPublicProfile(t *testing.T) {
+	c, srv := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/profile_lookup") {
+			t.Errorf("path = %q, want /profile_lookup", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("username"); got != "meta" {
+			t.Errorf("username = %q, want meta (stripped @)", got)
+		}
+		_, _ = w.Write([]byte(`{"username":"meta","name":"Meta","is_verified":true,"follower_count":1710677,"likes_count":2719,"views_count":15663}`))
+	})
+	defer srv.Close()
+
+	p, _, err := c.ProfileLookup(context.Background(), "@meta")
+	if err != nil {
+		t.Fatalf("ProfileLookup: %v", err)
+	}
+	if p.Username != "meta" {
+		t.Errorf("username = %q", p.Username)
+	}
+	if p.FollowerCount == nil || *p.FollowerCount != 1710677 {
+		t.Fatalf("follower_count = %v, want 1710677", p.FollowerCount)
+	}
+	if p.IsVerified == nil || !*p.IsVerified {
+		t.Fatalf("is_verified = %v, want true", p.IsVerified)
+	}
+}
+
+func TestProfileLookupRequiresUsername(t *testing.T) {
+	c, srv := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		t.Error("server should not be called without username")
+	})
+	defer srv.Close()
+
+	if _, _, err := c.ProfileLookup(context.Background(), "  "); err == nil {
+		t.Fatal("expected error for empty username")
+	}
+}
