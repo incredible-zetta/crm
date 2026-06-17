@@ -25,6 +25,18 @@ type ThreadsGateway interface {
 	RefreshToken(ctx context.Context, accessToken string) (ThreadsTokenResult, error)
 }
 
+// ThreadsDiscovery is the cookie-only discovery path backed by the
+// x-threads-utils binary. Auth is a logged-in session cookie blob per account
+// (no Graph API token). SearchPosts/Viral/Latest are reliable cookie-only.
+type ThreadsDiscovery interface {
+	// SearchPosts runs `search-posts` (server-rendered HTML scrape, JSON out).
+	SearchPosts(ctx context.Context, cookies, query string) ([]domain.ThreadsDiscoveredPost, []byte, error)
+	// Viral runs `viral <topic>` ranked by engagement (text out, returned raw).
+	Viral(ctx context.Context, cookies, topic string) ([]byte, error)
+	// Latest runs `latest <topic>` newest-first (text out, returned raw).
+	Latest(ctx context.Context, cookies, topic string) ([]byte, error)
+}
+
 type ThreadsPublishInput struct {
 	Text     string
 	ImageURL string

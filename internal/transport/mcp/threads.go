@@ -650,3 +650,80 @@ func toThreadsReplyOut(r domain.ThreadsReply) ThreadsReplyItemOut {
 	}
 	return out
 }
+
+// --- Cookie-only discovery (x-threads-utils binary) -------------------------
+//
+// This is a SEPARATE path from the Graph API tools above. It reads PUBLIC posts
+// from any account via a logged-in session cookie (configured server-side),
+// not an access token. Use it to research what others are posting and their
+// engagement when the official keyword_search/profile_lookup scopes are not yet
+// approved. IDs returned here (pk, code) are web IDs and are NOT valid on the
+// Graph API; only the username crosses between the two paths.
+
+type ThreadsDiscoverIn struct {
+	Query string `json:"query" jsonschema:"Topic or keyword to search public Threads for"`
+	Mode  string `json:"mode,omitempty" jsonschema:"posts (default, structured JSON incl like_count), viral (engagement-ranked text), or latest (newest-first text)"`
+}
+
+type ThreadsDiscoveredPostOut struct {
+	PK        string `json:"pk"`
+	Code      string `json:"code"`
+	Username  string `json:"username"`
+	UserPK    string `json:"user_pk"`
+	FullName  string `json:"full_name,omitempty"`
+	Caption   string `json:"caption,omitempty"`
+	LikeCount int    `json:"like_count"`
+	TakenAt   string `json:"taken_at,omitempty"`
+}
+
+type ThreadsDiscoverOut struct {
+	Mode  string                     `json:"mode"`
+	Posts []ThreadsDiscoveredPostOut `json:"posts,omitempty"`
+	Text  string                     `json:"text,omitempty"`
+}
+
+func (d *Deps) ThreadsDiscover(ctx context.Context, req *mcp.CallToolRequest, in ThreadsDiscoverIn) (*mcp.CallToolResult, ThreadsDiscoverOut, error) {
+	if d.Svc.Threads == nil {
+		return mcpserver.Err("disabled", "threads channel not configured"), ThreadsDiscoverOut{}, nil
+	}
+	if in.Query == "" {
+		return mcpserver.Err("validation", "query required"), ThreadsDiscoverOut{}, nil
+	}
+	mode := in.Mode
+	if mode == "" {
+		mode = "posts"
+	}
+	switch mode {
+	case "posts":
+		posts, err := d.Svc.Threads.DiscoverPosts(ctx, in.Query)
+		if err != nil {
+			return nil, ThreadsDiscoverOut{}, fmt.Errorf("threads_discover: %w", err)
+		}
+		out := ThreadsDiscoverOut{Mode: mode, Posts: make([]ThreadsDiscoveredPostOut, 0, len(posts))}
+		for _, p := range posts {
+			item := ThreadsDiscoveredPostOut{
+				PK: p.PK, Code: p.Code, Username: p.User.Username, UserPK: p.User.PK,
+				FullName: p.User.FullName, Caption: p.Caption, LikeCount: p.LikeCount,
+			}
+			if p.TakenAt > 0 {
+				item.TakenAt = time.Unix(p.TakenAt, 0).UTC().Format(time.RFC3339)
+			}
+			out.Posts = append(out.Posts, item)
+		}
+		return nil, out, nil
+	case "viral":
+		raw, err := d.Svc.Threads.DiscoverViral(ctx, in.Query)
+		if err != nil {
+			return nil, ThreadsDiscoverOut{}, fmt.Errorf("threads_discover: %w", err)
+		}
+		return nil, ThreadsDiscoverOut{Mode: mode, Text: string(raw)}, nil
+	case "latest":
+		raw, err := d.Svc.Threads.DiscoverLatest(ctx, in.Query)
+		if err != nil {
+			return nil, ThreadsDiscoverOut{}, fmt.Errorf("threads_discover: %w", err)
+		}
+		return nil, ThreadsDiscoverOut{Mode: mode, Text: string(raw)}, nil
+	default:
+		return mcpserver.Err("validation", "mode must be posts, viral, or latest"), ThreadsDiscoverOut{}, nil
+	}
+}

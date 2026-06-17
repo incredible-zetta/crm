@@ -10,12 +10,65 @@ import (
 )
 
 type ThreadsService struct {
-	gateway port.ThreadsGateway
-	repo    port.ThreadsRepo
+	gateway      port.ThreadsGateway
+	repo         port.ThreadsRepo
+	discovery    port.ThreadsDiscovery  // cookie-only discovery binary (optional)
+	discoCookies func() (string, error) // server-side cookie source for discovery
 }
 
 func NewThreadsService(gateway port.ThreadsGateway, repo port.ThreadsRepo) *ThreadsService {
 	return &ThreadsService{gateway: gateway, repo: repo}
+}
+
+// SetDiscovery attaches the cookie-only discovery runner plus a server-side
+// cookie source. cookies returns a Netscape cookie-file blob for the account's
+// logged-in session. Optional; when unset the discovery methods return an error.
+func (s *ThreadsService) SetDiscovery(d port.ThreadsDiscovery, cookies func() (string, error)) {
+	s.discovery = d
+	s.discoCookies = cookies
+}
+
+func (s *ThreadsService) discoveryReady() (string, error) {
+	if s.discovery == nil {
+		return "", fmt.Errorf("threads discovery not configured")
+	}
+	if s.discoCookies == nil {
+		return "", fmt.Errorf("threads discovery cookies not configured")
+	}
+	return s.discoCookies()
+}
+
+// DiscoverPosts runs cookie-only search-posts via the discovery binary.
+func (s *ThreadsService) DiscoverPosts(ctx context.Context, query string) ([]domain.ThreadsDiscoveredPost, error) {
+	cookies, err := s.discoveryReady()
+	if err != nil {
+		return nil, err
+	}
+	posts, raw, err := s.discovery.SearchPosts(ctx, cookies, query)
+	s.audit(ctx, "discover_posts", query, err, raw)
+	return posts, err
+}
+
+// DiscoverViral runs cookie-only `viral <topic>`; raw text output is returned.
+func (s *ThreadsService) DiscoverViral(ctx context.Context, topic string) ([]byte, error) {
+	cookies, err := s.discoveryReady()
+	if err != nil {
+		return nil, err
+	}
+	raw, err := s.discovery.Viral(ctx, cookies, topic)
+	s.audit(ctx, "discover_viral", topic, err, raw)
+	return raw, err
+}
+
+// DiscoverLatest runs cookie-only `latest <topic>`; raw text output is returned.
+func (s *ThreadsService) DiscoverLatest(ctx context.Context, topic string) ([]byte, error) {
+	cookies, err := s.discoveryReady()
+	if err != nil {
+		return nil, err
+	}
+	raw, err := s.discovery.Latest(ctx, cookies, topic)
+	s.audit(ctx, "discover_latest", topic, err, raw)
+	return raw, err
 }
 
 func (s *ThreadsService) Profile(ctx context.Context) (domain.ThreadsProfile, error) {

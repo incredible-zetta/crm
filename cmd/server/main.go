@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -16,6 +17,7 @@ import (
 	"github.com/incredible-zetta/crm/internal/adapter/mysql"
 	"github.com/incredible-zetta/crm/internal/adapter/system"
 	threadsadapter "github.com/incredible-zetta/crm/internal/adapter/threads"
+	"github.com/incredible-zetta/crm/internal/adapter/threadsdisc"
 	"github.com/incredible-zetta/crm/internal/adapter/verify"
 	whatsappadapter "github.com/incredible-zetta/crm/internal/adapter/whatsapp"
 	"github.com/incredible-zetta/crm/internal/config"
@@ -178,6 +180,29 @@ func main() {
 	} else {
 		svc.Threads = nil
 		debugLog(debug, "threads disabled: set THREADS_ACCESS_TOKEN to enable")
+	}
+
+	// Threads cookie-only discovery (x-threads-utils binary). Independent of the
+	// Graph API channel: needs THREADS_DISCOVERY_BIN + THREADS_COOKIES_FILE.
+	if cfg.ThreadsDiscoveryEnabled() {
+		discovery, err := threadsdisc.New(threadsdisc.Config{BinPath: cfg.ThreadsDiscoveryBin})
+		if err != nil {
+			log.Fatalf("failed to create threads discovery runner: %v", err)
+		}
+		if svc.Threads == nil {
+			svc.Threads = service.NewThreadsService(nil, store.Threads())
+		}
+		cookieFile := cfg.ThreadsCookiesFile
+		svc.Threads.SetDiscovery(discovery, func() (string, error) {
+			b, err := os.ReadFile(cookieFile)
+			if err != nil {
+				return "", fmt.Errorf("read threads cookie file: %w", err)
+			}
+			return string(b), nil
+		})
+		debugLog(debug, "threads discovery enabled: bin=%s cookies=%s", cfg.ThreadsDiscoveryBin, cfg.ThreadsCookiesFile)
+	} else {
+		debugLog(debug, "threads discovery disabled: set THREADS_DISCOVERY_BIN + THREADS_COOKIES_FILE to enable")
 	}
 
 	// Email verification (self-hosted: syntax + DNS/MX + heuristics).
