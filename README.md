@@ -206,8 +206,11 @@ All config comes from environment variables (EasyPanel injects them). See `.env.
 | `THREADS_APP_SECRET` | no | — | Threads app secret, required only for `threads_token_exchange`; never log/commit it |
 | `THREADS_USER_ID` | no | `me` | Threads user ID for profile/list/publish/reply endpoints |
 | `THREADS_API_VERSION` | no | `v1.0` | Threads Graph API version |
-| `THREADS_DISCOVERY_BIN` | no | — | Path to the [x-threads-utils](https://github.com/incredible-zetta/x-threads-utils/releases) `threads` binary. With `THREADS_COOKIES_FILE`, enables the cookie-only `threads_discover` tool (no token) |
-| `THREADS_COOKIES_FILE` | no | — | Path to a Netscape cookie-file export of a logged-in threads.com session, used by `threads_discover`. Holds a live session; never commit it |
+| `THREADS_DISCOVERY_BIN` | no | — | Path to the [x-threads-utils](https://github.com/incredible-zetta/x-threads-utils/releases) `threads` binary. With `THREADS_COOKIES_FILE`, enables the cookie-only `threads_discover` tool (no token). If the file is missing and `GH_TOKEN` is set, the server auto-downloads it on start |
+| `THREADS_COOKIES_FILE` | no | — | Path to a Netscape cookie-file export of a logged-in threads.com session, used by `threads_discover`. Holds a live session; never commit it. Mount it into the container manually |
+| `GH_TOKEN` / `GITHUB_TOKEN` | no | — | GitHub token (read access) used to auto-download the private `threads` discovery binary to `THREADS_DISCOVERY_BIN` when it is missing. Never logged |
+| `THREADS_DISCOVERY_REPO` | no | `incredible-zetta/x-threads-utils` | Override the release repo for the auto-download |
+| `THREADS_DISCOVERY_TAG` | no | `latest` | Override the release tag for the auto-download |
 | `WA_BASE_URL` | no | — | WhatsApp gateway base URL. Set (with `WA_DEVICE_ID`) to enable the WhatsApp channel |
 | `WA_BASIC_AUTH` | no | — | Raw base64 of `user:pass` for gateway Basic Auth (never logged) |
 | `WA_DEVICE_ID` | no | `cds` | `x-device-id` header sent to the gateway |

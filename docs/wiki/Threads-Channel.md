@@ -347,17 +347,26 @@ threads.com using only the cookie.
 
 ### Setup
 
-1. Download the `threads` binary for your OS/arch from the
-   [releases page](https://github.com/incredible-zetta/x-threads-utils/releases)
-   and extract it.
+1. Provision the `threads` binary one of two ways:
+   - **Auto-download (recommended for containers):** set `GH_TOKEN` (a GitHub
+     token with read access — the release repo is private) and
+     `THREADS_DISCOVERY_BIN` to a writable path. On start, if the binary is
+     missing, the server downloads the release archive for its OS/arch and
+     extracts the binary to that path. Already present → no download. Optional
+     `THREADS_DISCOVERY_REPO` / `THREADS_DISCOVERY_TAG` override the source.
+   - **Manual:** download the `threads` binary for your OS/arch from the
+     [releases page](https://github.com/incredible-zetta/x-threads-utils/releases),
+     extract it, and point `THREADS_DISCOVERY_BIN` at it.
 2. Export a Netscape cookie file for a logged-in `www.threads.com` session
    (use a browser "cookies.txt" extension). Needs `sessionid`, `ds_user_id`,
-   `csrftoken`, `mid`, `ig_did`, `rur`.
+   `csrftoken`, `mid`, `ig_did`, `rur`. Mount it into the container manually
+   (it is never auto-downloaded — it holds a live session).
 3. Set env:
 
    ```env
-   THREADS_DISCOVERY_BIN=/opt/threads/threads
-   THREADS_COOKIES_FILE=/opt/threads/www.threads.com_cookies.txt
+   GH_TOKEN=ghp_xxx              # only needed for auto-download
+   THREADS_DISCOVERY_BIN=/data/threads
+   THREADS_COOKIES_FILE=/data/www.threads.com_cookies.txt
    ```
 
 The server reads the cookie file at call time and never exposes it to the agent.
