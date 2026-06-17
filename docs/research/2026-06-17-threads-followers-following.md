@@ -89,6 +89,11 @@ Graph-API MCP.
 
 ## Recommendation
 
+> **Status: implemented 2026-06-17** — option 2 (followers_count on `threads_profile`)
+> and option 3 (`threads_follower_demographics` tool) shipped on branch
+> `research/threads-followers-following`. Following count / follower lists remain
+> unimplementable on the official API and are documented as unsupported.
+
 - Short term: document option 1 in `threads://publishing` + wiki so agents know
   `followers_count` comes from `threads_insights`, and that following/lists are
   unavailable.

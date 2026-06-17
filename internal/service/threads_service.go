@@ -75,6 +75,12 @@ func (s *ThreadsService) Insights(ctx context.Context, mediaID string) ([]domain
 	return items, err
 }
 
+func (s *ThreadsService) FollowerDemographics(ctx context.Context, breakdown string) (map[string]any, error) {
+	out, raw, err := s.gateway.FollowerDemographics(ctx, breakdown)
+	s.audit(ctx, "follower_demographics", "", err, raw)
+	return out, err
+}
+
 func (s *ThreadsService) Replies(ctx context.Context, mediaID string, limit int, cursor string) ([]domain.ThreadsReply, string, error) {
 	items, next, err := s.gateway.Replies(ctx, mediaID, limit, cursor)
 	s.audit(ctx, "replies", mediaID, err, nil)

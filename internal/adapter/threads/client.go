@@ -59,7 +59,40 @@ func (c *Client) Profile(ctx context.Context) (domain.ThreadsProfile, []byte, er
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return domain.ThreadsProfile{}, raw, err
 	}
+	// Best-effort follower count from the user insights metric. A brand-new
+	// account (or missing scope) may not return it; leave nil in that case
+	// rather than failing the whole profile fetch.
+	if n, ok := c.followersCount(ctx); ok {
+		p.FollowersCount = &n
+	}
 	return p, raw, nil
+}
+
+// followersCount reads the lifetime followers_count user-insight metric. It is
+// best-effort: any error (no scope, <0 followers window, brand-new account)
+// returns ok=false so the caller can omit the field.
+func (c *Client) followersCount(ctx context.Context) (int64, bool) {
+	raw, err := c.get(ctx, "/"+c.userID+"/threads_insights", url.Values{"metric": {"followers_count"}})
+	if err != nil {
+		return 0, false
+	}
+	var page struct {
+		Data []struct {
+			Name       string `json:"name"`
+			TotalValue struct {
+				Value *int64 `json:"value"`
+			} `json:"total_value"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &page); err != nil {
+		return 0, false
+	}
+	for _, d := range page.Data {
+		if d.Name == "followers_count" && d.TotalValue.Value != nil {
+			return *d.TotalValue.Value, true
+		}
+	}
+	return 0, false
 }
 
 func (c *Client) List(ctx context.Context, limit int, cursor string) ([]domain.ThreadsPost, string, error) {
@@ -166,6 +199,33 @@ func (c *Client) Insights(ctx context.Context, mediaID string) ([]domain.Threads
 		items = append(items, domain.ThreadsInsight{Name: fmt.Sprint(m["name"]), RawValue: m})
 	}
 	return items, raw, nil
+}
+
+// FollowerDemographics fetches the aggregate follower_demographics user insight.
+// breakdown must be one of country, city, age, gender (default country). The
+// Threads API requires the profile to have at least 100 followers; otherwise
+// the API returns an error which is surfaced to the caller.
+func (c *Client) FollowerDemographics(ctx context.Context, breakdown string) (map[string]any, []byte, error) {
+	breakdown = strings.ToLower(strings.TrimSpace(breakdown))
+	switch breakdown {
+	case "country", "city", "age", "gender":
+	case "":
+		breakdown = "country"
+	default:
+		return nil, nil, fmt.Errorf("invalid breakdown %q: must be country, city, age, or gender", breakdown)
+	}
+	raw, err := c.get(ctx, "/"+c.userID+"/threads_insights", url.Values{
+		"metric":    {"follower_demographics"},
+		"breakdown": {breakdown},
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	var out map[string]any
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, raw, err
+	}
+	return out, raw, nil
 }
 
 func (c *Client) Replies(ctx context.Context, mediaID string, limit int, cursor string) ([]domain.ThreadsReply, string, error) {

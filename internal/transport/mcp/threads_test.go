@@ -31,6 +31,9 @@ func (fakeThreadsGateway) Delete(context.Context, string) error { return nil }
 func (fakeThreadsGateway) Insights(context.Context, string) ([]domain.ThreadsInsight, []byte, error) {
 	return nil, nil, nil
 }
+func (fakeThreadsGateway) FollowerDemographics(context.Context, string) (map[string]any, []byte, error) {
+	return nil, nil, nil
+}
 func (f fakeThreadsGateway) Replies(context.Context, string, int, string) ([]domain.ThreadsReply, string, error) {
 	return f.replies, "", nil
 }
