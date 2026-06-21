@@ -188,6 +188,7 @@ type WhatsAppItemOut struct {
 	MessageID   string `json:"message_id,omitempty"`
 	Direction   string `json:"direction"`
 	Phone       string `json:"phone"`
+	SenderName  string `json:"sender_name,omitempty"`
 	ChatID      string `json:"chat_id,omitempty"`
 	ContactID   *int64 `json:"contact_id,omitempty"`
 	Body        string `json:"body,omitempty"`
@@ -249,16 +250,17 @@ func (d *Deps) WhatsAppList(ctx context.Context, req *mcp.CallToolRequest, in Wh
 
 func toWAItemOut(msg domain.WAMessage) WhatsAppItemOut {
 	out := WhatsAppItemOut{
-		ID:        msg.ID,
-		MessageID: msg.MessageID,
-		Direction: string(msg.Direction),
-		Phone:     msg.Phone,
-		ChatID:    msg.ChatID,
-		ContactID: msg.ContactID,
-		Body:      msg.Body,
-		MediaType: string(msg.MediaType),
-		Status:    string(msg.Status),
-		RepliedTo: msg.RepliedTo,
+		ID:         msg.ID,
+		MessageID:  msg.MessageID,
+		Direction:  string(msg.Direction),
+		Phone:      msg.Phone,
+		SenderName: msg.SenderName,
+		ChatID:     msg.ChatID,
+		ContactID:  msg.ContactID,
+		Body:       msg.Body,
+		MediaType:  string(msg.MediaType),
+		Status:     string(msg.Status),
+		RepliedTo:  msg.RepliedTo,
 	}
 	if msg.SentAt != nil {
 		out.SentAt = msg.SentAt.Format(time.RFC3339)

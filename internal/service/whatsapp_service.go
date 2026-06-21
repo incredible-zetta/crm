@@ -353,6 +353,7 @@ func (s *WhatsAppService) IngestMessage(ctx context.Context, evt domain.WAInboun
 		ChatID:     evt.ChatID,
 		Direction:  domain.WAInbound,
 		Phone:      phone,
+		SenderName: evt.FromName,
 		ContactID:  contactID,
 		Body:       evt.Body,
 		MediaType:  mediaType,
