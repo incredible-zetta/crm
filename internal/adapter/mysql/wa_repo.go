@@ -113,6 +113,14 @@ func (r *waMessageRepo) List(ctx context.Context, f domain.WAInboundFilter, p po
 		where = append(where, "chat_id = ?")
 		args = append(args, f.ChatID)
 	}
+	if f.Since != nil {
+		where = append(where, "created_at >= ?")
+		args = append(args, f.Since.UTC())
+	}
+	if f.Until != nil {
+		where = append(where, "created_at <= ?")
+		args = append(args, f.Until.UTC())
+	}
 	whereSQL := " WHERE " + strings.Join(where, " AND ")
 
 	var total int

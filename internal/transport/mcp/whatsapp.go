@@ -159,6 +159,17 @@ func (d *Deps) WhatsAppSend(ctx context.Context, req *mcp.CallToolRequest, in Wh
 
 // --- List ---
 
+// parseWATime accepts RFC3339, a date-only "2006-01-02", or "2006-01-02 15:04:05".
+func parseWATime(s string) (time.Time, error) {
+	layouts := []string{time.RFC3339, "2006-01-02 15:04:05", "2006-01-02"}
+	for _, l := range layouts {
+		if t, err := time.Parse(l, s); err == nil {
+			return t.UTC(), nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("use RFC3339 or YYYY-MM-DD")
+}
+
 type WhatsAppListIn struct {
 	Direction string `json:"direction,omitempty"` // "in" | "out" | ""
 	Unread    bool   `json:"unread,omitempty"`
@@ -166,6 +177,8 @@ type WhatsAppListIn struct {
 	ContactID int64  `json:"contact_id,omitempty"`
 	Phone     string `json:"phone,omitempty"`
 	ChatID    string `json:"chat_id,omitempty"` // group/chat JID, e.g. 120363...@g.us
+	Since     string `json:"since,omitempty"`   // RFC3339 or date; created_at >= since
+	Until     string `json:"until,omitempty"`   // RFC3339 or date; created_at <= until
 	Limit     int    `json:"limit,omitempty"`
 	Cursor    int64  `json:"cursor,omitempty"`
 }
@@ -208,6 +221,20 @@ func (d *Deps) WhatsAppList(ctx context.Context, req *mcp.CallToolRequest, in Wh
 		ContactID:  contactID,
 		Phone:      in.Phone,
 		ChatID:     in.ChatID,
+	}
+	if in.Since != "" {
+		t, err := parseWATime(in.Since)
+		if err != nil {
+			return mcpserver.Err("validation", "invalid since: "+err.Error()), WhatsAppListOut{}, nil
+		}
+		f.Since = &t
+	}
+	if in.Until != "" {
+		t, err := parseWATime(in.Until)
+		if err != nil {
+			return mcpserver.Err("validation", "invalid until: "+err.Error()), WhatsAppListOut{}, nil
+		}
+		f.Until = &t
 	}
 	page, err := d.Svc.WhatsApp.List(ctx, f, port.Paging{Limit: in.Limit, Cursor: in.Cursor})
 	if err != nil {

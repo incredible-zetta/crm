@@ -117,6 +117,8 @@ type WAInboundFilter struct {
 	ContactID  *int64
 	Phone      string
 	ChatID     string
+	Since      *time.Time // created_at >= Since
+	Until      *time.Time // created_at <= Until
 }
 
 // WAListener configures AI-visible listening for a WhatsApp chat/group JID.
