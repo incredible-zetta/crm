@@ -350,6 +350,7 @@ func (s *WhatsAppService) IngestMessage(ctx context.Context, evt domain.WAInboun
 	now := s.clock.Now()
 	msg := domain.WAMessage{
 		MessageID:  evt.MessageID,
+		ChatID:     evt.ChatID,
 		Direction:  domain.WAInbound,
 		Phone:      phone,
 		ContactID:  contactID,
