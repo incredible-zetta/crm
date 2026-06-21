@@ -112,6 +112,179 @@ func (s *WhatsAppService) ListContacts(ctx context.Context) ([]port.WhatsAppCont
 	return s.gateway.ListContacts(ctx)
 }
 
+// JoinGroup joins a group by invite link and returns the joined group JID.
+func (s *WhatsAppService) JoinGroup(ctx context.Context, inviteLink string) (string, error) {
+	if s.gateway == nil {
+		return "", fmt.Errorf("whatsapp disabled")
+	}
+	return s.gateway.JoinGroup(ctx, inviteLink)
+}
+
+// LeaveGroup leaves a group by JID.
+func (s *WhatsAppService) LeaveGroup(ctx context.Context, groupJID string) error {
+	if s.gateway == nil {
+		return fmt.Errorf("whatsapp disabled")
+	}
+	return s.gateway.LeaveGroup(ctx, groupJID)
+}
+
+// GroupInfoFromLink previews group metadata from an invite link without joining.
+func (s *WhatsAppService) GroupInfoFromLink(ctx context.Context, inviteLink string) (port.WhatsAppGroup, error) {
+	if s.gateway == nil {
+		return port.WhatsAppGroup{}, fmt.Errorf("whatsapp disabled")
+	}
+	return s.gateway.GroupInfoFromLink(ctx, inviteLink)
+}
+
+// manageGateway returns the extended group/account management surface, or an
+// error if the configured gateway does not support it.
+func (s *WhatsAppService) manageGateway() (port.WhatsAppManageGateway, error) {
+	if s.gateway == nil {
+		return nil, fmt.Errorf("whatsapp disabled")
+	}
+	m, ok := s.gateway.(port.WhatsAppManageGateway)
+	if !ok {
+		return nil, fmt.Errorf("whatsapp management not supported by gateway")
+	}
+	return m, nil
+}
+
+func (s *WhatsAppService) CreateGroup(ctx context.Context, title string, participants []string) (string, error) {
+	m, err := s.manageGateway()
+	if err != nil {
+		return "", err
+	}
+	return m.CreateGroup(ctx, title, participants)
+}
+
+func (s *WhatsAppService) GroupInfo(ctx context.Context, groupJID string) (port.WhatsAppGroupInfo, error) {
+	m, err := s.manageGateway()
+	if err != nil {
+		return port.WhatsAppGroupInfo{}, err
+	}
+	return m.GroupInfo(ctx, groupJID)
+}
+
+func (s *WhatsAppService) GroupParticipants(ctx context.Context, groupJID string) ([]port.WhatsAppParticipant, error) {
+	m, err := s.manageGateway()
+	if err != nil {
+		return nil, err
+	}
+	return m.GroupParticipants(ctx, groupJID)
+}
+
+func (s *WhatsAppService) ManageParticipants(ctx context.Context, groupJID, action string, participants []string) ([]port.WhatsAppParticipantResult, error) {
+	m, err := s.manageGateway()
+	if err != nil {
+		return nil, err
+	}
+	return m.ManageParticipants(ctx, groupJID, action, participants)
+}
+
+func (s *WhatsAppService) GroupParticipantRequests(ctx context.Context, groupJID string) ([]port.WhatsAppParticipant, error) {
+	m, err := s.manageGateway()
+	if err != nil {
+		return nil, err
+	}
+	return m.GroupParticipantRequests(ctx, groupJID)
+}
+
+func (s *WhatsAppService) ReviewParticipantRequests(ctx context.Context, groupJID, action string, participants []string) error {
+	m, err := s.manageGateway()
+	if err != nil {
+		return err
+	}
+	return m.ReviewParticipantRequests(ctx, groupJID, action, participants)
+}
+
+func (s *WhatsAppService) SetGroupName(ctx context.Context, groupJID, name string) error {
+	m, err := s.manageGateway()
+	if err != nil {
+		return err
+	}
+	return m.SetGroupName(ctx, groupJID, name)
+}
+
+func (s *WhatsAppService) SetGroupTopic(ctx context.Context, groupJID, topic string) error {
+	m, err := s.manageGateway()
+	if err != nil {
+		return err
+	}
+	return m.SetGroupTopic(ctx, groupJID, topic)
+}
+
+func (s *WhatsAppService) SetGroupLocked(ctx context.Context, groupJID string, locked bool) error {
+	m, err := s.manageGateway()
+	if err != nil {
+		return err
+	}
+	return m.SetGroupLocked(ctx, groupJID, locked)
+}
+
+func (s *WhatsAppService) SetGroupAnnounce(ctx context.Context, groupJID string, announce bool) error {
+	m, err := s.manageGateway()
+	if err != nil {
+		return err
+	}
+	return m.SetGroupAnnounce(ctx, groupJID, announce)
+}
+
+func (s *WhatsAppService) GroupInviteLink(ctx context.Context, groupJID string, reset bool) (string, error) {
+	m, err := s.manageGateway()
+	if err != nil {
+		return "", err
+	}
+	return m.GroupInviteLink(ctx, groupJID, reset)
+}
+
+func (s *WhatsAppService) ConnectionStatus(ctx context.Context) (port.WhatsAppConnection, error) {
+	m, err := s.manageGateway()
+	if err != nil {
+		return port.WhatsAppConnection{}, err
+	}
+	return m.ConnectionStatus(ctx)
+}
+
+func (s *WhatsAppService) ListDevices(ctx context.Context) ([]port.WhatsAppDevice, error) {
+	m, err := s.manageGateway()
+	if err != nil {
+		return nil, err
+	}
+	return m.ListDevices(ctx)
+}
+
+func (s *WhatsAppService) Logout(ctx context.Context) error {
+	m, err := s.manageGateway()
+	if err != nil {
+		return err
+	}
+	return m.Logout(ctx)
+}
+
+func (s *WhatsAppService) Reconnect(ctx context.Context) error {
+	m, err := s.manageGateway()
+	if err != nil {
+		return err
+	}
+	return m.Reconnect(ctx)
+}
+
+func (s *WhatsAppService) UserInfo(ctx context.Context, phone string) (port.WhatsAppUserInfo, error) {
+	m, err := s.manageGateway()
+	if err != nil {
+		return port.WhatsAppUserInfo{}, err
+	}
+	return m.UserInfo(ctx, phone)
+}
+
+func (s *WhatsAppService) SetPushName(ctx context.Context, name string) error {
+	m, err := s.manageGateway()
+	if err != nil {
+		return err
+	}
+	return m.SetPushName(ctx, name)
+}
+
 // CreateListener enables AI-visible listening for a chat/group JID.
 func (s *WhatsAppService) CreateListener(ctx context.Context, chatJID, name string) (domain.WAListener, error) {
 	if s.listeners == nil {
