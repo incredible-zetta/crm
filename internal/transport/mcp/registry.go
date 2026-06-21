@@ -277,6 +277,24 @@ func Register(srv *mcp.Server, d *Deps) {
 	mcp.AddTool(srv, &mcp.Tool{Name: "whatsapp_listener_delete", Description: "Disable/delete a WhatsApp AI listener"}, d.WhatsAppListenerDelete)
 	mcp.AddTool(srv, &mcp.Tool{Name: "whatsapp_listener_summary", Description: "Build a recent-message summary for one WhatsApp AI listener"}, d.WhatsAppListenerSummary)
 
+	mcp.AddTool(srv, &mcp.Tool{Name: "whatsapp_group_join", Description: "Join a WhatsApp group via invite link (https://chat.whatsapp.com/...)"}, d.WhatsAppGroupJoin)
+	mcp.AddTool(srv, &mcp.Tool{Name: "whatsapp_group_leave", Description: "Leave a WhatsApp group by group JID (120363...@g.us)"}, d.WhatsAppGroupLeave)
+	mcp.AddTool(srv, &mcp.Tool{Name: "whatsapp_group_info_from_link", Description: "Preview WhatsApp group info from an invite link without joining"}, d.WhatsAppGroupInfoFromLink)
+
+	mcp.AddTool(srv, &mcp.Tool{Name: "whatsapp_group_create", Description: "Create a WhatsApp group with a title and optional participant phone numbers"}, d.WhatsAppGroupCreate)
+	mcp.AddTool(srv, &mcp.Tool{Name: "whatsapp_group_info", Description: "Get detailed WhatsApp group info (name, topic, settings, participants) by group JID"}, d.WhatsAppGroupInfo)
+	mcp.AddTool(srv, &mcp.Tool{Name: "whatsapp_group_participants", Description: "List participants of a WhatsApp group by group JID"}, d.WhatsAppGroupParticipants)
+	mcp.AddTool(srv, &mcp.Tool{Name: "whatsapp_group_participants_manage", Description: "Add, remove, promote, or demote WhatsApp group participants. action: add|remove|promote|demote"}, d.WhatsAppGroupParticipantsManage)
+	mcp.AddTool(srv, &mcp.Tool{Name: "whatsapp_group_requests", Description: "List pending join requests for a WhatsApp group by group JID"}, d.WhatsAppGroupRequests)
+	mcp.AddTool(srv, &mcp.Tool{Name: "whatsapp_group_requests_review", Description: "Approve or reject pending WhatsApp group join requests. action: approve|reject"}, d.WhatsAppGroupRequestsReview)
+	mcp.AddTool(srv, &mcp.Tool{Name: "whatsapp_group_settings", Description: "Update WhatsApp group settings: name, topic, locked (admin-only info), announce (admin-only messages)"}, d.WhatsAppGroupSettings)
+	mcp.AddTool(srv, &mcp.Tool{Name: "whatsapp_group_invite_link", Description: "Get or reset the invite link for a WhatsApp group by group JID"}, d.WhatsAppGroupInviteLink)
+
+	mcp.AddTool(srv, &mcp.Tool{Name: "whatsapp_account_status", Description: "Get WhatsApp gateway connection and login status"}, d.WhatsAppAccountStatus)
+	mcp.AddTool(srv, &mcp.Tool{Name: "whatsapp_account_devices", Description: "List linked WhatsApp devices"}, d.WhatsAppAccountDevices)
+	mcp.AddTool(srv, &mcp.Tool{Name: "whatsapp_user_info", Description: "Look up a WhatsApp user's profile (verified name, status, devices) by phone"}, d.WhatsAppUserInfo)
+	mcp.AddTool(srv, &mcp.Tool{Name: "whatsapp_set_push_name", Description: "Change the WhatsApp account display (push) name"}, d.WhatsAppSetPushName)
+
 	// Group 11: Threads (threads.go)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_profile", Description: "Fetch Threads profile for configured user, including followers_count (best-effort from user insights; omitted on brand-new accounts or without insights scope)"}, d.ThreadsProfile)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_profile_lookup", Description: "Look up any PUBLIC Threads profile by username (profile discovery). Returns name, biography, picture, is_verified and public counters including follower_count, likes_count, quotes_count, replies_count, reposts_count, views_count. No 100-follower gate. Does NOT return a following count or follower/following lists (the API does not expose them). Requires threads_profile_discovery scope."}, d.ThreadsProfileLookup)

@@ -28,6 +28,11 @@ func (f *fakeGateway) ListGroups(ctx context.Context) ([]port.WhatsAppGroup, err
 func (f *fakeGateway) ListContacts(ctx context.Context) ([]port.WhatsAppContact, error) {
 	return nil, nil
 }
+func (f *fakeGateway) JoinGroup(ctx context.Context, link string) (string, error) { return "", nil }
+func (f *fakeGateway) LeaveGroup(ctx context.Context, jid string) error           { return nil }
+func (f *fakeGateway) GroupInfoFromLink(ctx context.Context, link string) (port.WhatsAppGroup, error) {
+	return port.WhatsAppGroup{}, nil
+}
 func (f *fakeGateway) SendMedia(ctx context.Context, msg port.WhatsAppMediaMessage) (port.WhatsAppSendResult, error) {
 	return port.WhatsAppSendResult{}, nil
 }

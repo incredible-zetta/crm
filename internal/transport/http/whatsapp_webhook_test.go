@@ -34,6 +34,11 @@ func (whFakeGateway) ListGroups(ctx context.Context) ([]port.WhatsAppGroup, erro
 func (whFakeGateway) ListContacts(ctx context.Context) ([]port.WhatsAppContact, error) {
 	return nil, nil
 }
+func (whFakeGateway) JoinGroup(ctx context.Context, link string) (string, error) { return "", nil }
+func (whFakeGateway) LeaveGroup(ctx context.Context, jid string) error           { return nil }
+func (whFakeGateway) GroupInfoFromLink(ctx context.Context, link string) (port.WhatsAppGroup, error) {
+	return port.WhatsAppGroup{}, nil
+}
 func (whFakeGateway) SendMedia(ctx context.Context, msg port.WhatsAppMediaMessage) (port.WhatsAppSendResult, error) {
 	return port.WhatsAppSendResult{}, nil
 }
