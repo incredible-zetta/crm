@@ -327,3 +327,24 @@ func TestWAListTool(t *testing.T) {
 		t.Errorf("items = %d, want 1", len(out.Items))
 	}
 }
+
+func TestWAListInvalidSince(t *testing.T) {
+	h := setupTestDeps(t)
+	wireWA(h, &waGwFake{})
+	res, _, _ := h.deps.WhatsAppList(context.Background(), nil, mcptransport.WhatsAppListIn{Since: "not-a-date"})
+	if code := waErrCode(t, res); code != "validation" {
+		t.Errorf("error code = %q, want validation", code)
+	}
+}
+
+func TestWAListAcceptsDateRange(t *testing.T) {
+	h := setupTestDeps(t)
+	wireWA(h, &waGwFake{})
+	res, _, err := h.deps.WhatsAppList(context.Background(), nil, mcptransport.WhatsAppListIn{Since: "2026-06-01", Until: "2026-06-21T23:59:59Z", ChatID: "120363@g.us"})
+	if err != nil {
+		t.Fatalf("go error: %v", err)
+	}
+	if res != nil && res.IsError {
+		t.Fatalf("unexpected error envelope")
+	}
+}

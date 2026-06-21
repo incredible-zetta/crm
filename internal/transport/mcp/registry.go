@@ -233,7 +233,7 @@ func Register(srv *mcp.Server, d *Deps) {
 
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "whatsapp_list",
-		Description: "List WhatsApp messages (inbound + outbound) with filtering",
+		Description: "List WhatsApp messages (inbound + outbound). Filters: direction, unread, known_only, contact_id, phone, chat_id (group/chat JID e.g. 120363...@g.us), since/until (RFC3339 or YYYY-MM-DD, on created_at), limit, cursor.",
 	}, d.WhatsAppList)
 
 	mcp.AddTool(srv, &mcp.Tool{
