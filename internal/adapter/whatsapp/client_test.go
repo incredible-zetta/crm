@@ -80,6 +80,49 @@ func TestClientSend(t *testing.T) {
 	}
 }
 
+func TestClientListGroups(t *testing.T) {
+	c, srv := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/user/my/groups" {
+			t.Fatalf("route = %s %s", r.Method, r.URL.Path)
+		}
+		_, _ = w.Write([]byte(`{"code":"SUCCESS","results":[{"jid":"120363@g.us","name":"Team","topic":"Ops","participants":[{},{}]}]}`))
+	})
+	defer srv.Close()
+	groups, err := c.ListGroups(context.Background())
+	if err != nil {
+		t.Fatalf("ListGroups: %v", err)
+	}
+	if len(groups) != 1 || groups[0].JID != "120363@g.us" || groups[0].Participant != 2 {
+		t.Fatalf("groups = %+v", groups)
+	}
+}
+
+func TestClientSendImageByURL(t *testing.T) {
+	c, srv := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/send/image" {
+			t.Fatalf("route = %s %s", r.Method, r.URL.Path)
+		}
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			t.Fatalf("parse multipart: %v", err)
+		}
+		if r.FormValue("phone") != "628123456789" {
+			t.Errorf("phone = %q", r.FormValue("phone"))
+		}
+		if r.FormValue("caption") != "caption" || r.FormValue("image_url") != "https://example.com/x.jpg" {
+			t.Errorf("form = %+v", r.MultipartForm.Value)
+		}
+		_, _ = w.Write([]byte(`{"code":"SUCCESS","message":"sent","results":{"message_id":"IMG1","status":"sent"}}`))
+	})
+	defer srv.Close()
+	res, err := c.SendMedia(context.Background(), port.WhatsAppMediaMessage{Phone: "08123456789", Kind: "image", URL: "https://example.com/x.jpg", Caption: "caption"})
+	if err != nil {
+		t.Fatalf("SendMedia: %v", err)
+	}
+	if res.MessageID != "IMG1" {
+		t.Errorf("message id = %q", res.MessageID)
+	}
+}
+
 func TestClientErrorSanitized(t *testing.T) {
 	c, srv := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)

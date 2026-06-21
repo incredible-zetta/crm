@@ -50,6 +50,15 @@ func (g *fakeWAGateway) MarkRead(ctx context.Context, messageID, phone string) e
 func (g *fakeWAGateway) DownloadMedia(ctx context.Context, messageID, phone string) (port.WhatsAppMedia, error) {
 	return port.WhatsAppMedia{URL: g.mediaURL, MimeType: "image/jpeg"}, nil
 }
+func (g *fakeWAGateway) ListGroups(ctx context.Context) ([]port.WhatsAppGroup, error) {
+	return nil, nil
+}
+func (g *fakeWAGateway) ListContacts(ctx context.Context) ([]port.WhatsAppContact, error) {
+	return nil, nil
+}
+func (g *fakeWAGateway) SendMedia(ctx context.Context, msg port.WhatsAppMediaMessage) (port.WhatsAppSendResult, error) {
+	return port.WhatsAppSendResult{MessageID: "wamid-media", Status: "sent"}, nil
+}
 
 type fakeWARepo struct {
 	msgs        map[int64]domain.WAMessage
@@ -214,7 +223,7 @@ func (r *fakeWAContactRepo) SetWhatsAppStatus(ctx context.Context, id int64, v d
 }
 
 func newWASvc(gw *fakeWAGateway, repo *fakeWARepo, contacts *fakeWAContactRepo, policy port.SmartSendPolicy) *WhatsAppService {
-	return NewWhatsAppService(gw, repo, contacts, stubClock{now: time.Unix(1000, 0)}, nil, policy)
+	return NewWhatsAppService(gw, repo, nil, contacts, stubClock{now: time.Unix(1000, 0)}, nil, policy)
 }
 
 // --- Send ------------------------------------------------------------------
@@ -483,7 +492,7 @@ func TestWAReplyRejectsOutboundTarget(t *testing.T) {
 // --- disabled guard --------------------------------------------------------
 
 func TestWADisabledWhenGatewayNil(t *testing.T) {
-	svc := NewWhatsAppService(nil, newFakeWARepo(), newFakeWAContactRepo(), stubClock{}, nil, port.SmartSendPolicy{})
+	svc := NewWhatsAppService(nil, newFakeWARepo(), nil, newFakeWAContactRepo(), stubClock{}, nil, port.SmartSendPolicy{})
 	if _, err := svc.Send(context.Background(), "08123456789", "hi"); err == nil {
 		t.Error("expected disabled error from Send")
 	}

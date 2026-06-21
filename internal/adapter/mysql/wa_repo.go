@@ -109,6 +109,10 @@ func (r *waMessageRepo) List(ctx context.Context, f domain.WAInboundFilter, p po
 		where = append(where, "phone = ?")
 		args = append(args, f.Phone)
 	}
+	if f.ChatID != "" {
+		where = append(where, "chat_id = ?")
+		args = append(args, f.ChatID)
+	}
 	whereSQL := " WHERE " + strings.Join(where, " AND ")
 
 	var total int

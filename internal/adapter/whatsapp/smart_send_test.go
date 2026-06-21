@@ -24,6 +24,13 @@ func (f *fakeGateway) MarkRead(ctx context.Context, id, phone string) error { re
 func (f *fakeGateway) DownloadMedia(ctx context.Context, id, phone string) (port.WhatsAppMedia, error) {
 	return port.WhatsAppMedia{}, nil
 }
+func (f *fakeGateway) ListGroups(ctx context.Context) ([]port.WhatsAppGroup, error) { return nil, nil }
+func (f *fakeGateway) ListContacts(ctx context.Context) ([]port.WhatsAppContact, error) {
+	return nil, nil
+}
+func (f *fakeGateway) SendMedia(ctx context.Context, msg port.WhatsAppMediaMessage) (port.WhatsAppSendResult, error) {
+	return port.WhatsAppSendResult{}, nil
+}
 
 type fakeCounter struct {
 	perRecipient int
