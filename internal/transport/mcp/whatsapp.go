@@ -379,3 +379,241 @@ func (d *Deps) WhatsAppGetMedia(ctx context.Context, req *mcp.CallToolRequest, i
 	}
 	return nil, WhatsAppGetMediaOut{URL: url}, nil
 }
+
+// --- Groups ---
+
+type WhatsAppGroupsIn struct{}
+
+type WhatsAppContactsIn struct{}
+
+type WhatsAppGroupOut struct {
+	JID         string `json:"jid"`
+	Name        string `json:"name,omitempty"`
+	Topic       string `json:"topic,omitempty"`
+	Participant int    `json:"participant_count,omitempty"`
+}
+
+type WhatsAppGroupsOut struct {
+	Items []WhatsAppGroupOut `json:"items"`
+	Count int                `json:"count"`
+}
+
+type WhatsAppContactOut struct {
+	JID  string `json:"jid"`
+	Name string `json:"name,omitempty"`
+}
+type WhatsAppContactsOut struct {
+	Items []WhatsAppContactOut `json:"items"`
+	Count int                  `json:"count"`
+}
+
+func (d *Deps) WhatsAppGroups(ctx context.Context, req *mcp.CallToolRequest, in WhatsAppGroupsIn) (*mcp.CallToolResult, WhatsAppGroupsOut, error) {
+	if d.Svc.WhatsApp == nil {
+		return mcpserver.Err("disabled", "whatsapp channel not configured"), WhatsAppGroupsOut{}, nil
+	}
+	groups, err := d.Svc.WhatsApp.ListGroups(ctx)
+	if err != nil {
+		return nil, WhatsAppGroupsOut{}, fmt.Errorf("whatsapp_groups: %w", err)
+	}
+	items := make([]WhatsAppGroupOut, len(groups))
+	for i, g := range groups {
+		items[i] = WhatsAppGroupOut{JID: g.JID, Name: g.Name, Topic: g.Topic, Participant: g.Participant}
+	}
+	return nil, WhatsAppGroupsOut{Items: items, Count: len(items)}, nil
+}
+
+func (d *Deps) WhatsAppContacts(ctx context.Context, req *mcp.CallToolRequest, in WhatsAppContactsIn) (*mcp.CallToolResult, WhatsAppContactsOut, error) {
+	if d.Svc.WhatsApp == nil {
+		return mcpserver.Err("disabled", "whatsapp channel not configured"), WhatsAppContactsOut{}, nil
+	}
+	contacts, err := d.Svc.WhatsApp.ListContacts(ctx)
+	if err != nil {
+		return nil, WhatsAppContactsOut{}, fmt.Errorf("whatsapp_contacts: %w", err)
+	}
+	items := make([]WhatsAppContactOut, len(contacts))
+	for i, c := range contacts {
+		items[i] = WhatsAppContactOut{JID: c.JID, Name: c.Name}
+	}
+	return nil, WhatsAppContactsOut{Items: items, Count: len(items)}, nil
+}
+
+// --- Send media ---
+
+type WhatsAppSendMediaIn struct {
+	ID        int64  `json:"id,omitempty"`
+	Phone     string `json:"phone,omitempty"`
+	Kind      string `json:"kind"` // image | video | file
+	URL       string `json:"url,omitempty"`
+	FilePath  string `json:"file_path,omitempty"`
+	Caption   string `json:"caption,omitempty"`
+	ReplyToID string `json:"reply_to_id,omitempty"`
+}
+
+type WhatsAppSendMediaOut struct {
+	ID        int64  `json:"id"`
+	MessageID string `json:"message_id"`
+	Phone     string `json:"phone"`
+	Status    string `json:"status"`
+}
+
+func (d *Deps) WhatsAppSendMedia(ctx context.Context, req *mcp.CallToolRequest, in WhatsAppSendMediaIn) (*mcp.CallToolResult, WhatsAppSendMediaOut, error) {
+	if d.Svc.WhatsApp == nil {
+		return mcpserver.Err("disabled", "whatsapp channel not configured"), WhatsAppSendMediaOut{}, nil
+	}
+	if in.Kind == "" {
+		return mcpserver.Err("validation", "kind required"), WhatsAppSendMediaOut{}, nil
+	}
+	if in.URL == "" && in.FilePath == "" {
+		return mcpserver.Err("validation", "url or file_path required"), WhatsAppSendMediaOut{}, nil
+	}
+	phone := in.Phone
+	if in.ID != 0 {
+		c, err := d.Svc.Contact.Get(ctx, in.ID)
+		if err != nil {
+			if errors.Is(err, domain.ErrNotFound) {
+				return mcpserver.Err("not_found", "contact not found"), WhatsAppSendMediaOut{}, nil
+			}
+			return nil, WhatsAppSendMediaOut{}, fmt.Errorf("whatsapp_send_media: get contact: %w", err)
+		}
+		if c.Phone == "" {
+			return mcpserver.Err("validation", "contact has no phone"), WhatsAppSendMediaOut{}, nil
+		}
+		phone = c.Phone
+	}
+	if phone == "" {
+		return mcpserver.Err("validation", "id or phone required"), WhatsAppSendMediaOut{}, nil
+	}
+	msg, err := d.Svc.WhatsApp.SendMedia(ctx, port.WhatsAppMediaMessage{Phone: phone, Kind: in.Kind, URL: in.URL, FilePath: in.FilePath, Caption: in.Caption, ReplyToID: in.ReplyToID})
+	if err != nil {
+		return nil, WhatsAppSendMediaOut{}, fmt.Errorf("whatsapp_send_media: %w", err)
+	}
+	return nil, WhatsAppSendMediaOut{ID: msg.ID, MessageID: msg.MessageID, Phone: msg.Phone, Status: string(msg.Status)}, nil
+}
+
+// --- Listeners ---
+
+type WhatsAppListenerCreateIn struct {
+	ChatJID string `json:"chat_jid"`
+	Name    string `json:"name,omitempty"`
+}
+type WhatsAppListenerUpdateIn struct {
+	ID      int64  `json:"id"`
+	ChatJID string `json:"chat_jid,omitempty"`
+	Name    string `json:"name,omitempty"`
+	Enabled bool   `json:"enabled"`
+}
+type WhatsAppListenerDeleteIn struct {
+	ID int64 `json:"id"`
+}
+type WhatsAppListenerListIn struct {
+	EnabledOnly bool `json:"enabled_only,omitempty"`
+}
+type WhatsAppListenerSummaryIn struct {
+	ID    int64 `json:"id"`
+	Limit int   `json:"limit,omitempty"`
+}
+
+type WhatsAppListenerOut struct {
+	ID        int64  `json:"id"`
+	ChatJID   string `json:"chat_jid"`
+	Name      string `json:"name,omitempty"`
+	Enabled   bool   `json:"enabled"`
+	Summary   string `json:"summary,omitempty"`
+	CreatedAt string `json:"created_at,omitempty"`
+	UpdatedAt string `json:"updated_at,omitempty"`
+}
+type WhatsAppListenerListOut struct {
+	Items []WhatsAppListenerOut `json:"items"`
+	Count int                   `json:"count"`
+}
+type WhatsAppListenerDeleteOut struct {
+	OK bool `json:"ok"`
+}
+type WhatsAppListenerSummaryOut struct {
+	Listener WhatsAppListenerOut `json:"listener"`
+	Messages []WhatsAppItemOut   `json:"messages"`
+}
+
+func toWAListenerOut(l domain.WAListener) WhatsAppListenerOut {
+	return WhatsAppListenerOut{ID: l.ID, ChatJID: l.ChatJID, Name: l.Name, Enabled: l.Enabled, Summary: l.Summary, CreatedAt: l.CreatedAt.Format(time.RFC3339), UpdatedAt: l.UpdatedAt.Format(time.RFC3339)}
+}
+
+func (d *Deps) WhatsAppListenerCreate(ctx context.Context, req *mcp.CallToolRequest, in WhatsAppListenerCreateIn) (*mcp.CallToolResult, WhatsAppListenerOut, error) {
+	if d.Svc.WhatsApp == nil {
+		return mcpserver.Err("disabled", "whatsapp channel not configured"), WhatsAppListenerOut{}, nil
+	}
+	if in.ChatJID == "" {
+		return mcpserver.Err("validation", "chat_jid required"), WhatsAppListenerOut{}, nil
+	}
+	l, err := d.Svc.WhatsApp.CreateListener(ctx, in.ChatJID, in.Name)
+	if err != nil {
+		return nil, WhatsAppListenerOut{}, fmt.Errorf("whatsapp_listener_create: %w", err)
+	}
+	return nil, toWAListenerOut(l), nil
+}
+
+func (d *Deps) WhatsAppListenerList(ctx context.Context, req *mcp.CallToolRequest, in WhatsAppListenerListIn) (*mcp.CallToolResult, WhatsAppListenerListOut, error) {
+	if d.Svc.WhatsApp == nil {
+		return mcpserver.Err("disabled", "whatsapp channel not configured"), WhatsAppListenerListOut{}, nil
+	}
+	items, err := d.Svc.WhatsApp.ListListeners(ctx, in.EnabledOnly)
+	if err != nil {
+		return nil, WhatsAppListenerListOut{}, fmt.Errorf("whatsapp_listener_list: %w", err)
+	}
+	out := make([]WhatsAppListenerOut, len(items))
+	for i, item := range items {
+		out[i] = toWAListenerOut(item)
+	}
+	return nil, WhatsAppListenerListOut{Items: out, Count: len(out)}, nil
+}
+
+func (d *Deps) WhatsAppListenerUpdate(ctx context.Context, req *mcp.CallToolRequest, in WhatsAppListenerUpdateIn) (*mcp.CallToolResult, WhatsAppListenerOut, error) {
+	if d.Svc.WhatsApp == nil {
+		return mcpserver.Err("disabled", "whatsapp channel not configured"), WhatsAppListenerOut{}, nil
+	}
+	if in.ID == 0 {
+		return mcpserver.Err("validation", "id required"), WhatsAppListenerOut{}, nil
+	}
+	l, err := d.Svc.WhatsApp.UpdateListener(ctx, in.ID, in.ChatJID, in.Name, in.Enabled)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return mcpserver.Err("not_found", "listener not found"), WhatsAppListenerOut{}, nil
+		}
+		return nil, WhatsAppListenerOut{}, fmt.Errorf("whatsapp_listener_update: %w", err)
+	}
+	return nil, toWAListenerOut(l), nil
+}
+
+func (d *Deps) WhatsAppListenerDelete(ctx context.Context, req *mcp.CallToolRequest, in WhatsAppListenerDeleteIn) (*mcp.CallToolResult, WhatsAppListenerDeleteOut, error) {
+	if d.Svc.WhatsApp == nil {
+		return mcpserver.Err("disabled", "whatsapp channel not configured"), WhatsAppListenerDeleteOut{}, nil
+	}
+	if in.ID == 0 {
+		return mcpserver.Err("validation", "id required"), WhatsAppListenerDeleteOut{}, nil
+	}
+	if err := d.Svc.WhatsApp.DeleteListener(ctx, in.ID); err != nil {
+		return nil, WhatsAppListenerDeleteOut{}, fmt.Errorf("whatsapp_listener_delete: %w", err)
+	}
+	return nil, WhatsAppListenerDeleteOut{OK: true}, nil
+}
+
+func (d *Deps) WhatsAppListenerSummary(ctx context.Context, req *mcp.CallToolRequest, in WhatsAppListenerSummaryIn) (*mcp.CallToolResult, WhatsAppListenerSummaryOut, error) {
+	if d.Svc.WhatsApp == nil {
+		return mcpserver.Err("disabled", "whatsapp channel not configured"), WhatsAppListenerSummaryOut{}, nil
+	}
+	if in.ID == 0 {
+		return mcpserver.Err("validation", "id required"), WhatsAppListenerSummaryOut{}, nil
+	}
+	l, msgs, err := d.Svc.WhatsApp.ListenerSummary(ctx, in.ID, in.Limit)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return mcpserver.Err("not_found", "listener not found"), WhatsAppListenerSummaryOut{}, nil
+		}
+		return nil, WhatsAppListenerSummaryOut{}, fmt.Errorf("whatsapp_listener_summary: %w", err)
+	}
+	outMsgs := make([]WhatsAppItemOut, len(msgs))
+	for i, msg := range msgs {
+		outMsgs[i] = toWAItemOut(msg)
+	}
+	return nil, WhatsAppListenerSummaryOut{Listener: toWAListenerOut(l), Messages: outMsgs}, nil
+}

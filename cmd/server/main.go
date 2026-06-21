@@ -153,7 +153,7 @@ func main() {
 				policy.RateMax, cfg.WASendWindowSec, policy.DailyCapPerRecipient, policy.WarmupPerDay,
 				cfg.WAJitterMinMS, cfg.WAJitterMaxMS)
 		}
-		svc.WhatsApp = service.NewWhatsAppService(gw, store.WhatsApp(), store.Contacts(), system.RealClock{}, nil, port.SmartSendPolicy{
+		svc.WhatsApp = service.NewWhatsAppService(gw, store.WhatsApp(), store.WhatsAppListeners(), store.Contacts(), system.RealClock{}, nil, port.SmartSendPolicy{
 			BlockNotRegistered: cfg.WABlockUnregistered,
 			MaxPerSecond:       0, // smart-sender handles rate-limiting
 		})
