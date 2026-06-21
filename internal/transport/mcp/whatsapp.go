@@ -165,6 +165,7 @@ type WhatsAppListIn struct {
 	KnownOnly bool   `json:"known_only,omitempty"`
 	ContactID int64  `json:"contact_id,omitempty"`
 	Phone     string `json:"phone,omitempty"`
+	ChatID    string `json:"chat_id,omitempty"` // group/chat JID, e.g. 120363...@g.us
 	Limit     int    `json:"limit,omitempty"`
 	Cursor    int64  `json:"cursor,omitempty"`
 }
@@ -174,6 +175,7 @@ type WhatsAppItemOut struct {
 	MessageID   string `json:"message_id,omitempty"`
 	Direction   string `json:"direction"`
 	Phone       string `json:"phone"`
+	ChatID      string `json:"chat_id,omitempty"`
 	ContactID   *int64 `json:"contact_id,omitempty"`
 	Body        string `json:"body,omitempty"`
 	MediaType   string `json:"media_type,omitempty"`
@@ -205,6 +207,7 @@ func (d *Deps) WhatsAppList(ctx context.Context, req *mcp.CallToolRequest, in Wh
 		KnownOnly:  in.KnownOnly,
 		ContactID:  contactID,
 		Phone:      in.Phone,
+		ChatID:     in.ChatID,
 	}
 	page, err := d.Svc.WhatsApp.List(ctx, f, port.Paging{Limit: in.Limit, Cursor: in.Cursor})
 	if err != nil {
@@ -223,6 +226,7 @@ func toWAItemOut(msg domain.WAMessage) WhatsAppItemOut {
 		MessageID: msg.MessageID,
 		Direction: string(msg.Direction),
 		Phone:     msg.Phone,
+		ChatID:    msg.ChatID,
 		ContactID: msg.ContactID,
 		Body:      msg.Body,
 		MediaType: string(msg.MediaType),

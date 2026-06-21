@@ -388,6 +388,27 @@ func TestWAIngestMessageLinksKnownContact(t *testing.T) {
 	}
 }
 
+func TestWAIngestMessageStoresGroupChatID(t *testing.T) {
+	repo := newFakeWARepo()
+	svc := newWASvc(&fakeWAGateway{}, repo, newFakeWAContactRepo(), port.SmartSendPolicy{})
+	evt := domain.WAInboundEvent{
+		MessageID: "wamid-grp-1",
+		ChatID:    "120363423368106030@g.us",
+		From:      "628996926184@s.whatsapp.net",
+		Body:      "test lagi",
+		Timestamp: time.Unix(600, 0),
+	}
+	if err := svc.IngestMessage(context.Background(), evt); err != nil {
+		t.Fatalf("ingest: %v", err)
+	}
+	if len(repo.inserted) != 1 {
+		t.Fatalf("inserted = %d, want 1", len(repo.inserted))
+	}
+	if got := repo.inserted[0].ChatID; got != "120363423368106030@g.us" {
+		t.Errorf("chat_id not stored from webhook: %q", got)
+	}
+}
+
 func TestWAIngestMessageIdempotent(t *testing.T) {
 	repo := newFakeWARepo()
 	svc := newWASvc(&fakeWAGateway{}, repo, newFakeWAContactRepo(), port.SmartSendPolicy{})
