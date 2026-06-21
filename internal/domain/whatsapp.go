@@ -116,6 +116,19 @@ type WAInboundFilter struct {
 	KnownOnly  bool
 	ContactID  *int64
 	Phone      string
+	ChatID     string
+}
+
+// WAListener configures AI-visible listening for a WhatsApp chat/group JID.
+type WAListener struct {
+	ID        int64
+	ChatJID   string
+	Name      string
+	Enabled   bool
+	Summary   string
+	DeletedAt *time.Time
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // WASendResult summarizes one outbound send.

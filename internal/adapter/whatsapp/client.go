@@ -6,12 +6,16 @@
 package whatsapp
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -222,4 +226,137 @@ func (c *Client) DownloadMedia(ctx context.Context, messageID, phone string) (po
 	}
 	_ = json.Unmarshal(env.Results, &res)
 	return port.WhatsAppMedia{URL: res.FileURL, FilePath: res.FilePath, MimeType: res.MimeType, Status: res.Status}, nil
+}
+
+// ListGroups returns groups joined by the authenticated WhatsApp device.
+func (c *Client) ListGroups(ctx context.Context) ([]port.WhatsAppGroup, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, "/user/my/groups", nil, "")
+	if err != nil {
+		return nil, err
+	}
+	env, err := c.do(req)
+	if err != nil {
+		return nil, err
+	}
+	var raw []struct {
+		JID          string            `json:"jid"`
+		ID           string            `json:"id"`
+		Name         string            `json:"name"`
+		Topic        string            `json:"topic"`
+		Participants []json.RawMessage `json:"participants"`
+	}
+	data := unwrapData(env.Results)
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, fmt.Errorf("whatsapp: unparseable groups response: %w", err)
+	}
+	out := make([]port.WhatsAppGroup, 0, len(raw))
+	for _, g := range raw {
+		jid := g.JID
+		if jid == "" {
+			jid = g.ID
+		}
+		out = append(out, port.WhatsAppGroup{JID: jid, Name: g.Name, Topic: g.Topic, Participant: len(g.Participants)})
+	}
+	return out, nil
+}
+
+// ListContacts returns WhatsApp contacts known by the authenticated device.
+func (c *Client) ListContacts(ctx context.Context) ([]port.WhatsAppContact, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, "/user/my/contacts", nil, "")
+	if err != nil {
+		return nil, err
+	}
+	env, err := c.do(req)
+	if err != nil {
+		return nil, err
+	}
+	var raw []struct {
+		JID  string `json:"jid"`
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(unwrapData(env.Results), &raw); err != nil {
+		return nil, fmt.Errorf("whatsapp: unparseable contacts response: %w", err)
+	}
+	out := make([]port.WhatsAppContact, len(raw))
+	for i, item := range raw {
+		out[i] = port.WhatsAppContact{JID: item.JID, Name: item.Name}
+	}
+	return out, nil
+}
+
+func unwrapData(raw json.RawMessage) json.RawMessage {
+	var wrapped struct {
+		Data json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &wrapped); err == nil && len(wrapped.Data) > 0 {
+		return wrapped.Data
+	}
+	return raw
+}
+
+// SendMedia sends image/video/file media via go-whatsapp-web-multidevice multipart endpoints.
+func (c *Client) SendMedia(ctx context.Context, msg port.WhatsAppMediaMessage) (port.WhatsAppSendResult, error) {
+	phone := NormalizePhone(msg.Phone)
+	if phone == "" {
+		return port.WhatsAppSendResult{}, fmt.Errorf("whatsapp: empty phone")
+	}
+	kind := strings.ToLower(strings.TrimSpace(msg.Kind))
+	field, urlField := kind, kind+"_url"
+	switch kind {
+	case "image", "video":
+	case "file", "document":
+		kind, field, urlField = "file", "file", "file_url"
+	default:
+		return port.WhatsAppSendResult{}, fmt.Errorf("whatsapp: unsupported media kind %q", msg.Kind)
+	}
+	if msg.URL == "" && msg.FilePath == "" {
+		return port.WhatsAppSendResult{}, fmt.Errorf("whatsapp: media url or file path required")
+	}
+
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	_ = mw.WriteField("phone", phone)
+	if msg.Caption != "" {
+		_ = mw.WriteField("caption", msg.Caption)
+	}
+	if msg.ReplyToID != "" {
+		_ = mw.WriteField("reply_message_id", msg.ReplyToID)
+	}
+	if msg.URL != "" {
+		_ = mw.WriteField(urlField, msg.URL)
+	}
+	if msg.FilePath != "" {
+		f, err := os.Open(msg.FilePath)
+		if err != nil {
+			return port.WhatsAppSendResult{}, err
+		}
+		defer f.Close()
+		part, err := mw.CreateFormFile(field, filepath.Base(msg.FilePath))
+		if err != nil {
+			return port.WhatsAppSendResult{}, err
+		}
+		if _, err := io.Copy(part, f); err != nil {
+			return port.WhatsAppSendResult{}, err
+		}
+	}
+	if err := mw.Close(); err != nil {
+		return port.WhatsAppSendResult{}, err
+	}
+	req, err := c.newRequest(ctx, http.MethodPost, "/send/"+kind, &body, mw.FormDataContentType())
+	if err != nil {
+		return port.WhatsAppSendResult{}, err
+	}
+	env, err := c.do(req)
+	if err != nil {
+		return port.WhatsAppSendResult{}, err
+	}
+	var res struct {
+		MessageID string `json:"message_id"`
+		Status    string `json:"status"`
+	}
+	_ = json.Unmarshal(env.Results, &res)
+	if res.Status == "" {
+		res.Status = env.Message
+	}
+	return port.WhatsAppSendResult{MessageID: res.MessageID, Status: res.Status}, nil
 }

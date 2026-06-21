@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/incredible-zetta/crm/internal/domain"
 	"github.com/incredible-zetta/crm/internal/port"
@@ -12,29 +13,32 @@ import (
 // capability audits (WhatsApp registration checks). It mirrors InboxService
 // for the inbound side and adds outbound + audit capabilities.
 type WhatsAppService struct {
-	gateway  port.WhatsAppGateway
-	waRepo   port.WAMessageRepo
-	contacts port.ContactRepo
-	clock    port.Clock
-	notifier port.AdminNotifier
-	policy   port.SmartSendPolicy
+	gateway   port.WhatsAppGateway
+	waRepo    port.WAMessageRepo
+	listeners port.WAListenerRepo
+	contacts  port.ContactRepo
+	clock     port.Clock
+	notifier  port.AdminNotifier
+	policy    port.SmartSendPolicy
 }
 
 func NewWhatsAppService(
 	gateway port.WhatsAppGateway,
 	waRepo port.WAMessageRepo,
+	listeners port.WAListenerRepo,
 	contacts port.ContactRepo,
 	clock port.Clock,
 	notifier port.AdminNotifier,
 	policy port.SmartSendPolicy,
 ) *WhatsAppService {
 	return &WhatsAppService{
-		gateway:  gateway,
-		waRepo:   waRepo,
-		contacts: contacts,
-		clock:    clock,
-		notifier: notifier,
-		policy:   policy,
+		gateway:   gateway,
+		waRepo:    waRepo,
+		listeners: listeners,
+		contacts:  contacts,
+		clock:     clock,
+		notifier:  notifier,
+		policy:    policy,
 	}
 }
 
@@ -88,6 +92,148 @@ func (s *WhatsAppService) Send(ctx context.Context, phone, body string) (domain.
 	stored, _, err := s.waRepo.Insert(ctx, msg)
 	if err != nil {
 		return domain.WAMessage{}, fmt.Errorf("persist outbound: %w", err)
+	}
+	return stored, nil
+}
+
+// ListGroups returns joined groups from the gateway.
+func (s *WhatsAppService) ListGroups(ctx context.Context) ([]port.WhatsAppGroup, error) {
+	if s.gateway == nil {
+		return nil, fmt.Errorf("whatsapp disabled")
+	}
+	return s.gateway.ListGroups(ctx)
+}
+
+// ListContacts returns contacts known by gateway storage.
+func (s *WhatsAppService) ListContacts(ctx context.Context) ([]port.WhatsAppContact, error) {
+	if s.gateway == nil {
+		return nil, fmt.Errorf("whatsapp disabled")
+	}
+	return s.gateway.ListContacts(ctx)
+}
+
+// CreateListener enables AI-visible listening for a chat/group JID.
+func (s *WhatsAppService) CreateListener(ctx context.Context, chatJID, name string) (domain.WAListener, error) {
+	if s.listeners == nil {
+		return domain.WAListener{}, fmt.Errorf("whatsapp listeners disabled")
+	}
+	if chatJID == "" {
+		return domain.WAListener{}, fmt.Errorf("chat_jid required")
+	}
+	return s.listeners.Create(ctx, domain.WAListener{ChatJID: chatJID, Name: name, Enabled: true})
+}
+
+func (s *WhatsAppService) ListListeners(ctx context.Context, enabledOnly bool) ([]domain.WAListener, error) {
+	if s.listeners == nil {
+		return nil, fmt.Errorf("whatsapp listeners disabled")
+	}
+	return s.listeners.List(ctx, enabledOnly)
+}
+
+func (s *WhatsAppService) UpdateListener(ctx context.Context, id int64, chatJID, name string, enabled bool) (domain.WAListener, error) {
+	if s.listeners == nil {
+		return domain.WAListener{}, fmt.Errorf("whatsapp listeners disabled")
+	}
+	existing, err := s.listeners.Get(ctx, id)
+	if err != nil {
+		return domain.WAListener{}, err
+	}
+	if chatJID != "" {
+		existing.ChatJID = chatJID
+	}
+	existing.Name = name
+	existing.Enabled = enabled
+	return s.listeners.Update(ctx, id, existing)
+}
+
+func (s *WhatsAppService) DeleteListener(ctx context.Context, id int64) error {
+	if s.listeners == nil {
+		return fmt.Errorf("whatsapp listeners disabled")
+	}
+	return s.listeners.SoftDelete(ctx, id)
+}
+
+func (s *WhatsAppService) ListenerSummary(ctx context.Context, id int64, limit int) (domain.WAListener, []domain.WAMessage, error) {
+	if s.listeners == nil {
+		return domain.WAListener{}, nil, fmt.Errorf("whatsapp listeners disabled")
+	}
+	l, err := s.listeners.Get(ctx, id)
+	if err != nil {
+		return domain.WAListener{}, nil, err
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+	page, err := s.waRepo.List(ctx, domain.WAInboundFilter{Direction: "in", ChatID: l.ChatJID}, port.Paging{Limit: limit})
+	if err != nil {
+		return domain.WAListener{}, nil, err
+	}
+	summary := buildListenerSummary(page.Items)
+	if err := s.listeners.SetSummary(ctx, id, summary); err == nil {
+		l.Summary = summary
+	}
+	return l, page.Items, nil
+}
+
+func buildListenerSummary(items []domain.WAMessage) string {
+	if len(items) == 0 {
+		return "No recent messages."
+	}
+	var b strings.Builder
+	b.WriteString("Recent WhatsApp listener messages:\n")
+	for i := len(items) - 1; i >= 0; i-- {
+		msg := items[i]
+		if msg.Body == "" {
+			continue
+		}
+		b.WriteString("- ")
+		b.WriteString(msg.Body)
+		b.WriteString("\n")
+	}
+	return strings.TrimSpace(b.String())
+}
+
+// SendMedia sends image/video/file media. Caption is persisted as body.
+func (s *WhatsAppService) SendMedia(ctx context.Context, in port.WhatsAppMediaMessage) (domain.WAMessage, error) {
+	if s.gateway == nil {
+		return domain.WAMessage{}, fmt.Errorf("whatsapp disabled")
+	}
+	phone := normalizePhone(in.Phone)
+	if phone == "" {
+		return domain.WAMessage{}, fmt.Errorf("invalid phone")
+	}
+	in.Phone = phone
+	result, err := s.gateway.SendMedia(ctx, in)
+	if err != nil {
+		return domain.WAMessage{}, fmt.Errorf("gateway send media: %w", err)
+	}
+	var contactID *int64
+	if c, err := s.contacts.GetByPhone(ctx, phone); err == nil {
+		contactID = &c.ID
+	}
+	now := s.clock.Now()
+	msg := domain.WAMessage{
+		MessageID: result.MessageID,
+		Direction: domain.WAOutbound,
+		Phone:     phone,
+		ContactID: contactID,
+		Body:      in.Caption,
+		MediaURL:  in.URL,
+		Status:    domain.WAStatusSent,
+		SentAt:    &now,
+		CreatedAt: now,
+	}
+	switch in.Kind {
+	case "image":
+		msg.MediaType = domain.WAMediaImage
+	case "video":
+		msg.MediaType = domain.WAMediaVideo
+	case "file", "document":
+		msg.MediaType = domain.WAMediaDocument
+	}
+	stored, _, err := s.waRepo.Insert(ctx, msg)
+	if err != nil {
+		return domain.WAMessage{}, fmt.Errorf("persist outbound media: %w", err)
 	}
 	return stored, nil
 }

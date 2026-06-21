@@ -19,6 +19,7 @@ import (
 type waGwFake struct {
 	checkStatus domain.WhatsAppStatus
 	sends       int
+	mediaSends  int
 }
 
 func (g *waGwFake) Send(ctx context.Context, m port.WhatsAppMessage) (port.WhatsAppSendResult, error) {
@@ -35,6 +36,16 @@ func (g *waGwFake) Check(ctx context.Context, phone string) (domain.WhatsAppChec
 func (g *waGwFake) MarkRead(ctx context.Context, id, phone string) error { return nil }
 func (g *waGwFake) DownloadMedia(ctx context.Context, id, phone string) (port.WhatsAppMedia, error) {
 	return port.WhatsAppMedia{URL: "https://media.test/x.jpg", MimeType: "image/jpeg"}, nil
+}
+func (g *waGwFake) ListGroups(ctx context.Context) ([]port.WhatsAppGroup, error) {
+	return []port.WhatsAppGroup{{JID: "120363@g.us", Name: "Team", Topic: "Ops", Participant: 2}}, nil
+}
+func (g *waGwFake) ListContacts(ctx context.Context) ([]port.WhatsAppContact, error) {
+	return []port.WhatsAppContact{{JID: "628123456789@s.whatsapp.net", Name: "Alice"}}, nil
+}
+func (g *waGwFake) SendMedia(ctx context.Context, m port.WhatsAppMediaMessage) (port.WhatsAppSendResult, error) {
+	g.mediaSends++
+	return port.WhatsAppSendResult{MessageID: "wamid-media", Status: "sent"}, nil
 }
 
 type waRepoFake struct {
@@ -137,7 +148,7 @@ func (waClockFake) Now() time.Time { return time.Unix(1000, 0) }
 func wireWA(h *testHarness, gw *waGwFake) *waRepoFake {
 	repo := newWARepoFake()
 	contacts := waContactsFake{byPhone: map[string]domain.Contact{}}
-	h.deps.Svc.WhatsApp = service.NewWhatsAppService(gw, repo, contacts, waClockFake{}, nil, port.SmartSendPolicy{})
+	h.deps.Svc.WhatsApp = service.NewWhatsAppService(gw, repo, nil, contacts, waClockFake{}, nil, port.SmartSendPolicy{})
 	return repo
 }
 
@@ -195,6 +206,14 @@ func TestWAToolsDisabledContract(t *testing.T) {
 			r, _, _ := h.deps.WhatsAppGetMedia(ctx, nil, mcptransport.WhatsAppGetMediaIn{ID: 1})
 			return r
 		}},
+		{"groups", func() *mcp.CallToolResult {
+			r, _, _ := h.deps.WhatsAppGroups(ctx, nil, mcptransport.WhatsAppGroupsIn{})
+			return r
+		}},
+		{"send_media", func() *mcp.CallToolResult {
+			r, _, _ := h.deps.WhatsAppSendMedia(ctx, nil, mcptransport.WhatsAppSendMediaIn{Phone: "628123456789", Kind: "image", URL: "https://example.com/x.jpg"})
+			return r
+		}},
 	}
 	for _, c := range checks {
 		t.Run(c.name, func(t *testing.T) {
@@ -247,6 +266,37 @@ func TestWASendTool(t *testing.T) {
 	}
 	if out.MessageID == "" {
 		t.Errorf("expected message id in output")
+	}
+}
+
+func TestWAGroupsTool(t *testing.T) {
+	h := setupTestDeps(t)
+	wireWA(h, &waGwFake{})
+	res, out, err := h.deps.WhatsAppGroups(context.Background(), nil, mcptransport.WhatsAppGroupsIn{})
+	if err != nil {
+		t.Fatalf("go error: %v", err)
+	}
+	if res != nil && res.IsError {
+		t.Fatalf("unexpected error envelope")
+	}
+	if len(out.Items) != 1 || out.Items[0].JID != "120363@g.us" || out.Items[0].Participant != 2 {
+		t.Fatalf("groups = %+v", out.Items)
+	}
+}
+
+func TestWASendMediaTool(t *testing.T) {
+	h := setupTestDeps(t)
+	gw := &waGwFake{}
+	wireWA(h, gw)
+	res, out, err := h.deps.WhatsAppSendMedia(context.Background(), nil, mcptransport.WhatsAppSendMediaIn{Phone: "628123456789", Kind: "image", URL: "https://example.com/x.jpg", Caption: "caption"})
+	if err != nil {
+		t.Fatalf("go error: %v", err)
+	}
+	if res != nil && res.IsError {
+		t.Fatalf("unexpected error envelope")
+	}
+	if gw.mediaSends != 1 || out.MessageID != "wamid-media" {
+		t.Fatalf("mediaSends=%d out=%+v", gw.mediaSends, out)
 	}
 }
 
