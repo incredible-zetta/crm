@@ -112,6 +112,11 @@ func (s *Store) WhatsApp() port.WAMessageRepo {
 	return &waMessageRepo{db: s.db}
 }
 
+// WhatsAppListeners returns a WAListenerRepo implementation.
+func (s *Store) WhatsAppListeners() port.WAListenerRepo {
+	return &waListenerRepo{db: s.db}
+}
+
 // Threads returns a ThreadsRepo implementation.
 func (s *Store) Threads() port.ThreadsRepo {
 	return &threadsRepo{db: s.db}

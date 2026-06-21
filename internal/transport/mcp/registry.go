@@ -256,6 +256,27 @@ func Register(srv *mcp.Server, d *Deps) {
 		Description: "Download media URL for a WhatsApp message with attachment",
 	}, d.WhatsAppGetMedia)
 
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "whatsapp_groups",
+		Description: "List WhatsApp groups joined by the configured device (gateway limit: up to 500 groups)",
+	}, d.WhatsAppGroups)
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "whatsapp_contacts",
+		Description: "List WhatsApp contacts known by the configured device",
+	}, d.WhatsAppContacts)
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "whatsapp_send_media",
+		Description: "Send WhatsApp image, video, or file by URL or local file path to a contact, phone, or group JID",
+	}, d.WhatsAppSendMedia)
+
+	mcp.AddTool(srv, &mcp.Tool{Name: "whatsapp_listener_create", Description: "Enable AI listener for a WhatsApp chat/group JID"}, d.WhatsAppListenerCreate)
+	mcp.AddTool(srv, &mcp.Tool{Name: "whatsapp_listener_list", Description: "List configured WhatsApp AI listeners"}, d.WhatsAppListenerList)
+	mcp.AddTool(srv, &mcp.Tool{Name: "whatsapp_listener_update", Description: "Update WhatsApp AI listener settings"}, d.WhatsAppListenerUpdate)
+	mcp.AddTool(srv, &mcp.Tool{Name: "whatsapp_listener_delete", Description: "Disable/delete a WhatsApp AI listener"}, d.WhatsAppListenerDelete)
+	mcp.AddTool(srv, &mcp.Tool{Name: "whatsapp_listener_summary", Description: "Build a recent-message summary for one WhatsApp AI listener"}, d.WhatsAppListenerSummary)
+
 	// Group 11: Threads (threads.go)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_profile", Description: "Fetch Threads profile for configured user, including followers_count (best-effort from user insights; omitted on brand-new accounts or without insights scope)"}, d.ThreadsProfile)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_profile_lookup", Description: "Look up any PUBLIC Threads profile by username (profile discovery). Returns name, biography, picture, is_verified and public counters including follower_count, likes_count, quotes_count, replies_count, reposts_count, views_count. No 100-follower gate. Does NOT return a following count or follower/following lists (the API does not expose them). Requires threads_profile_discovery scope."}, d.ThreadsProfileLookup)

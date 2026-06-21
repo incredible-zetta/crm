@@ -30,6 +30,13 @@ func (whFakeGateway) MarkRead(ctx context.Context, id, phone string) error { ret
 func (whFakeGateway) DownloadMedia(ctx context.Context, id, phone string) (port.WhatsAppMedia, error) {
 	return port.WhatsAppMedia{}, nil
 }
+func (whFakeGateway) ListGroups(ctx context.Context) ([]port.WhatsAppGroup, error) { return nil, nil }
+func (whFakeGateway) ListContacts(ctx context.Context) ([]port.WhatsAppContact, error) {
+	return nil, nil
+}
+func (whFakeGateway) SendMedia(ctx context.Context, msg port.WhatsAppMediaMessage) (port.WhatsAppSendResult, error) {
+	return port.WhatsAppSendResult{}, nil
+}
 
 type whFakeRepo struct {
 	inserts     int
@@ -110,7 +117,7 @@ func (whStubClock) Now() time.Time { return time.Unix(1000, 0) }
 
 func newWebhookHandler(secret string) (*WhatsAppWebhookHandler, *whFakeRepo) {
 	repo := &whFakeRepo{}
-	svc := service.NewWhatsAppService(whFakeGateway{}, repo, whFakeContacts{}, whStubClock{}, nil, port.SmartSendPolicy{})
+	svc := service.NewWhatsAppService(whFakeGateway{}, repo, nil, whFakeContacts{}, whStubClock{}, nil, port.SmartSendPolicy{})
 	return NewWhatsAppWebhookHandler(svc, secret), repo
 }
 
