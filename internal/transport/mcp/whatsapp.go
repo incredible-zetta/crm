@@ -188,6 +188,7 @@ type WhatsAppItemOut struct {
 	MessageID   string `json:"message_id,omitempty"`
 	Direction   string `json:"direction"`
 	Phone       string `json:"phone"`
+	SenderName  string `json:"sender_name,omitempty"`
 	ChatID      string `json:"chat_id,omitempty"`
 	ContactID   *int64 `json:"contact_id,omitempty"`
 	Body        string `json:"body,omitempty"`
@@ -249,16 +250,17 @@ func (d *Deps) WhatsAppList(ctx context.Context, req *mcp.CallToolRequest, in Wh
 
 func toWAItemOut(msg domain.WAMessage) WhatsAppItemOut {
 	out := WhatsAppItemOut{
-		ID:        msg.ID,
-		MessageID: msg.MessageID,
-		Direction: string(msg.Direction),
-		Phone:     msg.Phone,
-		ChatID:    msg.ChatID,
-		ContactID: msg.ContactID,
-		Body:      msg.Body,
-		MediaType: string(msg.MediaType),
-		Status:    string(msg.Status),
-		RepliedTo: msg.RepliedTo,
+		ID:         msg.ID,
+		MessageID:  msg.MessageID,
+		Direction:  string(msg.Direction),
+		Phone:      msg.Phone,
+		SenderName: msg.SenderName,
+		ChatID:     msg.ChatID,
+		ContactID:  msg.ContactID,
+		Body:       msg.Body,
+		MediaType:  string(msg.MediaType),
+		Status:     string(msg.Status),
+		RepliedTo:  msg.RepliedTo,
 	}
 	if msg.SentAt != nil {
 		out.SentAt = msg.SentAt.Format(time.RFC3339)
@@ -647,4 +649,374 @@ func (d *Deps) WhatsAppListenerSummary(ctx context.Context, req *mcp.CallToolReq
 		outMsgs[i] = toWAItemOut(msg)
 	}
 	return nil, WhatsAppListenerSummaryOut{Listener: toWAListenerOut(l), Messages: outMsgs}, nil
+}
+
+// --- Group membership ---
+
+type WhatsAppGroupJoinIn struct {
+	Link string `json:"link"`
+}
+type WhatsAppGroupJoinOut struct {
+	GroupJID string `json:"group_jid"`
+}
+
+func (d *Deps) WhatsAppGroupJoin(ctx context.Context, req *mcp.CallToolRequest, in WhatsAppGroupJoinIn) (*mcp.CallToolResult, WhatsAppGroupJoinOut, error) {
+	if d.Svc.WhatsApp == nil {
+		return mcpserver.Err("disabled", "whatsapp channel not configured"), WhatsAppGroupJoinOut{}, nil
+	}
+	if in.Link == "" {
+		return mcpserver.Err("validation", "link required"), WhatsAppGroupJoinOut{}, nil
+	}
+	jid, err := d.Svc.WhatsApp.JoinGroup(ctx, in.Link)
+	if err != nil {
+		return nil, WhatsAppGroupJoinOut{}, fmt.Errorf("whatsapp_group_join: %w", err)
+	}
+	return nil, WhatsAppGroupJoinOut{GroupJID: jid}, nil
+}
+
+type WhatsAppGroupLeaveIn struct {
+	GroupJID string `json:"group_jid"`
+}
+type WhatsAppGroupLeaveOut struct {
+	OK bool `json:"ok"`
+}
+
+func (d *Deps) WhatsAppGroupLeave(ctx context.Context, req *mcp.CallToolRequest, in WhatsAppGroupLeaveIn) (*mcp.CallToolResult, WhatsAppGroupLeaveOut, error) {
+	if d.Svc.WhatsApp == nil {
+		return mcpserver.Err("disabled", "whatsapp channel not configured"), WhatsAppGroupLeaveOut{}, nil
+	}
+	if in.GroupJID == "" {
+		return mcpserver.Err("validation", "group_jid required"), WhatsAppGroupLeaveOut{}, nil
+	}
+	if err := d.Svc.WhatsApp.LeaveGroup(ctx, in.GroupJID); err != nil {
+		return nil, WhatsAppGroupLeaveOut{}, fmt.Errorf("whatsapp_group_leave: %w", err)
+	}
+	return nil, WhatsAppGroupLeaveOut{OK: true}, nil
+}
+
+type WhatsAppGroupInfoFromLinkIn struct {
+	Link string `json:"link"`
+}
+
+func (d *Deps) WhatsAppGroupInfoFromLink(ctx context.Context, req *mcp.CallToolRequest, in WhatsAppGroupInfoFromLinkIn) (*mcp.CallToolResult, WhatsAppGroupOut, error) {
+	if d.Svc.WhatsApp == nil {
+		return mcpserver.Err("disabled", "whatsapp channel not configured"), WhatsAppGroupOut{}, nil
+	}
+	if in.Link == "" {
+		return mcpserver.Err("validation", "link required"), WhatsAppGroupOut{}, nil
+	}
+	g, err := d.Svc.WhatsApp.GroupInfoFromLink(ctx, in.Link)
+	if err != nil {
+		return nil, WhatsAppGroupOut{}, fmt.Errorf("whatsapp_group_info_from_link: %w", err)
+	}
+	return nil, WhatsAppGroupOut{JID: g.JID, Name: g.Name, Topic: g.Topic, Participant: g.Participant}, nil
+}
+
+// --- Group management ---
+
+type WhatsAppGroupCreateIn struct {
+	Title        string   `json:"title"`
+	Participants []string `json:"participants,omitempty"`
+}
+type WhatsAppGroupCreateOut struct {
+	GroupJID string `json:"group_jid"`
+}
+
+func (d *Deps) WhatsAppGroupCreate(ctx context.Context, req *mcp.CallToolRequest, in WhatsAppGroupCreateIn) (*mcp.CallToolResult, WhatsAppGroupCreateOut, error) {
+	if d.Svc.WhatsApp == nil {
+		return mcpserver.Err("disabled", "whatsapp channel not configured"), WhatsAppGroupCreateOut{}, nil
+	}
+	if in.Title == "" {
+		return mcpserver.Err("validation", "title required"), WhatsAppGroupCreateOut{}, nil
+	}
+	jid, err := d.Svc.WhatsApp.CreateGroup(ctx, in.Title, in.Participants)
+	if err != nil {
+		return nil, WhatsAppGroupCreateOut{}, fmt.Errorf("whatsapp_group_create: %w", err)
+	}
+	return nil, WhatsAppGroupCreateOut{GroupJID: jid}, nil
+}
+
+type WhatsAppGroupInfoIn struct {
+	GroupJID string `json:"group_jid"`
+}
+type WhatsAppParticipantOut struct {
+	JID          string `json:"jid"`
+	Phone        string `json:"phone,omitempty"`
+	DisplayName  string `json:"display_name,omitempty"`
+	IsAdmin      bool   `json:"is_admin"`
+	IsSuperAdmin bool   `json:"is_super_admin"`
+}
+type WhatsAppGroupInfoOut struct {
+	JID              string                   `json:"jid"`
+	Name             string                   `json:"name,omitempty"`
+	Topic            string                   `json:"topic,omitempty"`
+	OwnerJID         string                   `json:"owner_jid,omitempty"`
+	ParticipantCount int                      `json:"participant_count"`
+	IsLocked         bool                     `json:"is_locked"`
+	IsAnnounce       bool                     `json:"is_announce"`
+	Participants     []WhatsAppParticipantOut `json:"participants,omitempty"`
+}
+
+func participantsOut(in []port.WhatsAppParticipant) []WhatsAppParticipantOut {
+	out := make([]WhatsAppParticipantOut, len(in))
+	for i, p := range in {
+		out[i] = WhatsAppParticipantOut{JID: p.JID, Phone: p.Phone, DisplayName: p.DisplayName, IsAdmin: p.IsAdmin, IsSuperAdmin: p.IsSuperAdmin}
+	}
+	return out
+}
+
+func (d *Deps) WhatsAppGroupInfo(ctx context.Context, req *mcp.CallToolRequest, in WhatsAppGroupInfoIn) (*mcp.CallToolResult, WhatsAppGroupInfoOut, error) {
+	if d.Svc.WhatsApp == nil {
+		return mcpserver.Err("disabled", "whatsapp channel not configured"), WhatsAppGroupInfoOut{}, nil
+	}
+	if in.GroupJID == "" {
+		return mcpserver.Err("validation", "group_jid required"), WhatsAppGroupInfoOut{}, nil
+	}
+	g, err := d.Svc.WhatsApp.GroupInfo(ctx, in.GroupJID)
+	if err != nil {
+		return nil, WhatsAppGroupInfoOut{}, fmt.Errorf("whatsapp_group_info: %w", err)
+	}
+	return nil, WhatsAppGroupInfoOut{
+		JID: g.JID, Name: g.Name, Topic: g.Topic, OwnerJID: g.OwnerJID,
+		ParticipantCount: g.ParticipantCount, IsLocked: g.IsLocked, IsAnnounce: g.IsAnnounce,
+		Participants: participantsOut(g.Participants),
+	}, nil
+}
+
+type WhatsAppGroupParticipantsIn struct {
+	GroupJID string `json:"group_jid"`
+}
+type WhatsAppGroupParticipantsOut struct {
+	Items []WhatsAppParticipantOut `json:"items"`
+	Count int                      `json:"count"`
+}
+
+func (d *Deps) WhatsAppGroupParticipants(ctx context.Context, req *mcp.CallToolRequest, in WhatsAppGroupParticipantsIn) (*mcp.CallToolResult, WhatsAppGroupParticipantsOut, error) {
+	if d.Svc.WhatsApp == nil {
+		return mcpserver.Err("disabled", "whatsapp channel not configured"), WhatsAppGroupParticipantsOut{}, nil
+	}
+	if in.GroupJID == "" {
+		return mcpserver.Err("validation", "group_jid required"), WhatsAppGroupParticipantsOut{}, nil
+	}
+	ps, err := d.Svc.WhatsApp.GroupParticipants(ctx, in.GroupJID)
+	if err != nil {
+		return nil, WhatsAppGroupParticipantsOut{}, fmt.Errorf("whatsapp_group_participants: %w", err)
+	}
+	out := participantsOut(ps)
+	return nil, WhatsAppGroupParticipantsOut{Items: out, Count: len(out)}, nil
+}
+
+type WhatsAppGroupParticipantsManageIn struct {
+	GroupJID     string   `json:"group_jid"`
+	Action       string   `json:"action"` // add | remove | promote | demote
+	Participants []string `json:"participants"`
+}
+type WhatsAppParticipantResultOut struct {
+	Participant string `json:"participant"`
+	Status      string `json:"status"`
+	Message     string `json:"message,omitempty"`
+}
+type WhatsAppGroupParticipantsManageOut struct {
+	Results []WhatsAppParticipantResultOut `json:"results"`
+}
+
+func (d *Deps) WhatsAppGroupParticipantsManage(ctx context.Context, req *mcp.CallToolRequest, in WhatsAppGroupParticipantsManageIn) (*mcp.CallToolResult, WhatsAppGroupParticipantsManageOut, error) {
+	if d.Svc.WhatsApp == nil {
+		return mcpserver.Err("disabled", "whatsapp channel not configured"), WhatsAppGroupParticipantsManageOut{}, nil
+	}
+	if in.GroupJID == "" || in.Action == "" || len(in.Participants) == 0 {
+		return mcpserver.Err("validation", "group_jid, action, participants required"), WhatsAppGroupParticipantsManageOut{}, nil
+	}
+	res, err := d.Svc.WhatsApp.ManageParticipants(ctx, in.GroupJID, in.Action, in.Participants)
+	if err != nil {
+		return nil, WhatsAppGroupParticipantsManageOut{}, fmt.Errorf("whatsapp_group_participants_manage: %w", err)
+	}
+	out := make([]WhatsAppParticipantResultOut, len(res))
+	for i, r := range res {
+		out[i] = WhatsAppParticipantResultOut{Participant: r.Participant, Status: r.Status, Message: r.Message}
+	}
+	return nil, WhatsAppGroupParticipantsManageOut{Results: out}, nil
+}
+
+type WhatsAppGroupRequestsIn struct {
+	GroupJID string `json:"group_jid"`
+}
+
+func (d *Deps) WhatsAppGroupRequests(ctx context.Context, req *mcp.CallToolRequest, in WhatsAppGroupRequestsIn) (*mcp.CallToolResult, WhatsAppGroupParticipantsOut, error) {
+	if d.Svc.WhatsApp == nil {
+		return mcpserver.Err("disabled", "whatsapp channel not configured"), WhatsAppGroupParticipantsOut{}, nil
+	}
+	if in.GroupJID == "" {
+		return mcpserver.Err("validation", "group_jid required"), WhatsAppGroupParticipantsOut{}, nil
+	}
+	ps, err := d.Svc.WhatsApp.GroupParticipantRequests(ctx, in.GroupJID)
+	if err != nil {
+		return nil, WhatsAppGroupParticipantsOut{}, fmt.Errorf("whatsapp_group_requests: %w", err)
+	}
+	out := participantsOut(ps)
+	return nil, WhatsAppGroupParticipantsOut{Items: out, Count: len(out)}, nil
+}
+
+type WhatsAppGroupRequestsReviewIn struct {
+	GroupJID     string   `json:"group_jid"`
+	Action       string   `json:"action"` // approve | reject
+	Participants []string `json:"participants"`
+}
+
+func (d *Deps) WhatsAppGroupRequestsReview(ctx context.Context, req *mcp.CallToolRequest, in WhatsAppGroupRequestsReviewIn) (*mcp.CallToolResult, WhatsAppGroupLeaveOut, error) {
+	if d.Svc.WhatsApp == nil {
+		return mcpserver.Err("disabled", "whatsapp channel not configured"), WhatsAppGroupLeaveOut{}, nil
+	}
+	if in.GroupJID == "" || in.Action == "" || len(in.Participants) == 0 {
+		return mcpserver.Err("validation", "group_jid, action, participants required"), WhatsAppGroupLeaveOut{}, nil
+	}
+	if err := d.Svc.WhatsApp.ReviewParticipantRequests(ctx, in.GroupJID, in.Action, in.Participants); err != nil {
+		return nil, WhatsAppGroupLeaveOut{}, fmt.Errorf("whatsapp_group_requests_review: %w", err)
+	}
+	return nil, WhatsAppGroupLeaveOut{OK: true}, nil
+}
+
+type WhatsAppGroupSettingsIn struct {
+	GroupJID string  `json:"group_jid"`
+	Name     *string `json:"name,omitempty"`
+	Topic    *string `json:"topic,omitempty"`
+	Locked   *bool   `json:"locked,omitempty"`
+	Announce *bool   `json:"announce,omitempty"`
+}
+
+func (d *Deps) WhatsAppGroupSettings(ctx context.Context, req *mcp.CallToolRequest, in WhatsAppGroupSettingsIn) (*mcp.CallToolResult, WhatsAppGroupLeaveOut, error) {
+	if d.Svc.WhatsApp == nil {
+		return mcpserver.Err("disabled", "whatsapp channel not configured"), WhatsAppGroupLeaveOut{}, nil
+	}
+	if in.GroupJID == "" {
+		return mcpserver.Err("validation", "group_jid required"), WhatsAppGroupLeaveOut{}, nil
+	}
+	if in.Name != nil {
+		if err := d.Svc.WhatsApp.SetGroupName(ctx, in.GroupJID, *in.Name); err != nil {
+			return nil, WhatsAppGroupLeaveOut{}, fmt.Errorf("whatsapp_group_settings name: %w", err)
+		}
+	}
+	if in.Topic != nil {
+		if err := d.Svc.WhatsApp.SetGroupTopic(ctx, in.GroupJID, *in.Topic); err != nil {
+			return nil, WhatsAppGroupLeaveOut{}, fmt.Errorf("whatsapp_group_settings topic: %w", err)
+		}
+	}
+	if in.Locked != nil {
+		if err := d.Svc.WhatsApp.SetGroupLocked(ctx, in.GroupJID, *in.Locked); err != nil {
+			return nil, WhatsAppGroupLeaveOut{}, fmt.Errorf("whatsapp_group_settings locked: %w", err)
+		}
+	}
+	if in.Announce != nil {
+		if err := d.Svc.WhatsApp.SetGroupAnnounce(ctx, in.GroupJID, *in.Announce); err != nil {
+			return nil, WhatsAppGroupLeaveOut{}, fmt.Errorf("whatsapp_group_settings announce: %w", err)
+		}
+	}
+	return nil, WhatsAppGroupLeaveOut{OK: true}, nil
+}
+
+type WhatsAppGroupInviteLinkIn struct {
+	GroupJID string `json:"group_jid"`
+	Reset    bool   `json:"reset,omitempty"`
+}
+type WhatsAppGroupInviteLinkOut struct {
+	InviteLink string `json:"invite_link"`
+}
+
+func (d *Deps) WhatsAppGroupInviteLink(ctx context.Context, req *mcp.CallToolRequest, in WhatsAppGroupInviteLinkIn) (*mcp.CallToolResult, WhatsAppGroupInviteLinkOut, error) {
+	if d.Svc.WhatsApp == nil {
+		return mcpserver.Err("disabled", "whatsapp channel not configured"), WhatsAppGroupInviteLinkOut{}, nil
+	}
+	if in.GroupJID == "" {
+		return mcpserver.Err("validation", "group_jid required"), WhatsAppGroupInviteLinkOut{}, nil
+	}
+	link, err := d.Svc.WhatsApp.GroupInviteLink(ctx, in.GroupJID, in.Reset)
+	if err != nil {
+		return nil, WhatsAppGroupInviteLinkOut{}, fmt.Errorf("whatsapp_group_invite_link: %w", err)
+	}
+	return nil, WhatsAppGroupInviteLinkOut{InviteLink: link}, nil
+}
+
+// --- Account ---
+
+type WhatsAppAccountStatusOut struct {
+	Connected bool   `json:"connected"`
+	LoggedIn  bool   `json:"logged_in"`
+	DeviceID  string `json:"device_id,omitempty"`
+	JID       string `json:"jid,omitempty"`
+}
+
+func (d *Deps) WhatsAppAccountStatus(ctx context.Context, req *mcp.CallToolRequest, in struct{}) (*mcp.CallToolResult, WhatsAppAccountStatusOut, error) {
+	if d.Svc.WhatsApp == nil {
+		return mcpserver.Err("disabled", "whatsapp channel not configured"), WhatsAppAccountStatusOut{}, nil
+	}
+	st, err := d.Svc.WhatsApp.ConnectionStatus(ctx)
+	if err != nil {
+		return nil, WhatsAppAccountStatusOut{}, fmt.Errorf("whatsapp_account_status: %w", err)
+	}
+	return nil, WhatsAppAccountStatusOut{Connected: st.Connected, LoggedIn: st.LoggedIn, DeviceID: st.DeviceID, JID: st.JID}, nil
+}
+
+type WhatsAppDeviceOut struct {
+	Name string `json:"name,omitempty"`
+	JID  string `json:"jid,omitempty"`
+}
+type WhatsAppAccountDevicesOut struct {
+	Items []WhatsAppDeviceOut `json:"items"`
+	Count int                 `json:"count"`
+}
+
+func (d *Deps) WhatsAppAccountDevices(ctx context.Context, req *mcp.CallToolRequest, in struct{}) (*mcp.CallToolResult, WhatsAppAccountDevicesOut, error) {
+	if d.Svc.WhatsApp == nil {
+		return mcpserver.Err("disabled", "whatsapp channel not configured"), WhatsAppAccountDevicesOut{}, nil
+	}
+	devs, err := d.Svc.WhatsApp.ListDevices(ctx)
+	if err != nil {
+		return nil, WhatsAppAccountDevicesOut{}, fmt.Errorf("whatsapp_account_devices: %w", err)
+	}
+	out := make([]WhatsAppDeviceOut, len(devs))
+	for i, dv := range devs {
+		out[i] = WhatsAppDeviceOut{Name: dv.Name, JID: dv.JID}
+	}
+	return nil, WhatsAppAccountDevicesOut{Items: out, Count: len(out)}, nil
+}
+
+type WhatsAppUserInfoIn struct {
+	Phone string `json:"phone"`
+}
+type WhatsAppUserInfoOut struct {
+	VerifiedName string   `json:"verified_name,omitempty"`
+	Status       string   `json:"status,omitempty"`
+	PictureID    string   `json:"picture_id,omitempty"`
+	Devices      []string `json:"devices,omitempty"`
+}
+
+func (d *Deps) WhatsAppUserInfo(ctx context.Context, req *mcp.CallToolRequest, in WhatsAppUserInfoIn) (*mcp.CallToolResult, WhatsAppUserInfoOut, error) {
+	if d.Svc.WhatsApp == nil {
+		return mcpserver.Err("disabled", "whatsapp channel not configured"), WhatsAppUserInfoOut{}, nil
+	}
+	if in.Phone == "" {
+		return mcpserver.Err("validation", "phone required"), WhatsAppUserInfoOut{}, nil
+	}
+	info, err := d.Svc.WhatsApp.UserInfo(ctx, in.Phone)
+	if err != nil {
+		return nil, WhatsAppUserInfoOut{}, fmt.Errorf("whatsapp_user_info: %w", err)
+	}
+	return nil, WhatsAppUserInfoOut{VerifiedName: info.VerifiedName, Status: info.Status, PictureID: info.PictureID, Devices: info.Devices}, nil
+}
+
+type WhatsAppSetPushNameIn struct {
+	Name string `json:"name"`
+}
+
+func (d *Deps) WhatsAppSetPushName(ctx context.Context, req *mcp.CallToolRequest, in WhatsAppSetPushNameIn) (*mcp.CallToolResult, WhatsAppGroupLeaveOut, error) {
+	if d.Svc.WhatsApp == nil {
+		return mcpserver.Err("disabled", "whatsapp channel not configured"), WhatsAppGroupLeaveOut{}, nil
+	}
+	if in.Name == "" {
+		return mcpserver.Err("validation", "name required"), WhatsAppGroupLeaveOut{}, nil
+	}
+	if err := d.Svc.WhatsApp.SetPushName(ctx, in.Name); err != nil {
+		return nil, WhatsAppGroupLeaveOut{}, fmt.Errorf("whatsapp_set_push_name: %w", err)
+	}
+	return nil, WhatsAppGroupLeaveOut{OK: true}, nil
 }

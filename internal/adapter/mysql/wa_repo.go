@@ -18,7 +18,7 @@ type waMessageRepo struct {
 var _ port.WAMessageRepo = (*waMessageRepo)(nil)
 
 func waSelectSQL() string {
-	return `SELECT id, message_id, chat_id, direction, phone, contact_id, body, media_type, media_url, media_caption,
+	return `SELECT id, message_id, chat_id, direction, phone, sender_name, contact_id, body, media_type, media_url, media_caption,
 		status, error, replied_to, sent_at, delivered_at, read_at, received_at, notified_at, replied_at, deleted_at, created_at
 		FROM wa_messages`
 }
@@ -28,14 +28,15 @@ func (r *waMessageRepo) Insert(ctx context.Context, msg domain.WAMessage) (domai
 	// idempotent (webhook re-delivery). Outbound rows always have an id from
 	// the send response; inbound rows carry the wamid.
 	query := `INSERT IGNORE INTO wa_messages
-		(message_id, chat_id, direction, phone, contact_id, body, media_type, media_url, media_caption,
+		(message_id, chat_id, direction, phone, sender_name, contact_id, body, media_type, media_url, media_caption,
 		 status, error, replied_to, sent_at, delivered_at, read_at, received_at, notified_at, replied_at, deleted_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	res, err := r.db.ExecContext(ctx, query,
 		toNullString(msg.MessageID),
 		toNullString(msg.ChatID),
 		string(msg.Direction),
 		msg.Phone,
+		toNullString(msg.SenderName),
 		toNullInt64Ptr(msg.ContactID),
 		msg.Body,
 		string(msg.MediaType),
@@ -265,6 +266,7 @@ func (r *waMessageRepo) scanOne(row rowScanner) (domain.WAMessage, error) {
 func scanWAMessage(scanner rowScanner) (domain.WAMessage, error) {
 	var msg domain.WAMessage
 	var messageID, chatID, mediaURL, mediaCaption, errStr, repliedTo sql.NullString
+	var senderName sql.NullString
 	var direction, status, mediaType string
 	var contactID sql.NullInt64
 	var sentAt, deliveredAt, readAt, receivedAt, notifiedAt, repliedAt, deletedAt sql.NullTime
@@ -274,6 +276,7 @@ func scanWAMessage(scanner rowScanner) (domain.WAMessage, error) {
 		&chatID,
 		&direction,
 		&msg.Phone,
+		&senderName,
 		&contactID,
 		&msg.Body,
 		&mediaType,
@@ -296,6 +299,7 @@ func scanWAMessage(scanner rowScanner) (domain.WAMessage, error) {
 	}
 	msg.MessageID = fromNullString(messageID)
 	msg.ChatID = fromNullString(chatID)
+	msg.SenderName = fromNullString(senderName)
 	msg.Direction = domain.WADirection(direction)
 	msg.ContactID = fromNullInt64(contactID)
 	msg.MediaType = domain.WAMediaType(mediaType)

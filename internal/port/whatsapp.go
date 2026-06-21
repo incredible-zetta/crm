@@ -31,6 +31,15 @@ type WhatsAppGateway interface {
 	// ListContacts returns WhatsApp contacts known by the authenticated device.
 	ListContacts(ctx context.Context) ([]WhatsAppContact, error)
 
+	// JoinGroup joins a group via invite link. Returns the joined group JID.
+	JoinGroup(ctx context.Context, inviteLink string) (string, error)
+
+	// LeaveGroup leaves a group by JID.
+	LeaveGroup(ctx context.Context, groupJID string) error
+
+	// GroupInfoFromLink fetches group metadata from an invite link without joining.
+	GroupInfoFromLink(ctx context.Context, inviteLink string) (WhatsAppGroup, error)
+
 	// SendMedia sends image/video/file media by URL or local file path.
 	SendMedia(ctx context.Context, msg WhatsAppMediaMessage) (WhatsAppSendResult, error)
 }
@@ -78,6 +87,79 @@ type WhatsAppMedia struct {
 type WhatsAppSendResult struct {
 	MessageID string
 	Status    string
+}
+
+// WhatsAppParticipant is a group member.
+type WhatsAppParticipant struct {
+	JID          string
+	Phone        string
+	LID          string
+	DisplayName  string
+	IsAdmin      bool
+	IsSuperAdmin bool
+}
+
+// WhatsAppParticipantResult is the per-participant outcome of a manage action.
+type WhatsAppParticipantResult struct {
+	Participant string
+	Status      string
+	Message     string
+}
+
+// WhatsAppGroupInfo is detailed group metadata.
+type WhatsAppGroupInfo struct {
+	JID              string
+	Name             string
+	Topic            string
+	OwnerJID         string
+	ParticipantCount int
+	IsLocked         bool
+	IsAnnounce       bool
+	Participants     []WhatsAppParticipant
+}
+
+// WhatsAppDevice is a linked device entry.
+type WhatsAppDevice struct {
+	Name string
+	JID  string
+}
+
+// WhatsAppConnection is the gateway connection/login status.
+type WhatsAppConnection struct {
+	Connected bool
+	LoggedIn  bool
+	DeviceID  string
+	JID       string
+}
+
+// WhatsAppUserInfo is a looked-up WhatsApp user profile.
+type WhatsAppUserInfo struct {
+	VerifiedName string
+	Status       string
+	PictureID    string
+	Devices      []string
+}
+
+// WhatsAppManageGateway is the optional extended gateway surface for group and
+// account management. The real HTTP Client implements it; test fakes need not.
+type WhatsAppManageGateway interface {
+	CreateGroup(ctx context.Context, title string, participants []string) (string, error)
+	GroupInfo(ctx context.Context, groupJID string) (WhatsAppGroupInfo, error)
+	GroupParticipants(ctx context.Context, groupJID string) ([]WhatsAppParticipant, error)
+	ManageParticipants(ctx context.Context, groupJID, action string, participants []string) ([]WhatsAppParticipantResult, error)
+	GroupParticipantRequests(ctx context.Context, groupJID string) ([]WhatsAppParticipant, error)
+	ReviewParticipantRequests(ctx context.Context, groupJID, action string, participants []string) error
+	SetGroupName(ctx context.Context, groupJID, name string) error
+	SetGroupTopic(ctx context.Context, groupJID, topic string) error
+	SetGroupLocked(ctx context.Context, groupJID string, locked bool) error
+	SetGroupAnnounce(ctx context.Context, groupJID string, announce bool) error
+	GroupInviteLink(ctx context.Context, groupJID string, reset bool) (string, error)
+	ConnectionStatus(ctx context.Context) (WhatsAppConnection, error)
+	ListDevices(ctx context.Context) ([]WhatsAppDevice, error)
+	Logout(ctx context.Context) error
+	Reconnect(ctx context.Context) error
+	UserInfo(ctx context.Context, phone string) (WhatsAppUserInfo, error)
+	SetPushName(ctx context.Context, name string) error
 }
 
 // WAMessageRepo persists WhatsApp messages (both inbound and outbound).

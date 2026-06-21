@@ -91,6 +91,7 @@ type WAMessage struct {
 	ChatID       string // e.g. 628xxx@s.whatsapp.net
 	Direction    WADirection
 	Phone        string // normalized E.164 (no +), e.g. 628xxx
+	SenderName   string // webhook from_name (push name); inbound only
 	ContactID    *int64 // set when matched to a known contact
 	Body         string // WhatsApp-formatted text (or caption)
 	MediaType    WAMediaType

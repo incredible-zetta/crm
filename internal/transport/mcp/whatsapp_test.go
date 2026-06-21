@@ -43,6 +43,13 @@ func (g *waGwFake) ListGroups(ctx context.Context) ([]port.WhatsAppGroup, error)
 func (g *waGwFake) ListContacts(ctx context.Context) ([]port.WhatsAppContact, error) {
 	return []port.WhatsAppContact{{JID: "628123456789@s.whatsapp.net", Name: "Alice"}}, nil
 }
+func (g *waGwFake) JoinGroup(ctx context.Context, link string) (string, error) {
+	return "120363@g.us", nil
+}
+func (g *waGwFake) LeaveGroup(ctx context.Context, jid string) error { return nil }
+func (g *waGwFake) GroupInfoFromLink(ctx context.Context, link string) (port.WhatsAppGroup, error) {
+	return port.WhatsAppGroup{JID: "120363@g.us", Name: "Team"}, nil
+}
 func (g *waGwFake) SendMedia(ctx context.Context, m port.WhatsAppMediaMessage) (port.WhatsAppSendResult, error) {
 	g.mediaSends++
 	return port.WhatsAppSendResult{MessageID: "wamid-media", Status: "sent"}, nil
@@ -266,6 +273,44 @@ func TestWASendTool(t *testing.T) {
 	}
 	if out.MessageID == "" {
 		t.Errorf("expected message id in output")
+	}
+}
+
+func TestWAGroupJoinLeave(t *testing.T) {
+	h := setupTestDeps(t)
+	wireWA(h, &waGwFake{})
+	res, out, err := h.deps.WhatsAppGroupJoin(context.Background(), nil, mcptransport.WhatsAppGroupJoinIn{Link: "https://chat.whatsapp.com/abc"})
+	if err != nil {
+		t.Fatalf("go error: %v", err)
+	}
+	if res != nil && res.IsError {
+		t.Fatalf("unexpected error envelope")
+	}
+	if out.GroupJID != "120363@g.us" {
+		t.Errorf("group_jid = %q", out.GroupJID)
+	}
+	lres, lout, err := h.deps.WhatsAppGroupLeave(context.Background(), nil, mcptransport.WhatsAppGroupLeaveIn{GroupJID: "120363@g.us"})
+	if err != nil || (lres != nil && lres.IsError) || !lout.OK {
+		t.Fatalf("leave failed: %v res=%v ok=%v", err, lres, lout.OK)
+	}
+}
+
+func TestWAGroupJoinValidation(t *testing.T) {
+	h := setupTestDeps(t)
+	wireWA(h, &waGwFake{})
+	res, _, _ := h.deps.WhatsAppGroupJoin(context.Background(), nil, mcptransport.WhatsAppGroupJoinIn{})
+	if code := waErrCode(t, res); code != "validation" {
+		t.Errorf("error code = %q, want validation", code)
+	}
+}
+
+func TestWAGroupManageUnsupportedGateway(t *testing.T) {
+	// waGwFake does not implement WhatsAppManageGateway -> management tools error.
+	h := setupTestDeps(t)
+	wireWA(h, &waGwFake{})
+	_, _, err := h.deps.WhatsAppGroupInfo(context.Background(), nil, mcptransport.WhatsAppGroupInfoIn{GroupJID: "120363@g.us"})
+	if err == nil {
+		t.Fatal("expected error: fake gateway lacks management support")
 	}
 }
 

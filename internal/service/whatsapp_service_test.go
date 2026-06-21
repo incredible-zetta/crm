@@ -56,6 +56,13 @@ func (g *fakeWAGateway) ListGroups(ctx context.Context) ([]port.WhatsAppGroup, e
 func (g *fakeWAGateway) ListContacts(ctx context.Context) ([]port.WhatsAppContact, error) {
 	return nil, nil
 }
+func (g *fakeWAGateway) JoinGroup(ctx context.Context, link string) (string, error) {
+	return "120363@g.us", nil
+}
+func (g *fakeWAGateway) LeaveGroup(ctx context.Context, jid string) error { return nil }
+func (g *fakeWAGateway) GroupInfoFromLink(ctx context.Context, link string) (port.WhatsAppGroup, error) {
+	return port.WhatsAppGroup{JID: "120363@g.us", Name: "Team"}, nil
+}
 func (g *fakeWAGateway) SendMedia(ctx context.Context, msg port.WhatsAppMediaMessage) (port.WhatsAppSendResult, error) {
 	return port.WhatsAppSendResult{MessageID: "wamid-media", Status: "sent"}, nil
 }
@@ -395,6 +402,7 @@ func TestWAIngestMessageStoresGroupChatID(t *testing.T) {
 		MessageID: "wamid-grp-1",
 		ChatID:    "120363423368106030@g.us",
 		From:      "628996926184@s.whatsapp.net",
+		FromName:  "Indra",
 		Body:      "test lagi",
 		Timestamp: time.Unix(600, 0),
 	}
@@ -406,6 +414,9 @@ func TestWAIngestMessageStoresGroupChatID(t *testing.T) {
 	}
 	if got := repo.inserted[0].ChatID; got != "120363423368106030@g.us" {
 		t.Errorf("chat_id not stored from webhook: %q", got)
+	}
+	if got := repo.inserted[0].SenderName; got != "Indra" {
+		t.Errorf("sender_name not stored from webhook: %q", got)
 	}
 }
 
