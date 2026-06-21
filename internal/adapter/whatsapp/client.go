@@ -294,6 +294,81 @@ func unwrapData(raw json.RawMessage) json.RawMessage {
 	return raw
 }
 
+// JoinGroup joins a group via invite link. Returns the joined group JID if present.
+func (c *Client) JoinGroup(ctx context.Context, inviteLink string) (string, error) {
+	if strings.TrimSpace(inviteLink) == "" {
+		return "", fmt.Errorf("whatsapp: invite link required")
+	}
+	body, _ := json.Marshal(map[string]string{"link": inviteLink})
+	req, err := c.newRequest(ctx, http.MethodPost, "/group/join-with-link", bytes.NewReader(body), "application/json")
+	if err != nil {
+		return "", err
+	}
+	env, err := c.do(req)
+	if err != nil {
+		return "", err
+	}
+	var res struct {
+		GroupID string `json:"group_id"`
+		JID     string `json:"jid"`
+	}
+	_ = json.Unmarshal(env.Results, &res)
+	if res.GroupID != "" {
+		return res.GroupID, nil
+	}
+	return res.JID, nil
+}
+
+// LeaveGroup leaves a group by JID.
+func (c *Client) LeaveGroup(ctx context.Context, groupJID string) error {
+	if strings.TrimSpace(groupJID) == "" {
+		return fmt.Errorf("whatsapp: group jid required")
+	}
+	body, _ := json.Marshal(map[string]string{"group_id": groupJID})
+	req, err := c.newRequest(ctx, http.MethodPost, "/group/leave", bytes.NewReader(body), "application/json")
+	if err != nil {
+		return err
+	}
+	_, err = c.do(req)
+	return err
+}
+
+// GroupInfoFromLink fetches group metadata from an invite link without joining.
+func (c *Client) GroupInfoFromLink(ctx context.Context, inviteLink string) (port.WhatsAppGroup, error) {
+	if strings.TrimSpace(inviteLink) == "" {
+		return port.WhatsAppGroup{}, fmt.Errorf("whatsapp: invite link required")
+	}
+	q := url.Values{}
+	q.Set("link", inviteLink)
+	req, err := c.newRequest(ctx, http.MethodGet, "/group/info-from-link?"+q.Encode(), nil, "")
+	if err != nil {
+		return port.WhatsAppGroup{}, err
+	}
+	env, err := c.do(req)
+	if err != nil {
+		return port.WhatsAppGroup{}, err
+	}
+	var res struct {
+		JID          string            `json:"jid"`
+		ID           string            `json:"id"`
+		GroupID      string            `json:"group_id"`
+		Name         string            `json:"name"`
+		Topic        string            `json:"topic"`
+		Participants []json.RawMessage `json:"participants"`
+	}
+	if err := json.Unmarshal(unwrapData(env.Results), &res); err != nil {
+		return port.WhatsAppGroup{}, fmt.Errorf("whatsapp: unparseable group info response: %w", err)
+	}
+	jid := res.JID
+	if jid == "" {
+		jid = res.GroupID
+	}
+	if jid == "" {
+		jid = res.ID
+	}
+	return port.WhatsAppGroup{JID: jid, Name: res.Name, Topic: res.Topic, Participant: len(res.Participants)}, nil
+}
+
 // SendMedia sends image/video/file media via go-whatsapp-web-multidevice multipart endpoints.
 func (c *Client) SendMedia(ctx context.Context, msg port.WhatsAppMediaMessage) (port.WhatsAppSendResult, error) {
 	phone := NormalizePhone(msg.Phone)
@@ -359,4 +434,383 @@ func (c *Client) SendMedia(ctx context.Context, msg port.WhatsAppMediaMessage) (
 		res.Status = env.Message
 	}
 	return port.WhatsAppSendResult{MessageID: res.MessageID, Status: res.Status}, nil
+}
+
+var _ port.WhatsAppManageGateway = (*Client)(nil)
+
+// CreateGroup creates a group with the given title and participant phones.
+func (c *Client) CreateGroup(ctx context.Context, title string, participants []string) (string, error) {
+	body, _ := json.Marshal(map[string]any{"title": title, "participants": participants})
+	req, err := c.newRequest(ctx, http.MethodPost, "/group", bytes.NewReader(body), "application/json")
+	if err != nil {
+		return "", err
+	}
+	env, err := c.do(req)
+	if err != nil {
+		return "", err
+	}
+	var res struct {
+		GroupID string `json:"group_id"`
+		JID     string `json:"jid"`
+	}
+	_ = json.Unmarshal(env.Results, &res)
+	if res.GroupID != "" {
+		return res.GroupID, nil
+	}
+	return res.JID, nil
+}
+
+// GroupInfo fetches detailed metadata for a group.
+func (c *Client) GroupInfo(ctx context.Context, groupJID string) (port.WhatsAppGroupInfo, error) {
+	if strings.TrimSpace(groupJID) == "" {
+		return port.WhatsAppGroupInfo{}, fmt.Errorf("whatsapp: group jid required")
+	}
+	q := url.Values{}
+	q.Set("group_id", groupJID)
+	req, err := c.newRequest(ctx, http.MethodGet, "/group/info?"+q.Encode(), nil, "")
+	if err != nil {
+		return port.WhatsAppGroupInfo{}, err
+	}
+	env, err := c.do(req)
+	if err != nil {
+		return port.WhatsAppGroupInfo{}, err
+	}
+	var res struct {
+		JID              string `json:"JID"`
+		GroupID          string `json:"group_id"`
+		Name             string `json:"Name"`
+		Topic            string `json:"Topic"`
+		OwnerJID         string `json:"OwnerJID"`
+		ParticipantCount int    `json:"ParticipantCount"`
+		IsLocked         bool   `json:"IsLocked"`
+		IsAnnounce       bool   `json:"IsAnnounce"`
+		Participants     []struct {
+			JID          string `json:"JID"`
+			PhoneNumber  string `json:"PhoneNumber"`
+			LID          string `json:"LID"`
+			DisplayName  string `json:"DisplayName"`
+			IsAdmin      bool   `json:"IsAdmin"`
+			IsSuperAdmin bool   `json:"IsSuperAdmin"`
+		} `json:"Participants"`
+	}
+	_ = json.Unmarshal(env.Results, &res)
+	jid := res.JID
+	if jid == "" {
+		jid = res.GroupID
+	}
+	info := port.WhatsAppGroupInfo{
+		JID: jid, Name: res.Name, Topic: res.Topic, OwnerJID: res.OwnerJID,
+		ParticipantCount: res.ParticipantCount, IsLocked: res.IsLocked, IsAnnounce: res.IsAnnounce,
+	}
+	for _, p := range res.Participants {
+		info.Participants = append(info.Participants, port.WhatsAppParticipant{
+			JID: p.JID, Phone: p.PhoneNumber, LID: p.LID, DisplayName: p.DisplayName,
+			IsAdmin: p.IsAdmin, IsSuperAdmin: p.IsSuperAdmin,
+		})
+	}
+	if info.ParticipantCount == 0 {
+		info.ParticipantCount = len(info.Participants)
+	}
+	return info, nil
+}
+
+// GroupParticipants lists members of a group.
+func (c *Client) GroupParticipants(ctx context.Context, groupJID string) ([]port.WhatsAppParticipant, error) {
+	if strings.TrimSpace(groupJID) == "" {
+		return nil, fmt.Errorf("whatsapp: group jid required")
+	}
+	q := url.Values{}
+	q.Set("group_id", groupJID)
+	req, err := c.newRequest(ctx, http.MethodGet, "/group/participants?"+q.Encode(), nil, "")
+	if err != nil {
+		return nil, err
+	}
+	env, err := c.do(req)
+	if err != nil {
+		return nil, err
+	}
+	var res struct {
+		Participants []struct {
+			JID          string `json:"jid"`
+			PhoneNumber  string `json:"phone_number"`
+			LID          string `json:"lid"`
+			DisplayName  string `json:"display_name"`
+			IsAdmin      bool   `json:"is_admin"`
+			IsSuperAdmin bool   `json:"is_super_admin"`
+		} `json:"participants"`
+	}
+	_ = json.Unmarshal(env.Results, &res)
+	out := make([]port.WhatsAppParticipant, len(res.Participants))
+	for i, p := range res.Participants {
+		out[i] = port.WhatsAppParticipant{JID: p.JID, Phone: p.PhoneNumber, LID: p.LID, DisplayName: p.DisplayName, IsAdmin: p.IsAdmin, IsSuperAdmin: p.IsSuperAdmin}
+	}
+	return out, nil
+}
+
+// manageParticipants posts a ManageParticipantRequest to the given path.
+func (c *Client) manageParticipants(ctx context.Context, path, groupJID string, participants []string) ([]port.WhatsAppParticipantResult, error) {
+	if strings.TrimSpace(groupJID) == "" {
+		return nil, fmt.Errorf("whatsapp: group jid required")
+	}
+	body, _ := json.Marshal(map[string]any{"group_id": groupJID, "participants": participants})
+	req, err := c.newRequest(ctx, http.MethodPost, path, bytes.NewReader(body), "application/json")
+	if err != nil {
+		return nil, err
+	}
+	env, err := c.do(req)
+	if err != nil {
+		return nil, err
+	}
+	var res []struct {
+		Participant string `json:"participant"`
+		Status      string `json:"status"`
+		Message     string `json:"message"`
+	}
+	_ = json.Unmarshal(env.Results, &res)
+	out := make([]port.WhatsAppParticipantResult, len(res))
+	for i, r := range res {
+		out[i] = port.WhatsAppParticipantResult{Participant: r.Participant, Status: r.Status, Message: r.Message}
+	}
+	return out, nil
+}
+
+// ManageParticipants adds, removes, promotes, or demotes participants.
+// action: add | remove | promote | demote.
+func (c *Client) ManageParticipants(ctx context.Context, groupJID, action string, participants []string) ([]port.WhatsAppParticipantResult, error) {
+	var path string
+	switch action {
+	case "add":
+		path = "/group/participants"
+	case "remove":
+		path = "/group/participants/remove"
+	case "promote":
+		path = "/group/participants/promote"
+	case "demote":
+		path = "/group/participants/demote"
+	default:
+		return nil, fmt.Errorf("whatsapp: unsupported participant action %q", action)
+	}
+	return c.manageParticipants(ctx, path, groupJID, participants)
+}
+
+// GroupParticipantRequests lists pending join requests for a group.
+func (c *Client) GroupParticipantRequests(ctx context.Context, groupJID string) ([]port.WhatsAppParticipant, error) {
+	if strings.TrimSpace(groupJID) == "" {
+		return nil, fmt.Errorf("whatsapp: group jid required")
+	}
+	q := url.Values{}
+	q.Set("group_id", groupJID)
+	req, err := c.newRequest(ctx, http.MethodGet, "/group/participant-requests?"+q.Encode(), nil, "")
+	if err != nil {
+		return nil, err
+	}
+	env, err := c.do(req)
+	if err != nil {
+		return nil, err
+	}
+	var res []struct {
+		JID         string `json:"jid"`
+		PhoneNumber string `json:"phone_number"`
+		DisplayName string `json:"display_name"`
+	}
+	_ = json.Unmarshal(unwrapData(env.Results), &res)
+	out := make([]port.WhatsAppParticipant, len(res))
+	for i, r := range res {
+		out[i] = port.WhatsAppParticipant{JID: r.JID, Phone: r.PhoneNumber, DisplayName: r.DisplayName}
+	}
+	return out, nil
+}
+
+// ReviewParticipantRequests approves or rejects pending join requests.
+// action: approve | reject.
+func (c *Client) ReviewParticipantRequests(ctx context.Context, groupJID, action string, participants []string) error {
+	var path string
+	switch action {
+	case "approve":
+		path = "/group/participant-requests/approve"
+	case "reject":
+		path = "/group/participant-requests/reject"
+	default:
+		return fmt.Errorf("whatsapp: unsupported review action %q", action)
+	}
+	if strings.TrimSpace(groupJID) == "" {
+		return fmt.Errorf("whatsapp: group jid required")
+	}
+	body, _ := json.Marshal(map[string]any{"group_id": groupJID, "participants": participants})
+	req, err := c.newRequest(ctx, http.MethodPost, path, bytes.NewReader(body), "application/json")
+	if err != nil {
+		return err
+	}
+	_, err = c.do(req)
+	return err
+}
+
+func (c *Client) groupSetString(ctx context.Context, path, groupJID, field, value string) error {
+	if strings.TrimSpace(groupJID) == "" {
+		return fmt.Errorf("whatsapp: group jid required")
+	}
+	body, _ := json.Marshal(map[string]string{"group_id": groupJID, field: value})
+	req, err := c.newRequest(ctx, http.MethodPost, path, bytes.NewReader(body), "application/json")
+	if err != nil {
+		return err
+	}
+	_, err = c.do(req)
+	return err
+}
+
+func (c *Client) groupSetBool(ctx context.Context, path, groupJID, field string, value bool) error {
+	if strings.TrimSpace(groupJID) == "" {
+		return fmt.Errorf("whatsapp: group jid required")
+	}
+	body, _ := json.Marshal(map[string]any{"group_id": groupJID, field: value})
+	req, err := c.newRequest(ctx, http.MethodPost, path, bytes.NewReader(body), "application/json")
+	if err != nil {
+		return err
+	}
+	_, err = c.do(req)
+	return err
+}
+
+// SetGroupName sets the group subject.
+func (c *Client) SetGroupName(ctx context.Context, groupJID, name string) error {
+	return c.groupSetString(ctx, "/group/name", groupJID, "name", name)
+}
+
+// SetGroupTopic sets or clears the group topic/description.
+func (c *Client) SetGroupTopic(ctx context.Context, groupJID, topic string) error {
+	return c.groupSetString(ctx, "/group/topic", groupJID, "topic", topic)
+}
+
+// SetGroupLocked locks/unlocks group info editing to admins.
+func (c *Client) SetGroupLocked(ctx context.Context, groupJID string, locked bool) error {
+	return c.groupSetBool(ctx, "/group/locked", groupJID, "locked", locked)
+}
+
+// SetGroupAnnounce enables/disables admin-only messaging.
+func (c *Client) SetGroupAnnounce(ctx context.Context, groupJID string, announce bool) error {
+	return c.groupSetBool(ctx, "/group/announce", groupJID, "announce", announce)
+}
+
+// GroupInviteLink returns (or resets) the group invite link.
+func (c *Client) GroupInviteLink(ctx context.Context, groupJID string, reset bool) (string, error) {
+	if strings.TrimSpace(groupJID) == "" {
+		return "", fmt.Errorf("whatsapp: group jid required")
+	}
+	q := url.Values{}
+	q.Set("group_id", groupJID)
+	if reset {
+		q.Set("reset", "true")
+	}
+	req, err := c.newRequest(ctx, http.MethodGet, "/group/invite-link?"+q.Encode(), nil, "")
+	if err != nil {
+		return "", err
+	}
+	env, err := c.do(req)
+	if err != nil {
+		return "", err
+	}
+	var res struct {
+		InviteLink string `json:"invite_link"`
+	}
+	_ = json.Unmarshal(env.Results, &res)
+	return res.InviteLink, nil
+}
+
+// ConnectionStatus reports gateway connection/login state.
+func (c *Client) ConnectionStatus(ctx context.Context) (port.WhatsAppConnection, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, "/app/status", nil, "")
+	if err != nil {
+		return port.WhatsAppConnection{}, err
+	}
+	env, err := c.do(req)
+	if err != nil {
+		return port.WhatsAppConnection{}, err
+	}
+	var res struct {
+		IsConnected bool   `json:"is_connected"`
+		IsLoggedIn  bool   `json:"is_logged_in"`
+		DeviceID    string `json:"device_id"`
+		JID         string `json:"jid"`
+	}
+	_ = json.Unmarshal(env.Results, &res)
+	return port.WhatsAppConnection{Connected: res.IsConnected, LoggedIn: res.IsLoggedIn, DeviceID: res.DeviceID, JID: res.JID}, nil
+}
+
+// ListDevices lists linked devices.
+func (c *Client) ListDevices(ctx context.Context) ([]port.WhatsAppDevice, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, "/app/devices", nil, "")
+	if err != nil {
+		return nil, err
+	}
+	env, err := c.do(req)
+	if err != nil {
+		return nil, err
+	}
+	var res []struct {
+		Name string `json:"name"`
+		JID  string `json:"device"`
+	}
+	_ = json.Unmarshal(unwrapData(env.Results), &res)
+	out := make([]port.WhatsAppDevice, len(res))
+	for i, d := range res {
+		out[i] = port.WhatsAppDevice{Name: d.Name, JID: d.JID}
+	}
+	return out, nil
+}
+
+// Logout logs the device out of WhatsApp.
+func (c *Client) Logout(ctx context.Context) error {
+	req, err := c.newRequest(ctx, http.MethodGet, "/app/logout", nil, "")
+	if err != nil {
+		return err
+	}
+	_, err = c.do(req)
+	return err
+}
+
+// Reconnect forces the gateway to reconnect.
+func (c *Client) Reconnect(ctx context.Context) error {
+	req, err := c.newRequest(ctx, http.MethodGet, "/app/reconnect", nil, "")
+	if err != nil {
+		return err
+	}
+	_, err = c.do(req)
+	return err
+}
+
+// UserInfo looks up a WhatsApp user's profile by phone.
+func (c *Client) UserInfo(ctx context.Context, phone string) (port.WhatsAppUserInfo, error) {
+	p := NormalizePhone(phone)
+	if p == "" {
+		return port.WhatsAppUserInfo{}, fmt.Errorf("whatsapp: phone required")
+	}
+	q := url.Values{}
+	q.Set("phone", p)
+	req, err := c.newRequest(ctx, http.MethodGet, "/user/info?"+q.Encode(), nil, "")
+	if err != nil {
+		return port.WhatsAppUserInfo{}, err
+	}
+	env, err := c.do(req)
+	if err != nil {
+		return port.WhatsAppUserInfo{}, err
+	}
+	var res struct {
+		VerifiedName string   `json:"verified_name"`
+		Status       string   `json:"status"`
+		PictureID    string   `json:"picture_id"`
+		Devices      []string `json:"devices"`
+	}
+	_ = json.Unmarshal(env.Results, &res)
+	return port.WhatsAppUserInfo{VerifiedName: res.VerifiedName, Status: res.Status, PictureID: res.PictureID, Devices: res.Devices}, nil
+}
+
+// SetPushName changes the account display (push) name.
+func (c *Client) SetPushName(ctx context.Context, name string) error {
+	body, _ := json.Marshal(map[string]string{"push_name": name})
+	req, err := c.newRequest(ctx, http.MethodPost, "/user/pushname", bytes.NewReader(body), "application/json")
+	if err != nil {
+		return err
+	}
+	_, err = c.do(req)
+	return err
 }
