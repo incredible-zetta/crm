@@ -8,6 +8,7 @@ import (
 
 	"github.com/incredible-zetta/crm/internal/domain"
 	"github.com/incredible-zetta/crm/internal/port"
+	"github.com/incredible-zetta/crm/internal/tenant"
 )
 
 type templateRepo struct {
@@ -22,8 +23,8 @@ func (r *templateRepo) Create(ctx context.Context, t domain.Template) (domain.Te
 		return domain.Template{}, fmt.Errorf("marshal variables: %w", err)
 	}
 
-	query := `INSERT INTO email_templates (name, subject, body_html, body_text, variables, deleted_at) VALUES (?, ?, ?, ?, ?, ?)`
-	res, err := r.db.ExecContext(ctx, query, t.Name, t.Subject, t.BodyHTML, t.BodyText, variablesJSON, toNullTime(t.DeletedAt))
+	query := `INSERT INTO email_templates (tenant_id, name, subject, body_html, body_text, variables, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
+	res, err := r.db.ExecContext(ctx, query, tenant.From(ctx), t.Name, t.Subject, t.BodyHTML, t.BodyText, variablesJSON, toNullTime(t.DeletedAt))
 	if err != nil {
 		if strings.Contains(err.Error(), "Duplicate") {
 			return domain.Template{}, fmt.Errorf("template with name %q already exists: %w", t.Name, domain.ErrConflict)
@@ -40,8 +41,8 @@ func (r *templateRepo) Create(ctx context.Context, t domain.Template) (domain.Te
 }
 
 func (r *templateRepo) Get(ctx context.Context, id int64) (domain.Template, error) {
-	query := `SELECT id, name, subject, body_html, body_text, variables, deleted_at, created_at, updated_at FROM email_templates WHERE id = ? AND deleted_at IS NULL`
-	row := r.db.QueryRowContext(ctx, query, id)
+	query := `SELECT id, name, subject, body_html, body_text, variables, deleted_at, created_at, updated_at FROM email_templates WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL`
+	row := r.db.QueryRowContext(ctx, query, id, tenant.From(ctx))
 	t, err := scanTemplate(row)
 	if err == sql.ErrNoRows {
 		return domain.Template{}, fmt.Errorf("template not found: %w", domain.ErrNotFound)
@@ -53,8 +54,8 @@ func (r *templateRepo) Get(ctx context.Context, id int64) (domain.Template, erro
 }
 
 func (r *templateRepo) GetByName(ctx context.Context, name string) (domain.Template, error) {
-	query := `SELECT id, name, subject, body_html, body_text, variables, deleted_at, created_at, updated_at FROM email_templates WHERE name = ? AND deleted_at IS NULL`
-	row := r.db.QueryRowContext(ctx, query, name)
+	query := `SELECT id, name, subject, body_html, body_text, variables, deleted_at, created_at, updated_at FROM email_templates WHERE name = ? AND tenant_id = ? AND deleted_at IS NULL`
+	row := r.db.QueryRowContext(ctx, query, name, tenant.From(ctx))
 	t, err := scanTemplate(row)
 	if err == sql.ErrNoRows {
 		return domain.Template{}, fmt.Errorf("template not found by name: %w", domain.ErrNotFound)
@@ -66,8 +67,8 @@ func (r *templateRepo) GetByName(ctx context.Context, name string) (domain.Templ
 }
 
 func (r *templateRepo) List(ctx context.Context) ([]domain.Template, error) {
-	query := `SELECT id, name, subject, body_html, body_text, variables, deleted_at, created_at, updated_at FROM email_templates WHERE deleted_at IS NULL ORDER BY name ASC`
-	rows, err := r.db.QueryContext(ctx, query)
+	query := `SELECT id, name, subject, body_html, body_text, variables, deleted_at, created_at, updated_at FROM email_templates WHERE deleted_at IS NULL AND tenant_id = ? ORDER BY name ASC`
+	rows, err := r.db.QueryContext(ctx, query, tenant.From(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("list templates: %w", err)
 	}
@@ -93,8 +94,8 @@ func (r *templateRepo) Update(ctx context.Context, id int64, t domain.Template) 
 		return domain.Template{}, fmt.Errorf("marshal variables: %w", err)
 	}
 
-	query := `UPDATE email_templates SET name = ?, subject = ?, body_html = ?, body_text = ?, variables = ? WHERE id = ? AND deleted_at IS NULL`
-	res, err := r.db.ExecContext(ctx, query, t.Name, t.Subject, t.BodyHTML, t.BodyText, variablesJSON, id)
+	query := `UPDATE email_templates SET name = ?, subject = ?, body_html = ?, body_text = ?, variables = ? WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL`
+	res, err := r.db.ExecContext(ctx, query, t.Name, t.Subject, t.BodyHTML, t.BodyText, variablesJSON, id, tenant.From(ctx))
 	if err != nil {
 		if strings.Contains(err.Error(), "Duplicate") {
 			return domain.Template{}, fmt.Errorf("template name conflict: %w", domain.ErrConflict)
@@ -118,8 +119,8 @@ func (r *templateRepo) Update(ctx context.Context, id int64, t domain.Template) 
 }
 
 func (r *templateRepo) SoftDelete(ctx context.Context, id int64) error {
-	query := `UPDATE email_templates SET deleted_at = NOW() WHERE id = ? AND deleted_at IS NULL`
-	res, err := r.db.ExecContext(ctx, query, id)
+	query := `UPDATE email_templates SET deleted_at = NOW() WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL`
+	res, err := r.db.ExecContext(ctx, query, id, tenant.From(ctx))
 	if err != nil {
 		return fmt.Errorf("soft delete template: %w", err)
 	}

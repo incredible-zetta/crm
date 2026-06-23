@@ -7,6 +7,7 @@ import (
 
 	"github.com/incredible-zetta/crm/internal/domain"
 	"github.com/incredible-zetta/crm/internal/port"
+	"github.com/incredible-zetta/crm/internal/tenant"
 )
 
 type eventRepo struct {
@@ -32,8 +33,8 @@ func (r *eventRepo) Insert(ctx context.Context, e domain.EmailEvent) error {
 		linkCodeVal = nil
 	}
 
-	query := `INSERT INTO email_events (contact_id, campaign_id, type, link_code, meta) VALUES (?, ?, ?, ?, ?)`
-	_, err = r.db.ExecContext(ctx, query, e.ContactID, e.CampaignID, string(e.Type), linkCodeVal, metaJSON)
+	query := `INSERT INTO email_events (tenant_id, contact_id, campaign_id, type, link_code, meta) VALUES (?, ?, ?, ?, ?, ?)`
+	_, err = r.db.ExecContext(ctx, query, tenant.From(ctx), e.ContactID, e.CampaignID, string(e.Type), linkCodeVal, metaJSON)
 	if err != nil {
 		return fmt.Errorf("insert event exec: %w", err)
 	}
@@ -42,8 +43,8 @@ func (r *eventRepo) Insert(ctx context.Context, e domain.EmailEvent) error {
 }
 
 func (r *eventRepo) OverviewCounts(ctx context.Context) (map[string]int, error) {
-	query := `SELECT type, COUNT(*) FROM email_events GROUP BY type`
-	rows, err := r.db.QueryContext(ctx, query)
+	query := `SELECT type, COUNT(*) FROM email_events WHERE tenant_id = ? GROUP BY type`
+	rows, err := r.db.QueryContext(ctx, query, tenant.From(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("overview counts query: %w", err)
 	}
@@ -71,8 +72,8 @@ func (r *eventRepo) OverviewCounts(ctx context.Context) (map[string]int, error) 
 }
 
 func (r *eventRepo) CampaignCounts(ctx context.Context, campaignID int64) (map[string]int, error) {
-	query := `SELECT type, COUNT(*) FROM email_events WHERE campaign_id = ? GROUP BY type`
-	rows, err := r.db.QueryContext(ctx, query, campaignID)
+	query := `SELECT type, COUNT(*) FROM email_events WHERE campaign_id = ? AND tenant_id = ? GROUP BY type`
+	rows, err := r.db.QueryContext(ctx, query, campaignID, tenant.From(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("campaign counts query: %w", err)
 	}
@@ -103,10 +104,11 @@ func (r *eventRepo) UniqueOpens(ctx context.Context, campaignID *int64) (int, er
 	var query string
 	var args []any
 	if campaignID == nil {
-		query = `SELECT COUNT(DISTINCT contact_id) FROM email_events WHERE type = 'open'`
+		query = `SELECT COUNT(DISTINCT contact_id) FROM email_events WHERE type = 'open' AND tenant_id = ?`
+		args = append(args, tenant.From(ctx))
 	} else {
-		query = `SELECT COUNT(DISTINCT contact_id) FROM email_events WHERE type = 'open' AND campaign_id = ?`
-		args = append(args, *campaignID)
+		query = `SELECT COUNT(DISTINCT contact_id) FROM email_events WHERE type = 'open' AND campaign_id = ? AND tenant_id = ?`
+		args = append(args, *campaignID, tenant.From(ctx))
 	}
 
 	var count int
@@ -127,12 +129,12 @@ func (r *eventRepo) TopLinks(ctx context.Context, campaignID int64, limit int) (
 	}
 
 	query := `SELECT link_code, COUNT(*) as clicks FROM email_events 
-WHERE campaign_id = ? AND type = 'click' AND link_code IS NOT NULL AND link_code != ''
+WHERE campaign_id = ? AND tenant_id = ? AND type = 'click' AND link_code IS NOT NULL AND link_code != ''
 GROUP BY link_code 
 ORDER BY clicks DESC, link_code ASC 
 LIMIT ?`
 
-	rows, err := r.db.QueryContext(ctx, query, campaignID, limit)
+	rows, err := r.db.QueryContext(ctx, query, campaignID, tenant.From(ctx), limit)
 	if err != nil {
 		return nil, fmt.Errorf("top links query: %w", err)
 	}

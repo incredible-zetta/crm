@@ -10,6 +10,7 @@ import (
 
 	"github.com/incredible-zetta/crm/internal/domain"
 	"github.com/incredible-zetta/crm/internal/port"
+	"github.com/incredible-zetta/crm/internal/tenant"
 )
 
 type contactRepo struct {
@@ -46,8 +47,8 @@ func (r *contactRepo) Upsert(ctx context.Context, c domain.Contact) (domain.Cont
 		}
 	}
 
-	query := `INSERT INTO contacts (email, first_name, last_name, company, phone, stage, tags, notes, custom, source, unsub_code, unsubscribed_at, deleted_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	query := `INSERT INTO contacts (tenant_id, email, first_name, last_name, company, phone, stage, tags, notes, custom, source, unsub_code, unsubscribed_at, deleted_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE
   first_name = IF(VALUES(first_name) != '', VALUES(first_name), first_name),
   last_name  = IF(VALUES(last_name)  != '', VALUES(last_name),  last_name),
@@ -63,6 +64,7 @@ ON DUPLICATE KEY UPDATE
   deleted_at = IF(VALUES(deleted_at) IS NOT NULL, VALUES(deleted_at), deleted_at)`
 
 	_, err := r.db.ExecContext(ctx, query,
+		tenant.From(ctx),
 		c.Email,
 		toNullString(c.FirstName),
 		toNullString(c.LastName),
@@ -87,8 +89,8 @@ ON DUPLICATE KEY UPDATE
 
 func (r *contactRepo) Get(ctx context.Context, id int64) (domain.Contact, error) {
 	query := `SELECT id, email, first_name, last_name, company, phone, stage, tags, notes, custom, source, unsub_code, unsubscribed_at, deleted_at, created_at, updated_at, email_status, email_reason, email_checked_at, whatsapp_status, whatsapp_checked_at 
-FROM contacts WHERE id = ? AND deleted_at IS NULL`
-	row := r.db.QueryRowContext(ctx, query, id)
+FROM contacts WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL`
+	row := r.db.QueryRowContext(ctx, query, id, tenant.From(ctx))
 	c, err := scanContact(row)
 	if err == sql.ErrNoRows {
 		return domain.Contact{}, fmt.Errorf("contact not found: %w", domain.ErrNotFound)
@@ -101,8 +103,8 @@ FROM contacts WHERE id = ? AND deleted_at IS NULL`
 
 func (r *contactRepo) GetByEmail(ctx context.Context, email string) (domain.Contact, error) {
 	query := `SELECT id, email, first_name, last_name, company, phone, stage, tags, notes, custom, source, unsub_code, unsubscribed_at, deleted_at, created_at, updated_at, email_status, email_reason, email_checked_at, whatsapp_status, whatsapp_checked_at 
-FROM contacts WHERE email = ? AND deleted_at IS NULL`
-	row := r.db.QueryRowContext(ctx, query, email)
+FROM contacts WHERE email = ? AND tenant_id = ? AND deleted_at IS NULL`
+	row := r.db.QueryRowContext(ctx, query, email, tenant.From(ctx))
 	c, err := scanContact(row)
 	if err == sql.ErrNoRows {
 		return domain.Contact{}, fmt.Errorf("contact not found: %w", domain.ErrNotFound)
@@ -128,10 +130,11 @@ func (r *contactRepo) GetByPhone(ctx context.Context, phone string) (domain.Cont
 	query := `SELECT id, email, first_name, last_name, company, phone, stage, tags, notes, custom, source, unsub_code, unsubscribed_at, deleted_at, created_at, updated_at, email_status, email_reason, email_checked_at, whatsapp_status, whatsapp_checked_at
 FROM contacts
 WHERE deleted_at IS NULL
+  AND tenant_id = ?
   AND phone IS NOT NULL AND phone <> ''
   AND RIGHT(REGEXP_REPLACE(phone, '[^0-9]', ''), 9) = ?
 ORDER BY id ASC LIMIT 1`
-	row := r.db.QueryRowContext(ctx, query, suffix)
+	row := r.db.QueryRowContext(ctx, query, tenant.From(ctx), suffix)
 	c, err := scanContact(row)
 	if err == sql.ErrNoRows {
 		return domain.Contact{}, fmt.Errorf("contact not found: %w", domain.ErrNotFound)
@@ -241,8 +244,8 @@ func (r *contactRepo) Update(ctx context.Context, id int64, patch domain.Contact
 		return r.Get(ctx, id)
 	}
 
-	query := fmt.Sprintf("UPDATE contacts SET %s WHERE id = ? AND deleted_at IS NULL", strings.Join(updateParts, ", "))
-	args = append(args, id)
+	query := fmt.Sprintf("UPDATE contacts SET %s WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL", strings.Join(updateParts, ", "))
+	args = append(args, id, tenant.From(ctx))
 
 	_, err = r.db.ExecContext(ctx, query, args...)
 	if err != nil {
@@ -257,6 +260,8 @@ func (r *contactRepo) List(ctx context.Context, f domain.ContactFilter, p port.P
 	var args []any
 
 	whereParts = append(whereParts, "deleted_at IS NULL")
+	whereParts = append(whereParts, "tenant_id = ?")
+	args = append(args, tenant.From(ctx))
 
 	if f.Stage != "" {
 		whereParts = append(whereParts, "stage = ?")
@@ -337,8 +342,8 @@ FROM contacts WHERE ` + strings.Join(queryParts, " AND ") + " ORDER BY id ASC LI
 }
 
 func (r *contactRepo) CountByStage(ctx context.Context) (map[string]int, error) {
-	query := "SELECT stage, COUNT(*) FROM contacts WHERE deleted_at IS NULL GROUP BY stage"
-	rows, err := r.db.QueryContext(ctx, query)
+	query := "SELECT stage, COUNT(*) FROM contacts WHERE deleted_at IS NULL AND tenant_id = ? GROUP BY stage"
+	rows, err := r.db.QueryContext(ctx, query, tenant.From(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("count by stage: %w", err)
 	}
@@ -360,8 +365,8 @@ func (r *contactRepo) CountByStage(ctx context.Context) (map[string]int, error) 
 }
 
 func (r *contactRepo) SoftDelete(ctx context.Context, id int64) error {
-	query := "UPDATE contacts SET deleted_at = NOW() WHERE id = ? AND deleted_at IS NULL"
-	res, err := r.db.ExecContext(ctx, query, id)
+	query := "UPDATE contacts SET deleted_at = NOW() WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL"
+	res, err := r.db.ExecContext(ctx, query, id, tenant.From(ctx))
 	if err != nil {
 		return fmt.Errorf("soft delete contact: %w", err)
 	}
@@ -376,8 +381,8 @@ func (r *contactRepo) SoftDelete(ctx context.Context, id int64) error {
 }
 
 func (r *contactRepo) Purge(ctx context.Context, id int64) error {
-	query := "DELETE FROM contacts WHERE id = ?"
-	res, err := r.db.ExecContext(ctx, query, id)
+	query := "DELETE FROM contacts WHERE id = ? AND tenant_id = ?"
+	res, err := r.db.ExecContext(ctx, query, id, tenant.From(ctx))
 	if err != nil {
 		return fmt.Errorf("purge contact: %w", err)
 	}
@@ -392,8 +397,8 @@ func (r *contactRepo) Purge(ctx context.Context, id int64) error {
 }
 
 func (r *contactRepo) SetUnsubscribed(ctx context.Context, id int64, at time.Time) error {
-	query := "UPDATE contacts SET unsubscribed_at = ? WHERE id = ?"
-	res, err := r.db.ExecContext(ctx, query, at, id)
+	query := "UPDATE contacts SET unsubscribed_at = ? WHERE id = ? AND tenant_id = ?"
+	res, err := r.db.ExecContext(ctx, query, at, id, tenant.From(ctx))
 	if err != nil {
 		return fmt.Errorf("set unsubscribed contact: %w", err)
 	}
@@ -403,7 +408,7 @@ func (r *contactRepo) SetUnsubscribed(ctx context.Context, id int64, at time.Tim
 	}
 	if affected == 0 {
 		var exists int
-		if err := r.db.QueryRowContext(ctx, "SELECT 1 FROM contacts WHERE id = ? AND deleted_at IS NULL", id).Scan(&exists); err != nil {
+		if err := r.db.QueryRowContext(ctx, "SELECT 1 FROM contacts WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL", id, tenant.From(ctx)).Scan(&exists); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return fmt.Errorf("contact not found: %w", domain.ErrNotFound)
 			}
@@ -414,8 +419,8 @@ func (r *contactRepo) SetUnsubscribed(ctx context.Context, id int64, at time.Tim
 }
 
 func (r *contactRepo) SetUnsubCode(ctx context.Context, id int64, code string) error {
-	query := "UPDATE contacts SET unsub_code = ? WHERE id = ?"
-	res, err := r.db.ExecContext(ctx, query, code, id)
+	query := "UPDATE contacts SET unsub_code = ? WHERE id = ? AND tenant_id = ?"
+	res, err := r.db.ExecContext(ctx, query, code, id, tenant.From(ctx))
 	if err != nil {
 		return fmt.Errorf("set unsub code contact: %w", err)
 	}
@@ -434,8 +439,8 @@ func (r *contactRepo) SetEmailStatus(ctx context.Context, id int64, v domain.Ema
 	if status == "" {
 		status = domain.EmailUnknown
 	}
-	query := "UPDATE contacts SET email_status = ?, email_reason = ?, email_checked_at = ? WHERE id = ? AND deleted_at IS NULL"
-	res, err := r.db.ExecContext(ctx, query, string(status), toNullString(v.Reason), toNullTime(&v.CheckedAt), id)
+	query := "UPDATE contacts SET email_status = ?, email_reason = ?, email_checked_at = ? WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL"
+	res, err := r.db.ExecContext(ctx, query, string(status), toNullString(v.Reason), toNullTime(&v.CheckedAt), id, tenant.From(ctx))
 	if err != nil {
 		return fmt.Errorf("set email status: %w", err)
 	}
@@ -454,8 +459,8 @@ func (r *contactRepo) SetWhatsAppStatus(ctx context.Context, id int64, v domain.
 	if status == "" {
 		status = domain.WhatsAppUnknown
 	}
-	query := "UPDATE contacts SET whatsapp_status = ?, whatsapp_checked_at = ? WHERE id = ? AND deleted_at IS NULL"
-	res, err := r.db.ExecContext(ctx, query, string(status), toNullTime(&v.CheckedAt), id)
+	query := "UPDATE contacts SET whatsapp_status = ?, whatsapp_checked_at = ? WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL"
+	res, err := r.db.ExecContext(ctx, query, string(status), toNullTime(&v.CheckedAt), id, tenant.From(ctx))
 	if err != nil {
 		return fmt.Errorf("set whatsapp status: %w", err)
 	}

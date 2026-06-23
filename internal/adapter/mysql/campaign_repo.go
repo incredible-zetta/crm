@@ -8,6 +8,7 @@ import (
 
 	"github.com/incredible-zetta/crm/internal/domain"
 	"github.com/incredible-zetta/crm/internal/port"
+	"github.com/incredible-zetta/crm/internal/tenant"
 )
 
 type campaignRepo struct {
@@ -41,8 +42,8 @@ func (r *campaignRepo) Create(ctx context.Context, c domain.Campaign) (domain.Ca
 		return domain.Campaign{}, fmt.Errorf("marshal stats: %w", err)
 	}
 
-	query := `INSERT INTO campaigns (name, template_id, provider, segment, status, scheduled_at, stats, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-	res, err := r.db.ExecContext(ctx, query, c.Name, toNullInt64(c.TemplateID), string(c.Provider), segmentJSON, string(c.Status), toNullTime(c.ScheduledAt), statsJSON, toNullTime(c.DeletedAt))
+	query := `INSERT INTO campaigns (tenant_id, name, template_id, provider, segment, status, scheduled_at, stats, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	res, err := r.db.ExecContext(ctx, query, tenant.From(ctx), c.Name, toNullInt64(c.TemplateID), string(c.Provider), segmentJSON, string(c.Status), toNullTime(c.ScheduledAt), statsJSON, toNullTime(c.DeletedAt))
 	if err != nil {
 		return domain.Campaign{}, fmt.Errorf("create campaign exec: %w", err)
 	}
@@ -56,8 +57,8 @@ func (r *campaignRepo) Create(ctx context.Context, c domain.Campaign) (domain.Ca
 }
 
 func (r *campaignRepo) Get(ctx context.Context, id int64) (domain.Campaign, error) {
-	query := `SELECT id, name, template_id, provider, segment, status, scheduled_at, stats, deleted_at, created_at FROM campaigns WHERE id = ? AND deleted_at IS NULL`
-	row := r.db.QueryRowContext(ctx, query, id)
+	query := `SELECT id, tenant_id, name, template_id, provider, segment, status, scheduled_at, stats, deleted_at, created_at FROM campaigns WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL`
+	row := r.db.QueryRowContext(ctx, query, id, tenant.From(ctx))
 	c, err := scanCampaign(row)
 	if err == sql.ErrNoRows {
 		return domain.Campaign{}, fmt.Errorf("campaign not found: %w", domain.ErrNotFound)
@@ -69,8 +70,8 @@ func (r *campaignRepo) Get(ctx context.Context, id int64) (domain.Campaign, erro
 }
 
 func (r *campaignRepo) List(ctx context.Context) ([]domain.Campaign, error) {
-	query := `SELECT id, name, template_id, provider, segment, status, scheduled_at, stats, deleted_at, created_at FROM campaigns WHERE deleted_at IS NULL ORDER BY id DESC`
-	rows, err := r.db.QueryContext(ctx, query)
+	query := `SELECT id, tenant_id, name, template_id, provider, segment, status, scheduled_at, stats, deleted_at, created_at FROM campaigns WHERE deleted_at IS NULL AND tenant_id = ? ORDER BY id DESC`
+	rows, err := r.db.QueryContext(ctx, query, tenant.From(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("list campaigns: %w", err)
 	}
@@ -95,8 +96,8 @@ func (r *campaignRepo) UpdateStatus(ctx context.Context, id int64, status domain
 		return fmt.Errorf("%w: invalid status: %q", domain.ErrValidation, status)
 	}
 
-	query := `UPDATE campaigns SET status = ? WHERE id = ? AND deleted_at IS NULL`
-	res, err := r.db.ExecContext(ctx, query, string(status), id)
+	query := `UPDATE campaigns SET status = ? WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL`
+	res, err := r.db.ExecContext(ctx, query, string(status), id, tenant.From(ctx))
 	if err != nil {
 		return fmt.Errorf("update campaign status exec: %w", err)
 	}
@@ -126,8 +127,8 @@ func (r *campaignRepo) Update(ctx context.Context, id int64, c domain.Campaign) 
 		return domain.Campaign{}, fmt.Errorf("marshal segment: %w", err)
 	}
 
-	query := `UPDATE campaigns SET name = ?, template_id = ?, provider = ?, segment = ?, scheduled_at = ? WHERE id = ? AND deleted_at IS NULL`
-	res, err := r.db.ExecContext(ctx, query, c.Name, toNullInt64(c.TemplateID), string(c.Provider), segmentJSON, toNullTime(c.ScheduledAt), id)
+	query := `UPDATE campaigns SET name = ?, template_id = ?, provider = ?, segment = ?, scheduled_at = ? WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL`
+	res, err := r.db.ExecContext(ctx, query, c.Name, toNullInt64(c.TemplateID), string(c.Provider), segmentJSON, toNullTime(c.ScheduledAt), id, tenant.From(ctx))
 	if err != nil {
 		return domain.Campaign{}, fmt.Errorf("update campaign: %w", err)
 	}
@@ -153,8 +154,8 @@ func (r *campaignRepo) SetStats(ctx context.Context, id int64, stats map[string]
 		return fmt.Errorf("marshal stats: %w", err)
 	}
 
-	query := `UPDATE campaigns SET stats = ? WHERE id = ? AND deleted_at IS NULL`
-	res, err := r.db.ExecContext(ctx, query, statsJSON, id)
+	query := `UPDATE campaigns SET stats = ? WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL`
+	res, err := r.db.ExecContext(ctx, query, statsJSON, id, tenant.From(ctx))
 	if err != nil {
 		return fmt.Errorf("set stats: %w", err)
 	}
@@ -178,7 +179,7 @@ func (r *campaignRepo) ListDueScheduled(ctx context.Context, now time.Time, limi
 	if limit <= 0 {
 		limit = 50
 	}
-	query := `SELECT id, name, template_id, provider, segment, status, scheduled_at, stats, deleted_at, created_at
+	query := `SELECT id, tenant_id, name, template_id, provider, segment, status, scheduled_at, stats, deleted_at, created_at
 FROM campaigns
 WHERE deleted_at IS NULL AND status = 'scheduled' AND scheduled_at IS NOT NULL AND scheduled_at <= ?
 ORDER BY scheduled_at ASC, id ASC
@@ -204,8 +205,8 @@ LIMIT ?`
 }
 
 func (r *campaignRepo) SoftDelete(ctx context.Context, id int64) error {
-	query := `UPDATE campaigns SET deleted_at = NOW() WHERE id = ? AND deleted_at IS NULL`
-	res, err := r.db.ExecContext(ctx, query, id)
+	query := `UPDATE campaigns SET deleted_at = NOW() WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL`
+	res, err := r.db.ExecContext(ctx, query, id, tenant.From(ctx))
 	if err != nil {
 		return fmt.Errorf("soft delete campaign: %w", err)
 	}
@@ -234,6 +235,7 @@ func scanCampaign(row interface{ Scan(dest ...any) error }) (domain.Campaign, er
 
 	err := row.Scan(
 		&c.ID,
+		&c.TenantID,
 		&c.Name,
 		&templateID,
 		(*string)(&c.Provider),

@@ -174,6 +174,15 @@ type TrackingRepo interface {
 	GetLink(ctx context.Context, code string) (domain.TrackingLink, error)
 }
 
+// TenantRepo resolves and auto-provisions tenants from caller credentials.
+// It is used by the multi-tenant MCP middleware; in single-tenant mode it is
+// never consulted (everything runs as tenant.DefaultID).
+type TenantRepo interface {
+	// Resolve returns the tenant id for the (apiKey, sessionID) pair, creating
+	// the tenant on first contact. The id is opaque and stable across calls.
+	Resolve(ctx context.Context, apiKey, sessionID string) (string, error)
+}
+
 // ExportRepo defines operations for export files and metadata.
 type ExportRepo interface {
 	// Create persists export metadata.

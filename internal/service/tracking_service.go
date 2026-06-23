@@ -8,6 +8,7 @@ import (
 
 	"github.com/incredible-zetta/crm/internal/domain"
 	"github.com/incredible-zetta/crm/internal/port"
+	"github.com/incredible-zetta/crm/internal/tenant"
 )
 
 type TrackingService struct {
@@ -50,6 +51,10 @@ func (s *TrackingService) ResolveClick(ctx context.Context, code string) (target
 		return "", err
 	}
 
+	// Public route: no tenant in ctx. Scope the click event to the link's
+	// owning tenant resolved from the row.
+	ctx = tenant.With(ctx, link.TenantID)
+
 	var contactID int64
 	if link.ContactID != nil {
 		contactID = *link.ContactID
@@ -69,6 +74,11 @@ func (s *TrackingService) ResolveClick(ctx context.Context, code string) (target
 
 // ResolveOpen logs an open event correlate to link_code, best-effort (returning error to caller if insert fails).
 func (s *TrackingService) ResolveOpen(ctx context.Context, code string) error {
+	// Public route: resolve the owning tenant from the link row so the open
+	// event is logged under the correct tenant.
+	if link, err := s.tracking.GetLink(ctx, code); err == nil {
+		ctx = tenant.With(ctx, link.TenantID)
+	}
 	err := s.events.Insert(ctx, domain.EmailEvent{
 		ContactID: 0,
 		Type:      domain.EventOpen,

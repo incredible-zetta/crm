@@ -7,6 +7,7 @@ import (
 
 	"github.com/incredible-zetta/crm/internal/domain"
 	"github.com/incredible-zetta/crm/internal/port"
+	"github.com/incredible-zetta/crm/internal/tenant"
 )
 
 type waListenerRepo struct{ db *sql.DB }
@@ -14,7 +15,7 @@ type waListenerRepo struct{ db *sql.DB }
 var _ port.WAListenerRepo = (*waListenerRepo)(nil)
 
 func (r *waListenerRepo) Create(ctx context.Context, l domain.WAListener) (domain.WAListener, error) {
-	res, err := r.db.ExecContext(ctx, `INSERT INTO wa_listeners (chat_jid, name, enabled, summary) VALUES (?, ?, ?, ?)`, l.ChatJID, toNullString(l.Name), l.Enabled, toNullString(l.Summary))
+	res, err := r.db.ExecContext(ctx, `INSERT INTO wa_listeners (tenant_id, chat_jid, name, enabled, summary) VALUES (?, ?, ?, ?, ?)`, tenant.From(ctx), l.ChatJID, toNullString(l.Name), l.Enabled, toNullString(l.Summary))
 	if err != nil {
 		return domain.WAListener{}, fmt.Errorf("create wa listener: %w", err)
 	}
@@ -26,20 +27,20 @@ func (r *waListenerRepo) Create(ctx context.Context, l domain.WAListener) (domai
 }
 
 func (r *waListenerRepo) Get(ctx context.Context, id int64) (domain.WAListener, error) {
-	return r.scanOne(r.db.QueryRowContext(ctx, `SELECT id, chat_jid, name, enabled, summary, deleted_at, created_at, updated_at FROM wa_listeners WHERE id = ? AND deleted_at IS NULL`, id))
+	return r.scanOne(r.db.QueryRowContext(ctx, `SELECT id, chat_jid, name, enabled, summary, deleted_at, created_at, updated_at FROM wa_listeners WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL`, id, tenant.From(ctx)))
 }
 
 func (r *waListenerRepo) GetByChatJID(ctx context.Context, chatJID string) (domain.WAListener, error) {
-	return r.scanOne(r.db.QueryRowContext(ctx, `SELECT id, chat_jid, name, enabled, summary, deleted_at, created_at, updated_at FROM wa_listeners WHERE chat_jid = ? AND deleted_at IS NULL`, chatJID))
+	return r.scanOne(r.db.QueryRowContext(ctx, `SELECT id, chat_jid, name, enabled, summary, deleted_at, created_at, updated_at FROM wa_listeners WHERE chat_jid = ? AND tenant_id = ? AND deleted_at IS NULL`, chatJID, tenant.From(ctx)))
 }
 
 func (r *waListenerRepo) List(ctx context.Context, enabledOnly bool) ([]domain.WAListener, error) {
-	query := `SELECT id, chat_jid, name, enabled, summary, deleted_at, created_at, updated_at FROM wa_listeners WHERE deleted_at IS NULL`
+	query := `SELECT id, chat_jid, name, enabled, summary, deleted_at, created_at, updated_at FROM wa_listeners WHERE deleted_at IS NULL AND tenant_id = ?`
 	if enabledOnly {
 		query += ` AND enabled = TRUE`
 	}
 	query += ` ORDER BY id DESC`
-	rows, err := r.db.QueryContext(ctx, query)
+	rows, err := r.db.QueryContext(ctx, query, tenant.From(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("list wa listeners: %w", err)
 	}
@@ -59,7 +60,7 @@ func (r *waListenerRepo) List(ctx context.Context, enabledOnly bool) ([]domain.W
 }
 
 func (r *waListenerRepo) Update(ctx context.Context, id int64, l domain.WAListener) (domain.WAListener, error) {
-	_, err := r.db.ExecContext(ctx, `UPDATE wa_listeners SET chat_jid = ?, name = ?, enabled = ?, summary = ? WHERE id = ? AND deleted_at IS NULL`, l.ChatJID, toNullString(l.Name), l.Enabled, toNullString(l.Summary), id)
+	_, err := r.db.ExecContext(ctx, `UPDATE wa_listeners SET chat_jid = ?, name = ?, enabled = ?, summary = ? WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL`, l.ChatJID, toNullString(l.Name), l.Enabled, toNullString(l.Summary), id, tenant.From(ctx))
 	if err != nil {
 		return domain.WAListener{}, fmt.Errorf("update wa listener: %w", err)
 	}
@@ -67,12 +68,12 @@ func (r *waListenerRepo) Update(ctx context.Context, id int64, l domain.WAListen
 }
 
 func (r *waListenerRepo) SoftDelete(ctx context.Context, id int64) error {
-	_, err := r.db.ExecContext(ctx, `UPDATE wa_listeners SET deleted_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted_at IS NULL`, id)
+	_, err := r.db.ExecContext(ctx, `UPDATE wa_listeners SET deleted_at = CURRENT_TIMESTAMP WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL`, id, tenant.From(ctx))
 	return err
 }
 
 func (r *waListenerRepo) SetSummary(ctx context.Context, id int64, summary string) error {
-	_, err := r.db.ExecContext(ctx, `UPDATE wa_listeners SET summary = ? WHERE id = ? AND deleted_at IS NULL`, summary, id)
+	_, err := r.db.ExecContext(ctx, `UPDATE wa_listeners SET summary = ? WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL`, summary, id, tenant.From(ctx))
 	return err
 }
 

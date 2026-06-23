@@ -63,6 +63,7 @@ func (s CampaignStatus) Valid() bool {
 // Campaign represents an email marketing campaign.
 type Campaign struct {
 	ID          int64
+	TenantID    string
 	Name        string
 	TemplateID  int64
 	Provider    Provider

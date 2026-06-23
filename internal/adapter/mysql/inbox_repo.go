@@ -9,6 +9,7 @@ import (
 
 	"github.com/incredible-zetta/crm/internal/domain"
 	"github.com/incredible-zetta/crm/internal/port"
+	"github.com/incredible-zetta/crm/internal/tenant"
 )
 
 type inboxRepo struct {
@@ -18,10 +19,10 @@ type inboxRepo struct {
 var _ port.InboxRepo = (*inboxRepo)(nil)
 
 func (r *inboxRepo) GetCursor(ctx context.Context, mailbox string) (domain.InboxCursor, error) {
-	query := `SELECT id, mailbox, last_uid, last_message_date, updated_at FROM inbox_cursors WHERE mailbox = ?`
+	query := `SELECT id, mailbox, last_uid, last_message_date, updated_at FROM inbox_cursors WHERE mailbox = ? AND tenant_id = ?`
 	var c domain.InboxCursor
 	var lastDate sql.NullTime
-	err := r.db.QueryRowContext(ctx, query, mailbox).Scan(&c.ID, &c.Mailbox, &c.LastUID, &lastDate, &c.UpdatedAt)
+	err := r.db.QueryRowContext(ctx, query, mailbox, tenant.From(ctx)).Scan(&c.ID, &c.Mailbox, &c.LastUID, &lastDate, &c.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return domain.InboxCursor{Mailbox: mailbox}, nil
 	}
@@ -33,13 +34,13 @@ func (r *inboxRepo) GetCursor(ctx context.Context, mailbox string) (domain.Inbox
 }
 
 func (r *inboxRepo) UpsertCursor(ctx context.Context, cursor domain.InboxCursor) error {
-	query := `INSERT INTO inbox_cursors (mailbox, last_uid, last_message_date)
-		VALUES (?, ?, ?)
+	query := `INSERT INTO inbox_cursors (tenant_id, mailbox, last_uid, last_message_date)
+		VALUES (?, ?, ?, ?)
 		ON DUPLICATE KEY UPDATE
 		last_uid = GREATEST(last_uid, VALUES(last_uid)),
 		last_message_date = VALUES(last_message_date),
 		updated_at = CURRENT_TIMESTAMP`
-	_, err := r.db.ExecContext(ctx, query, cursor.Mailbox, cursor.LastUID, toNullTime(cursor.LastMessageDate))
+	_, err := r.db.ExecContext(ctx, query, tenant.From(ctx), cursor.Mailbox, cursor.LastUID, toNullTime(cursor.LastMessageDate))
 	if err != nil {
 		return fmt.Errorf("upsert inbox cursor: %w", err)
 	}
@@ -49,10 +50,11 @@ func (r *inboxRepo) UpsertCursor(ctx context.Context, cursor domain.InboxCursor)
 func (r *inboxRepo) InsertMessage(ctx context.Context, msg domain.InboundMessage) (domain.InboundMessage, bool, error) {
 	msg.FromEmail = strings.ToLower(strings.TrimSpace(msg.FromEmail))
 	query := `INSERT IGNORE INTO inbound_messages
-		(mailbox, uid, message_id, in_reply_to, references_header, from_email, from_name, to_email, subject, received_at,
+		(tenant_id, mailbox, uid, message_id, in_reply_to, references_header, from_email, from_name, to_email, subject, received_at,
 		 text_body, html_body, snippet, contact_id, campaign_id, read_at, replied_at, deleted_at, notified_at, raw_headers_json)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	res, err := r.db.ExecContext(ctx, query,
+		tenant.From(ctx),
 		msg.Mailbox,
 		msg.UID,
 		toNullString(msg.MessageID),
@@ -93,7 +95,7 @@ func (r *inboxRepo) InsertMessage(ctx context.Context, msg domain.InboundMessage
 }
 
 func (r *inboxRepo) GetMessage(ctx context.Context, id int64) (domain.InboundMessage, error) {
-	return r.scanMessage(r.db.QueryRowContext(ctx, inboxSelectSQL()+` WHERE id = ? AND deleted_at IS NULL`, id))
+	return r.scanMessage(r.db.QueryRowContext(ctx, inboxSelectSQL()+` WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL`, id, tenant.From(ctx)))
 }
 
 func (r *inboxRepo) ListMessages(ctx context.Context, f domain.InboxFilter, p port.Paging) (port.InboxPage, error) {
@@ -101,8 +103,8 @@ func (r *inboxRepo) ListMessages(ctx context.Context, f domain.InboxFilter, p po
 	if limit <= 0 {
 		limit = 20
 	}
-	where := []string{"deleted_at IS NULL"}
-	args := []any{}
+	where := []string{"deleted_at IS NULL", "tenant_id = ?"}
+	args := []any{tenant.From(ctx)}
 	if p.Cursor > 0 {
 		where = append(where, "id < ?")
 		args = append(args, p.Cursor)
@@ -153,7 +155,7 @@ func (r *inboxRepo) ListMessages(ctx context.Context, f domain.InboxFilter, p po
 }
 
 func (r *inboxRepo) MarkRead(ctx context.Context, id int64, at *time.Time) error {
-	_, err := r.db.ExecContext(ctx, `UPDATE inbound_messages SET read_at = ? WHERE id = ? AND deleted_at IS NULL`, toNullTime(at), id)
+	_, err := r.db.ExecContext(ctx, `UPDATE inbound_messages SET read_at = ? WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL`, toNullTime(at), id, tenant.From(ctx))
 	if err != nil {
 		return fmt.Errorf("mark inbound read: %w", err)
 	}
@@ -161,7 +163,7 @@ func (r *inboxRepo) MarkRead(ctx context.Context, id int64, at *time.Time) error
 }
 
 func (r *inboxRepo) MarkReplied(ctx context.Context, id int64, at time.Time) error {
-	_, err := r.db.ExecContext(ctx, `UPDATE inbound_messages SET replied_at = ? WHERE id = ? AND deleted_at IS NULL`, at, id)
+	_, err := r.db.ExecContext(ctx, `UPDATE inbound_messages SET replied_at = ? WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL`, at, id, tenant.From(ctx))
 	if err != nil {
 		return fmt.Errorf("mark inbound replied: %w", err)
 	}
@@ -169,7 +171,7 @@ func (r *inboxRepo) MarkReplied(ctx context.Context, id int64, at time.Time) err
 }
 
 func (r *inboxRepo) SoftDeleteMessage(ctx context.Context, id int64) error {
-	_, err := r.db.ExecContext(ctx, `UPDATE inbound_messages SET deleted_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted_at IS NULL`, id)
+	_, err := r.db.ExecContext(ctx, `UPDATE inbound_messages SET deleted_at = CURRENT_TIMESTAMP WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL`, id, tenant.From(ctx))
 	if err != nil {
 		return fmt.Errorf("soft delete inbound message: %w", err)
 	}
@@ -177,7 +179,7 @@ func (r *inboxRepo) SoftDeleteMessage(ctx context.Context, id int64) error {
 }
 
 func (r *inboxRepo) MarkNotified(ctx context.Context, id int64, at time.Time) error {
-	_, err := r.db.ExecContext(ctx, `UPDATE inbound_messages SET notified_at = ? WHERE id = ? AND deleted_at IS NULL`, at, id)
+	_, err := r.db.ExecContext(ctx, `UPDATE inbound_messages SET notified_at = ? WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL`, at, id, tenant.From(ctx))
 	if err != nil {
 		return fmt.Errorf("mark inbound notified: %w", err)
 	}
@@ -188,7 +190,7 @@ func (r *inboxRepo) ListUnnotifiedKnown(ctx context.Context, limit int) ([]domai
 	if limit <= 0 {
 		limit = 20
 	}
-	rows, err := r.db.QueryContext(ctx, inboxSelectSQL()+` WHERE deleted_at IS NULL AND contact_id IS NOT NULL AND notified_at IS NULL ORDER BY received_at ASC, id ASC LIMIT ?`, limit)
+	rows, err := r.db.QueryContext(ctx, inboxSelectSQL()+` WHERE deleted_at IS NULL AND tenant_id = ? AND contact_id IS NOT NULL AND notified_at IS NULL ORDER BY received_at ASC, id ASC LIMIT ?`, tenant.From(ctx), limit)
 	if err != nil {
 		return nil, fmt.Errorf("list unnotified known inbound messages: %w", err)
 	}
@@ -208,7 +210,7 @@ func (r *inboxRepo) ListUnnotifiedKnown(ctx context.Context, limit int) ([]domai
 }
 
 func (r *inboxRepo) getMessageByMailboxUID(ctx context.Context, mailbox string, uid uint32, isNew bool) (domain.InboundMessage, bool, error) {
-	msg, err := r.scanMessage(r.db.QueryRowContext(ctx, inboxSelectSQL()+` WHERE mailbox = ? AND uid = ?`, mailbox, uid))
+	msg, err := r.scanMessage(r.db.QueryRowContext(ctx, inboxSelectSQL()+` WHERE mailbox = ? AND uid = ? AND tenant_id = ?`, mailbox, uid, tenant.From(ctx)))
 	return msg, isNew, err
 }
 
