@@ -121,3 +121,8 @@ func (s *Store) WhatsAppListeners() port.WAListenerRepo {
 func (s *Store) Threads() port.ThreadsRepo {
 	return &threadsRepo{db: s.db}
 }
+
+// Tenants returns a TenantRepo implementation (multi-tenant resolver).
+func (s *Store) Tenants() port.TenantRepo {
+	return &tenantRepo{db: s.db}
+}

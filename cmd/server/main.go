@@ -228,6 +228,12 @@ func main() {
 
 	// 6. MCP transport (auth-gated /mcp)
 	mcpSrv := mcpserver.NewMCPServer("zettacrm", version)
+	if cfg.MultiTenancy {
+		mcpSrv.AddReceivingMiddleware(mcpserver.TenantMiddleware(store.Tenants()))
+		log.Println("multi-tenancy ENABLED: tenants resolved from (Authorization, X-Session-Id)")
+	} else {
+		debugLog(debug, "multi-tenancy disabled: running as single tenant %q", "default")
+	}
 	mcptransport.Register(mcpSrv, &mcptransport.Deps{
 		Svc:     svc,
 		Version: version,

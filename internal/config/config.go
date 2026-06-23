@@ -21,6 +21,11 @@ type Config struct {
 	MailgunDomain        string
 	MailgunAPIKey        string
 	LogLevel             string
+	// Multi-tenancy (optional). When MultiTenancy is false the server runs as a
+	// single implicit tenant (tenant.DefaultID) and behaves exactly as before.
+	// When true, an MCP middleware resolves/auto-provisions a tenant from the
+	// (Authorization, X-Session-Id) pair and scopes all data by tenant_id.
+	MultiTenancy bool
 	IMAPHost             string
 	IMAPPort             string
 	IMAPUser             string
@@ -184,6 +189,8 @@ func Load() (*Config, error) {
 		emailRateWindowSec = val
 	}
 
+	multiTenancy := boolEnv("MULTI_TENANCY", false)
+
 	verifyEmails := boolEnv("VERIFY_EMAILS", false)
 	blockInvalidSend := boolEnv("BLOCK_INVALID_SEND", false)
 	waBlockUnregistered := boolEnv("WA_BLOCK_UNREGISTERED_SEND", false)
@@ -260,6 +267,7 @@ func Load() (*Config, error) {
 		MailgunDomain:        os.Getenv("MAILGUN_DOMAIN"),
 		MailgunAPIKey:        os.Getenv("MAILGUN_API_KEY"),
 		LogLevel:             os.Getenv("LOG_LEVEL"),
+		MultiTenancy:         multiTenancy,
 		IMAPHost:             os.Getenv("IMAP_HOST"),
 		IMAPPort:             imapPort,
 		IMAPUser:             os.Getenv("IMAP_USER"),

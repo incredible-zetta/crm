@@ -9,6 +9,7 @@ import (
 	"github.com/incredible-zetta/crm/internal/port"
 	"github.com/incredible-zetta/crm/internal/scheduler"
 	"github.com/incredible-zetta/crm/internal/service"
+	"github.com/incredible-zetta/crm/internal/tenant"
 )
 
 // disabledSender is used when no email provider is configured. It satisfies
@@ -33,6 +34,7 @@ func (c taskClaimer) ClaimDue(ctx context.Context, now time.Time, limit int) ([]
 	for _, d := range dts {
 		out = append(out, scheduler.Task{
 			ID:       d.ID,
+			TenantID: d.TenantID,
 			Kind:     string(d.Kind),
 			Payload:  d.Payload,
 			Attempts: d.Attempts,
@@ -54,8 +56,12 @@ func (c taskClaimer) MarkFailed(ctx context.Context, id int64, errMsg string) er
 type taskExecutor struct{ tasks *service.TaskService }
 
 func (e taskExecutor) Execute(ctx context.Context, t scheduler.Task) error {
+	// The scheduler claims tasks across all tenants, so inject the task's owning
+	// tenant into ctx before running tenant-scoped service work.
+	ctx = tenant.With(ctx, t.TenantID)
 	return e.tasks.Execute(ctx, domain.ScheduledTask{
 		ID:       t.ID,
+		TenantID: t.TenantID,
 		Kind:     domain.TaskKind(t.Kind),
 		Payload:  t.Payload,
 		Attempts: t.Attempts,
