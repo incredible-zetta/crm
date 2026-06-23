@@ -20,3 +20,7 @@ vendor/
 # compiled server binary
 /server
 /exports/
+
+# Secrets: never commit live session cookie exports (e.g. Threads/IG sessions)
+*_cookies.txt
+www.threads.com_cookies.txt
