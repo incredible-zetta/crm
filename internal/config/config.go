@@ -25,19 +25,19 @@ type Config struct {
 	// single implicit tenant (tenant.DefaultID) and behaves exactly as before.
 	// When true, an MCP middleware resolves/auto-provisions a tenant from the
 	// (Authorization, X-Session-Id) pair and scopes all data by tenant_id.
-	MultiTenancy bool
-	IMAPHost             string
-	IMAPPort             string
-	IMAPUser             string
-	IMAPPass             string
-	IMAPMailbox          string
-	IMAPPollIntervalSec  int
-	IMAPSinceDays        int
-	AdminNotifyEmail     string
-	EmailRateMax         int
-	EmailRateWindowSec   int
-	VerifyEmails         bool
-	BlockInvalidSend     bool
+	MultiTenancy        bool
+	IMAPHost            string
+	IMAPPort            string
+	IMAPUser            string
+	IMAPPass            string
+	IMAPMailbox         string
+	IMAPPollIntervalSec int
+	IMAPSinceDays       int
+	AdminNotifyEmail    string
+	EmailRateMax        int
+	EmailRateWindowSec  int
+	VerifyEmails        bool
+	BlockInvalidSend    bool
 	// WhatsApp channel
 	WABaseURL           string // gateway base URL, e.g. https://notification.dev.lazyindra.online
 	WABasicAuth         string // raw base64 of "user:pass" (never logged)
