@@ -7,6 +7,7 @@ import (
 
 	"github.com/incredible-zetta/crm/internal/domain"
 	"github.com/incredible-zetta/crm/internal/port"
+	"github.com/incredible-zetta/crm/internal/tenant"
 )
 
 // CampaignQueue enqueues due scheduled campaigns that do not already have an
@@ -32,7 +33,11 @@ func (q *CampaignQueue) EnqueueDue(ctx context.Context, now time.Time) (int, err
 
 	var enqueued int
 	for _, c := range due {
-		active, err := q.tasks.HasActiveCampaignTask(ctx, c.ID)
+		// ListDueScheduled runs cross-tenant (the scheduler has no tenant in
+		// ctx); scope each campaign's task to its owning tenant so the worker
+		// later resolves the right data.
+		cctx := tenant.With(ctx, c.TenantID)
+		active, err := q.tasks.HasActiveCampaignTask(cctx, c.ID)
 		if err != nil {
 			return enqueued, fmt.Errorf("check active task for campaign %d: %w", c.ID, err)
 		}
@@ -45,7 +50,7 @@ func (q *CampaignQueue) EnqueueDue(ctx context.Context, now time.Time) (int, err
 			runAt = *c.ScheduledAt
 		}
 
-		_, err = q.tasks.Insert(ctx, domain.ScheduledTask{
+		_, err = q.tasks.Insert(cctx, domain.ScheduledTask{
 			Kind:    domain.TaskCampaign,
 			Payload: map[string]any{"campaign_id": c.ID},
 			RunAt:   runAt,

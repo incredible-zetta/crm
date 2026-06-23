@@ -8,6 +8,7 @@ import (
 
 	"github.com/incredible-zetta/crm/internal/domain"
 	"github.com/incredible-zetta/crm/internal/port"
+	"github.com/incredible-zetta/crm/internal/tenant"
 )
 
 type taskRepo struct {
@@ -33,8 +34,8 @@ func (r *taskRepo) Insert(ctx context.Context, t domain.ScheduledTask) (int64, e
 		return 0, fmt.Errorf("marshal payload: %w", err)
 	}
 
-	query := `INSERT INTO scheduled_tasks (kind, payload, run_at, status, attempts, last_error) VALUES (?, ?, ?, ?, ?, ?)`
-	res, err := r.db.ExecContext(ctx, query, string(t.Kind), payloadJSON, t.RunAt, string(t.Status), t.Attempts, toNullString(t.LastError))
+	query := `INSERT INTO scheduled_tasks (tenant_id, kind, payload, run_at, status, attempts, last_error) VALUES (?, ?, ?, ?, ?, ?, ?)`
+	res, err := r.db.ExecContext(ctx, query, tenant.From(ctx), string(t.Kind), payloadJSON, t.RunAt, string(t.Status), t.Attempts, toNullString(t.LastError))
 	if err != nil {
 		return 0, fmt.Errorf("insert task exec: %w", err)
 	}
@@ -58,18 +59,19 @@ func (r *taskRepo) List(ctx context.Context, status string, limit int) ([]domain
 	var args []any
 
 	if status == "" {
-		query = `SELECT id, kind, payload, run_at, status, attempts, last_error, created_at 
+		query = `SELECT id, tenant_id, kind, payload, run_at, status, attempts, last_error, created_at 
 FROM scheduled_tasks 
+WHERE tenant_id = ?
 ORDER BY CASE WHEN status IN ('pending', 'running') THEN 0 ELSE 1 END ASC, run_at ASC 
 LIMIT ?`
-		args = append(args, limit)
+		args = append(args, tenant.From(ctx), limit)
 	} else {
-		query = `SELECT id, kind, payload, run_at, status, attempts, last_error, created_at 
+		query = `SELECT id, tenant_id, kind, payload, run_at, status, attempts, last_error, created_at 
 FROM scheduled_tasks 
-WHERE status = ? 
+WHERE status = ? AND tenant_id = ?
 ORDER BY run_at ASC 
 LIMIT ?`
-		args = append(args, status, limit)
+		args = append(args, status, tenant.From(ctx), limit)
 	}
 
 	rows, err := r.db.QueryContext(ctx, query, args...)
@@ -104,7 +106,7 @@ func (r *taskRepo) ClaimDue(ctx context.Context, now time.Time, limit int) ([]do
 	}
 	defer tx.Rollback()
 
-	query := `SELECT id, kind, payload, run_at, status, attempts, last_error, created_at 
+	query := `SELECT id, tenant_id, kind, payload, run_at, status, attempts, last_error, created_at 
 FROM scheduled_tasks 
 WHERE status = 'pending' AND run_at <= ? 
 ORDER BY run_at ASC, id ASC 
@@ -216,11 +218,12 @@ func (r *taskRepo) MarkFailed(ctx context.Context, id int64, errMsg string) erro
 func (r *taskRepo) HasActiveCampaignTask(ctx context.Context, campaignID int64) (bool, error) {
 	query := `SELECT 1 FROM scheduled_tasks
 WHERE kind = 'campaign'
+  AND tenant_id = ?
   AND status IN ('pending', 'running')
   AND JSON_EXTRACT(payload, '$.campaign_id') = ?
 LIMIT 1`
 	var exists int
-	err := r.db.QueryRowContext(ctx, query, campaignID).Scan(&exists)
+	err := r.db.QueryRowContext(ctx, query, tenant.From(ctx), campaignID).Scan(&exists)
 	if err == sql.ErrNoRows {
 		return false, nil
 	}
@@ -232,7 +235,7 @@ LIMIT 1`
 
 func (r *taskRepo) Cancel(ctx context.Context, id int64) error {
 	var status string
-	err := r.db.QueryRowContext(ctx, "SELECT status FROM scheduled_tasks WHERE id = ?", id).Scan(&status)
+	err := r.db.QueryRowContext(ctx, "SELECT status FROM scheduled_tasks WHERE id = ? AND tenant_id = ?", id, tenant.From(ctx)).Scan(&status)
 	if err == sql.ErrNoRows {
 		return fmt.Errorf("task not found: %w", domain.ErrNotFound)
 	}
@@ -244,8 +247,8 @@ func (r *taskRepo) Cancel(ctx context.Context, id int64) error {
 		return fmt.Errorf("task not pending (status: %s): %w", status, domain.ErrConflict)
 	}
 
-	query := `UPDATE scheduled_tasks SET status = 'cancelled' WHERE id = ? AND status = 'pending'`
-	res, err := r.db.ExecContext(ctx, query, id)
+	query := `UPDATE scheduled_tasks SET status = 'cancelled' WHERE id = ? AND tenant_id = ? AND status = 'pending'`
+	res, err := r.db.ExecContext(ctx, query, id, tenant.From(ctx))
 	if err != nil {
 		return fmt.Errorf("cancel task: %w", err)
 	}
@@ -271,6 +274,7 @@ func scanTask(row interface{ Scan(dest ...any) error }) (domain.ScheduledTask, e
 
 	err := row.Scan(
 		&t.ID,
+		&t.TenantID,
 		(*string)(&t.Kind),
 		&payloadBuf,
 		&t.RunAt,

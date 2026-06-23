@@ -1,0 +1,11 @@
+# Netscape HTTP Cookie File
+# https://curl.haxx.se/rfc/cookie_spec.html
+# This is a generated file! Do not edit.
+
+.threads.com	TRUE	/	TRUE	1810705214	ig_did	6D64E35C-F4EB-49E5-B224-0AE36EE4A862
+.threads.com	TRUE	/	TRUE	1814602453	mid	ahlK1AAEAAHi9FGKUJ6t2G_kGhle
+.threads.com	TRUE	/	TRUE	1815203723	ps_l	1
+.threads.com	TRUE	/	TRUE	1815203723	ps_n	1
+.threads.com	TRUE	/	TRUE	1816239019	csrftoken	mZswJhEpwpswnzgdPi5eTL0hV8XKFetO
+.threads.com	TRUE	/	TRUE	1789455019	ds_user_id	23938898617
+.threads.com	TRUE	/	TRUE	1813215005	sessionid	23938898617%3AnugrV39ItQXS1e%3A13%3AAYgnoTn1UQrohvR_DfpKubPNjoZ9fANgUYsASzH_ww

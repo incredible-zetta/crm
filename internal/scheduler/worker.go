@@ -14,6 +14,7 @@ type TaskClaimer interface {
 
 type Task struct {
 	ID       int64
+	TenantID string // owning tenant; injected into ctx before Execute
 	Kind     string // "email" | "campaign"
 	Payload  map[string]any
 	Attempts int

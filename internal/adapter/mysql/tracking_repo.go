@@ -10,6 +10,7 @@ import (
 
 	"github.com/incredible-zetta/crm/internal/domain"
 	"github.com/incredible-zetta/crm/internal/port"
+	"github.com/incredible-zetta/crm/internal/tenant"
 )
 
 type trackingRepo struct {
@@ -39,8 +40,8 @@ func (r *trackingRepo) CreateLink(ctx context.Context, targetURL string, campaig
 			return "", fmt.Errorf("generate code: %w", err)
 		}
 
-		query := `INSERT INTO tracking_links (code, target_url, campaign_id, contact_id) VALUES (?, ?, ?, ?)`
-		_, err = r.db.ExecContext(ctx, query, code, targetURL, campaignID, contactID)
+		query := `INSERT INTO tracking_links (tenant_id, code, target_url, campaign_id, contact_id) VALUES (?, ?, ?, ?, ?)`
+		_, err = r.db.ExecContext(ctx, query, tenant.From(ctx), code, targetURL, campaignID, contactID)
 		if err != nil {
 			if strings.Contains(err.Error(), "Duplicate") {
 				continue
@@ -55,7 +56,10 @@ func (r *trackingRepo) CreateLink(ctx context.Context, targetURL string, campaig
 }
 
 func (r *trackingRepo) GetLink(ctx context.Context, code string) (domain.TrackingLink, error) {
-	query := `SELECT id, code, target_url, campaign_id, contact_id, created_at FROM tracking_links WHERE code = ?`
+	// Global lookup by random code: the public /t and /o routes are
+	// unauthenticated and carry no tenant; the owning tenant is read from the
+	// row (TrackingLink.TenantID) so events are logged under the right tenant.
+	query := `SELECT id, tenant_id, code, target_url, campaign_id, contact_id, created_at FROM tracking_links WHERE code = ?`
 	var link domain.TrackingLink
 	var (
 		campaignID sql.NullInt64
@@ -64,6 +68,7 @@ func (r *trackingRepo) GetLink(ctx context.Context, code string) (domain.Trackin
 
 	err := r.db.QueryRowContext(ctx, query, code).Scan(
 		&link.ID,
+		&link.TenantID,
 		&link.Code,
 		&link.TargetURL,
 		&campaignID,

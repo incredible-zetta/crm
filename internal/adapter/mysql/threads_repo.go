@@ -8,6 +8,7 @@ import (
 
 	"github.com/incredible-zetta/crm/internal/domain"
 	"github.com/incredible-zetta/crm/internal/port"
+	"github.com/incredible-zetta/crm/internal/tenant"
 )
 
 type threadsRepo struct{ db *sql.DB }
@@ -20,10 +21,10 @@ func threadsPostSelectSQL() string {
 
 func (r *threadsRepo) UpsertPost(ctx context.Context, post domain.ThreadsPost) (domain.ThreadsPost, error) {
 	_, err := r.db.ExecContext(ctx, `INSERT INTO threads_posts
-		(threads_id, media_product_type, media_type, text, permalink, timestamp, username, topic_tag, is_quote_post, raw_json)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		(tenant_id, threads_id, media_product_type, media_type, text, permalink, timestamp, username, topic_tag, is_quote_post, raw_json)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON DUPLICATE KEY UPDATE media_product_type=VALUES(media_product_type), media_type=VALUES(media_type), text=VALUES(text), permalink=VALUES(permalink), timestamp=VALUES(timestamp), username=VALUES(username), topic_tag=VALUES(topic_tag), is_quote_post=VALUES(is_quote_post), raw_json=VALUES(raw_json), deleted_at=NULL`,
-		post.ThreadsID, post.MediaProductType, post.MediaType, post.Text, post.Permalink, toNullTime(post.Timestamp), post.Username, toNullString(post.TopicTag), post.IsQuotePost, toNullJSON(post.RawJSON))
+		tenant.From(ctx), post.ThreadsID, post.MediaProductType, post.MediaType, post.Text, post.Permalink, toNullTime(post.Timestamp), post.Username, toNullString(post.TopicTag), post.IsQuotePost, toNullJSON(post.RawJSON))
 	if err != nil {
 		return domain.ThreadsPost{}, fmt.Errorf("upsert threads post: %w", err)
 	}
@@ -31,11 +32,11 @@ func (r *threadsRepo) UpsertPost(ctx context.Context, post domain.ThreadsPost) (
 }
 
 func (r *threadsRepo) GetPost(ctx context.Context, id int64) (domain.ThreadsPost, error) {
-	return r.scanPost(r.db.QueryRowContext(ctx, threadsPostSelectSQL()+` WHERE id = ? AND deleted_at IS NULL`, id))
+	return r.scanPost(r.db.QueryRowContext(ctx, threadsPostSelectSQL()+` WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL`, id, tenant.From(ctx)))
 }
 
 func (r *threadsRepo) GetPostByThreadsID(ctx context.Context, threadsID string) (domain.ThreadsPost, error) {
-	return r.scanPost(r.db.QueryRowContext(ctx, threadsPostSelectSQL()+` WHERE threads_id = ? AND deleted_at IS NULL`, threadsID))
+	return r.scanPost(r.db.QueryRowContext(ctx, threadsPostSelectSQL()+` WHERE threads_id = ? AND tenant_id = ? AND deleted_at IS NULL`, threadsID, tenant.From(ctx)))
 }
 
 func (r *threadsRepo) ListPosts(ctx context.Context, f domain.ThreadsListFilter, p port.Paging) (port.ThreadsPostPage, error) {
@@ -43,8 +44,8 @@ func (r *threadsRepo) ListPosts(ctx context.Context, f domain.ThreadsListFilter,
 	if limit <= 0 {
 		limit = 20
 	}
-	where := []string{"deleted_at IS NULL"}
-	args := []any{}
+	where := []string{"deleted_at IS NULL", "tenant_id = ?"}
+	args := []any{tenant.From(ctx)}
 	if p.Cursor > 0 {
 		where = append(where, "id < ?")
 		args = append(args, p.Cursor)
@@ -89,7 +90,7 @@ func (r *threadsRepo) ListPosts(ctx context.Context, f domain.ThreadsListFilter,
 }
 
 func (r *threadsRepo) SoftDeletePost(ctx context.Context, id int64) error {
-	_, err := r.db.ExecContext(ctx, `UPDATE threads_posts SET deleted_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted_at IS NULL`, id)
+	_, err := r.db.ExecContext(ctx, `UPDATE threads_posts SET deleted_at = CURRENT_TIMESTAMP WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL`, id, tenant.From(ctx))
 	if err != nil {
 		return fmt.Errorf("soft delete threads post: %w", err)
 	}
@@ -97,10 +98,10 @@ func (r *threadsRepo) SoftDeletePost(ctx context.Context, id int64) error {
 }
 
 func (r *threadsRepo) UpsertReply(ctx context.Context, reply domain.ThreadsReply) (domain.ThreadsReply, error) {
-	_, err := r.db.ExecContext(ctx, `INSERT INTO threads_replies (reply_id, post_id, text, username, timestamp, hide_status, raw_json)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
+	_, err := r.db.ExecContext(ctx, `INSERT INTO threads_replies (tenant_id, reply_id, post_id, text, username, timestamp, hide_status, raw_json)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON DUPLICATE KEY UPDATE post_id=VALUES(post_id), text=VALUES(text), username=VALUES(username), timestamp=VALUES(timestamp), hide_status=VALUES(hide_status), raw_json=VALUES(raw_json)`,
-		reply.ReplyID, reply.PostID, reply.Text, reply.Username, toNullTime(reply.Timestamp), reply.HideStatus, toNullJSON(reply.RawJSON))
+		tenant.From(ctx), reply.ReplyID, reply.PostID, reply.Text, reply.Username, toNullTime(reply.Timestamp), reply.HideStatus, toNullJSON(reply.RawJSON))
 	if err != nil {
 		return domain.ThreadsReply{}, fmt.Errorf("upsert threads reply: %w", err)
 	}
@@ -108,10 +109,10 @@ func (r *threadsRepo) UpsertReply(ctx context.Context, reply domain.ThreadsReply
 }
 
 func (r *threadsRepo) UpsertMention(ctx context.Context, mention domain.ThreadsMention) (domain.ThreadsMention, error) {
-	_, err := r.db.ExecContext(ctx, `INSERT INTO threads_mentions (mention_id, text, username, permalink, timestamp, raw_json)
-		VALUES (?, ?, ?, ?, ?, ?)
+	_, err := r.db.ExecContext(ctx, `INSERT INTO threads_mentions (tenant_id, mention_id, text, username, permalink, timestamp, raw_json)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
 		ON DUPLICATE KEY UPDATE text=VALUES(text), username=VALUES(username), permalink=VALUES(permalink), timestamp=VALUES(timestamp), raw_json=VALUES(raw_json)`,
-		mention.MentionID, mention.Text, mention.Username, mention.Permalink, toNullTime(mention.Timestamp), toNullJSON(mention.RawJSON))
+		tenant.From(ctx), mention.MentionID, mention.Text, mention.Username, mention.Permalink, toNullTime(mention.Timestamp), toNullJSON(mention.RawJSON))
 	if err != nil {
 		return domain.ThreadsMention{}, fmt.Errorf("upsert threads mention: %w", err)
 	}
@@ -119,7 +120,7 @@ func (r *threadsRepo) UpsertMention(ctx context.Context, mention domain.ThreadsM
 }
 
 func (r *threadsRepo) InsertAudit(ctx context.Context, event domain.ThreadsAuditEvent) error {
-	_, err := r.db.ExecContext(ctx, `INSERT INTO threads_audit_events (action, object_id, ok, error, raw_json) VALUES (?, ?, ?, ?, ?)`, event.Action, toNullString(event.ObjectID), event.OK, toNullString(event.Error), toNullJSON(event.RawJSON))
+	_, err := r.db.ExecContext(ctx, `INSERT INTO threads_audit_events (tenant_id, action, object_id, ok, error, raw_json) VALUES (?, ?, ?, ?, ?, ?)`, tenant.From(ctx), event.Action, toNullString(event.ObjectID), event.OK, toNullString(event.Error), toNullJSON(event.RawJSON))
 	if err != nil {
 		return fmt.Errorf("insert threads audit: %w", err)
 	}
@@ -131,10 +132,10 @@ func (r *threadsRepo) ListAudit(ctx context.Context, p port.Paging) (port.Thread
 	if limit <= 0 {
 		limit = 20
 	}
-	where := ""
-	args := []any{}
+	where := " WHERE tenant_id = ?"
+	args := []any{tenant.From(ctx)}
 	if p.Cursor > 0 {
-		where = " WHERE id < ?"
+		where += " AND id < ?"
 		args = append(args, p.Cursor)
 	}
 	var total int

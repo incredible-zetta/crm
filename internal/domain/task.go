@@ -59,6 +59,7 @@ func (s TaskStatus) Valid() bool {
 // ScheduledTask represents an asynchronous background job.
 type ScheduledTask struct {
 	ID        int64
+	TenantID  string
 	Kind      TaskKind
 	Payload   map[string]any
 	RunAt     time.Time

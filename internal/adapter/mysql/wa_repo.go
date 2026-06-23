@@ -9,6 +9,7 @@ import (
 
 	"github.com/incredible-zetta/crm/internal/domain"
 	"github.com/incredible-zetta/crm/internal/port"
+	"github.com/incredible-zetta/crm/internal/tenant"
 )
 
 type waMessageRepo struct {
@@ -28,10 +29,11 @@ func (r *waMessageRepo) Insert(ctx context.Context, msg domain.WAMessage) (domai
 	// idempotent (webhook re-delivery). Outbound rows always have an id from
 	// the send response; inbound rows carry the wamid.
 	query := `INSERT IGNORE INTO wa_messages
-		(message_id, chat_id, direction, phone, sender_name, contact_id, body, media_type, media_url, media_caption,
+		(tenant_id, message_id, chat_id, direction, phone, sender_name, contact_id, body, media_type, media_url, media_caption,
 		 status, error, replied_to, sent_at, delivered_at, read_at, received_at, notified_at, replied_at, deleted_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	res, err := r.db.ExecContext(ctx, query,
+		tenant.From(ctx),
 		toNullString(msg.MessageID),
 		toNullString(msg.ChatID),
 		string(msg.Direction),
@@ -74,11 +76,11 @@ func (r *waMessageRepo) Insert(ctx context.Context, msg domain.WAMessage) (domai
 }
 
 func (r *waMessageRepo) Get(ctx context.Context, id int64) (domain.WAMessage, error) {
-	return r.scanOne(r.db.QueryRowContext(ctx, waSelectSQL()+` WHERE id = ? AND deleted_at IS NULL`, id))
+	return r.scanOne(r.db.QueryRowContext(ctx, waSelectSQL()+` WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL`, id, tenant.From(ctx)))
 }
 
 func (r *waMessageRepo) GetByMessageID(ctx context.Context, messageID string) (domain.WAMessage, error) {
-	return r.scanOne(r.db.QueryRowContext(ctx, waSelectSQL()+` WHERE message_id = ?`, messageID))
+	return r.scanOne(r.db.QueryRowContext(ctx, waSelectSQL()+` WHERE message_id = ? AND tenant_id = ?`, messageID, tenant.From(ctx)))
 }
 
 func (r *waMessageRepo) List(ctx context.Context, f domain.WAInboundFilter, p port.Paging) (port.WAMessagePage, error) {
@@ -86,8 +88,8 @@ func (r *waMessageRepo) List(ctx context.Context, f domain.WAInboundFilter, p po
 	if limit <= 0 {
 		limit = 20
 	}
-	where := []string{"deleted_at IS NULL"}
-	args := []any{}
+	where := []string{"deleted_at IS NULL", "tenant_id = ?"}
+	args := []any{tenant.From(ctx)}
 	if p.Cursor > 0 {
 		where = append(where, "id < ?")
 		args = append(args, p.Cursor)
@@ -167,23 +169,24 @@ func (r *waMessageRepo) UpdateStatus(ctx context.Context, messageID string, stat
 	}
 	var query string
 	var args []any
+	tid := tenant.From(ctx)
 	switch status {
 	case domain.WAStatusDelivered:
 		// Only sent -> delivered; never downgrade read back to delivered.
 		query = `UPDATE wa_messages SET status = 'delivered', delivered_at = COALESCE(delivered_at, ?)
-			WHERE message_id = ? AND status = 'sent'`
-		args = []any{at, messageID}
+			WHERE message_id = ? AND tenant_id = ? AND status = 'sent'`
+		args = []any{at, messageID, tid}
 	case domain.WAStatusRead:
 		query = `UPDATE wa_messages SET status = 'read', read_at = COALESCE(read_at, ?),
 			delivered_at = COALESCE(delivered_at, ?)
-			WHERE message_id = ? AND status IN ('sent','delivered')`
-		args = []any{at, at, messageID}
+			WHERE message_id = ? AND tenant_id = ? AND status IN ('sent','delivered')`
+		args = []any{at, at, messageID, tid}
 	case domain.WAStatusFailed:
-		query = `UPDATE wa_messages SET status = 'failed' WHERE message_id = ? AND status = 'sent'`
-		args = []any{messageID}
+		query = `UPDATE wa_messages SET status = 'failed' WHERE message_id = ? AND tenant_id = ? AND status = 'sent'`
+		args = []any{messageID, tid}
 	default:
-		query = `UPDATE wa_messages SET status = ? WHERE message_id = ?`
-		args = []any{string(status), messageID}
+		query = `UPDATE wa_messages SET status = ? WHERE message_id = ? AND tenant_id = ?`
+		args = []any{string(status), messageID, tid}
 	}
 	if _, err := r.db.ExecContext(ctx, query, args...); err != nil {
 		return fmt.Errorf("update wa status: %w", err)
@@ -192,7 +195,7 @@ func (r *waMessageRepo) UpdateStatus(ctx context.Context, messageID string, stat
 }
 
 func (r *waMessageRepo) MarkRead(ctx context.Context, id int64, at *time.Time) error {
-	_, err := r.db.ExecContext(ctx, `UPDATE wa_messages SET read_at = ? WHERE id = ? AND deleted_at IS NULL`, toNullTime(at), id)
+	_, err := r.db.ExecContext(ctx, `UPDATE wa_messages SET read_at = ? WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL`, toNullTime(at), id, tenant.From(ctx))
 	if err != nil {
 		return fmt.Errorf("mark wa read: %w", err)
 	}
@@ -200,7 +203,7 @@ func (r *waMessageRepo) MarkRead(ctx context.Context, id int64, at *time.Time) e
 }
 
 func (r *waMessageRepo) MarkNotified(ctx context.Context, id int64, at time.Time) error {
-	_, err := r.db.ExecContext(ctx, `UPDATE wa_messages SET notified_at = ? WHERE id = ? AND deleted_at IS NULL`, at, id)
+	_, err := r.db.ExecContext(ctx, `UPDATE wa_messages SET notified_at = ? WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL`, at, id, tenant.From(ctx))
 	if err != nil {
 		return fmt.Errorf("mark wa notified: %w", err)
 	}
@@ -209,7 +212,7 @@ func (r *waMessageRepo) MarkNotified(ctx context.Context, id int64, at time.Time
 
 // MarkReplied sets the replied_at timestamp for an inbound message.
 func (r *waMessageRepo) MarkReplied(ctx context.Context, id int64, at time.Time) error {
-	_, err := r.db.ExecContext(ctx, `UPDATE wa_messages SET replied_at = ? WHERE id = ? AND deleted_at IS NULL`, at, id)
+	_, err := r.db.ExecContext(ctx, `UPDATE wa_messages SET replied_at = ? WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL`, at, id, tenant.From(ctx))
 	if err != nil {
 		return fmt.Errorf("mark wa replied: %w", err)
 	}
@@ -218,7 +221,7 @@ func (r *waMessageRepo) MarkReplied(ctx context.Context, id int64, at time.Time)
 
 // SetRepliedTo links an outbound message to the inbound message it replies to.
 func (r *waMessageRepo) SetRepliedTo(ctx context.Context, outboundID int64, inboundMessageID string) error {
-	_, err := r.db.ExecContext(ctx, `UPDATE wa_messages SET replied_to = ? WHERE id = ? AND deleted_at IS NULL`, inboundMessageID, outboundID)
+	_, err := r.db.ExecContext(ctx, `UPDATE wa_messages SET replied_to = ? WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL`, inboundMessageID, outboundID, tenant.From(ctx))
 	if err != nil {
 		return fmt.Errorf("set wa replied_to: %w", err)
 	}
@@ -226,7 +229,7 @@ func (r *waMessageRepo) SetRepliedTo(ctx context.Context, outboundID int64, inbo
 }
 
 func (r *waMessageRepo) SoftDelete(ctx context.Context, id int64) error {
-	_, err := r.db.ExecContext(ctx, `UPDATE wa_messages SET deleted_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted_at IS NULL`, id)
+	_, err := r.db.ExecContext(ctx, `UPDATE wa_messages SET deleted_at = CURRENT_TIMESTAMP WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL`, id, tenant.From(ctx))
 	if err != nil {
 		return fmt.Errorf("soft delete wa message: %w", err)
 	}
@@ -236,8 +239,8 @@ func (r *waMessageRepo) SoftDelete(ctx context.Context, id int64) error {
 func (r *waMessageRepo) CountSentSince(ctx context.Context, phone string, since time.Time) (int, error) {
 	var n int
 	err := r.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM wa_messages WHERE direction = 'out' AND phone = ? AND created_at >= ?`,
-		phone, since).Scan(&n)
+		`SELECT COUNT(*) FROM wa_messages WHERE direction = 'out' AND phone = ? AND tenant_id = ? AND created_at >= ?`,
+		phone, tenant.From(ctx), since).Scan(&n)
 	if err != nil {
 		return 0, fmt.Errorf("count wa sent since: %w", err)
 	}
@@ -247,8 +250,8 @@ func (r *waMessageRepo) CountSentSince(ctx context.Context, phone string, since 
 func (r *waMessageRepo) CountSentSinceAll(ctx context.Context, since time.Time) (int, error) {
 	var n int
 	err := r.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM wa_messages WHERE direction = 'out' AND created_at >= ?`,
-		since).Scan(&n)
+		`SELECT COUNT(*) FROM wa_messages WHERE direction = 'out' AND tenant_id = ? AND created_at >= ?`,
+		tenant.From(ctx), since).Scan(&n)
 	if err != nil {
 		return 0, fmt.Errorf("count wa sent since all: %w", err)
 	}
