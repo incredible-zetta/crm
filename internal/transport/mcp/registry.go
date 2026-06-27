@@ -302,6 +302,7 @@ func Register(srv *mcp.Server, d *Deps) {
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_publish", Description: "Publish a Threads text/image/video post and cache it locally"}, d.ThreadsPublish)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_delete", Description: "Delete a live Threads post by threads_id and soft-delete cached row"}, d.ThreadsDelete)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_insights", Description: "Fetch user-level or media-level Threads insights"}, d.ThreadsInsights)
+	mcp.AddTool(srv, &mcp.Tool{Name: "threads_daily_summary", Description: "Summarize a single day's Threads posts: lists posts for the day (default today, optional date + IANA timezone), enriches each with media-level insights (views/likes/reposts/quotes) and a reply breakdown (total replies, replies by me, replies by others, needs_reply), computes per-post and account-wide engagement (likes+reposts+quotes+others' replies) and engagement rate, plus follower count. Live API is source of truth; per-post failures are reported inline."}, d.ThreadsDailySummary)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_follower_demographics", Description: "Fetch aggregate follower demographics (country/city/age/gender) for the configured user. Requires the profile to have at least 100 followers. Returns aggregate buckets only — the Threads API does not expose a list of individual followers or any following data."}, d.ThreadsFollowerDemographics)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_replies", Description: "List live replies for a Threads post and cache them locally"}, d.ThreadsReplies)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_reply_tree", Description: "Show a post's full reply conversation as a nested tree. Each node has reply_id, username, is_mine, depth, needs_reply (someone else's comment you have not answered) and children. Use this before replying to find the exact comment reply_id to respond to and to avoid duplicate replies."}, d.ThreadsReplyTree)
@@ -432,6 +433,19 @@ SEARCH:
 
   If app lacks approved threads_keyword_search permission, public search may only return posts owned by authenticated user.
   In that case use author_username for owned content discovery.
+
+DAILY SUMMARY:
+  threads_daily_summary reports one local day's posts in a single call.
+  Args: date (YYYY-MM-DD, default today), timezone (IANA, e.g. Asia/Jakarta,
+  default server tz), max_posts (default 25, cap 100).
+  Per post: media insights (views,likes,reposts,quotes,replies_metric) and a
+  reply breakdown from the conversation tree (total_replies, my_replies,
+  other_replies, needs_reply). engagement = likes+reposts+quotes+other_replies;
+  engagement_rate = engagement/views. Account-wide totals + followers_count are
+  included. Per-post failures surface inline (insights_error/replies_error)
+  instead of failing the whole summary.
+  Note: replies_metric (insights count) may differ from total_replies (distinct
+  comments seen in the conversation tree); both are returned for comparison.
 
 TOPIC TAGS:
   Use topic_tag on threads_publish to set the official Threads topic.
