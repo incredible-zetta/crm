@@ -118,6 +118,7 @@ Hybrid Threads channel via Meta Threads Graph API. Enabled when `THREADS_ACCESS_
 | `threads_publish` | Publish text/image/video post with optional `topic_tag` and cache result |
 | `threads_delete` | Delete live post and soft-delete cached row |
 | `threads_insights` | Fetch user-level or media-level insights |
+| `threads_daily_summary` | Summarize a day's posts: per-post insights + reply breakdown (total/mine/others/needs_reply) + engagement and account totals |
 | `threads_follower_demographics` | Fetch aggregate follower demographics (country/city/age/gender); requires ≥100 followers |
 | `threads_replies` | List live replies for a post and cache them |
 | `threads_reply_tree` | Nested reply conversation tree with `is_mine`/`needs_reply` flags |

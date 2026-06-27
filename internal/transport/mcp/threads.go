@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/incredible-zetta/crm/internal/domain"
@@ -342,6 +343,237 @@ func (d *Deps) ThreadsReplyTree(ctx context.Context, req *mcp.CallToolRequest, i
 	for _, id := range roots {
 		walk(id, 1)
 	}
+	return nil, out, nil
+}
+
+// --- Daily summary ----------------------------------------------------------
+
+type ThreadsDailySummaryIn struct {
+	Date     string `json:"date,omitempty" jsonschema:"Local day to summarize as YYYY-MM-DD. Defaults to today in the server's timezone when omitted."`
+	Timezone string `json:"timezone,omitempty" jsonschema:"IANA timezone for the day window and date parsing, e.g. Asia/Jakarta. Defaults to the server local timezone."`
+	MaxPosts int    `json:"max_posts,omitempty" jsonschema:"Max recent posts to scan for the day (default 25, capped at 100). Older posts beyond this are ignored."`
+}
+
+type ThreadsPostSummaryOut struct {
+	ThreadsID      string `json:"threads_id"`
+	Permalink      string `json:"permalink,omitempty"`
+	Text           string `json:"text,omitempty"`
+	MediaType      string `json:"media_type,omitempty"`
+	Timestamp      string `json:"timestamp,omitempty"`
+	Views          int64  `json:"views"`
+	Likes          int64  `json:"likes"`
+	Reposts        int64  `json:"reposts"`
+	Quotes         int64  `json:"quotes"`
+	RepliesMetric  int64  `json:"replies_metric"`            // replies count from the insights API
+	TotalReplies   int64  `json:"total_replies"`             // replies observed in the conversation tree
+	MyReplies      int64  `json:"my_replies"`                // replies authored by the configured account
+	OtherReplies   int64  `json:"other_replies"`             // replies authored by other users
+	NeedsReply     int64  `json:"needs_reply"`               // others' comments with no reply from me beneath them
+	Engagement     int64  `json:"engagement"`                // likes+reposts+quotes+otherReplies
+	EngagementRate string `json:"engagement_rate,omitempty"` // engagement/views as a percentage string
+	InsightsError  string `json:"insights_error,omitempty"`
+	RepliesError   string `json:"replies_error,omitempty"`
+}
+
+type ThreadsDailySummaryTotalsOut struct {
+	Posts          int    `json:"posts"`
+	Views          int64  `json:"views"`
+	Likes          int64  `json:"likes"`
+	Reposts        int64  `json:"reposts"`
+	Quotes         int64  `json:"quotes"`
+	TotalReplies   int64  `json:"total_replies"`
+	MyReplies      int64  `json:"my_replies"`
+	OtherReplies   int64  `json:"other_replies"`
+	NeedsReply     int64  `json:"needs_reply"`
+	Engagement     int64  `json:"engagement"`
+	EngagementRate string `json:"engagement_rate,omitempty"`
+}
+
+type ThreadsDailySummaryOut struct {
+	Date            string                       `json:"date"`
+	Timezone        string                       `json:"timezone"`
+	AuthenticatedAs string                       `json:"authenticated_as,omitempty"`
+	FollowersCount  *int64                       `json:"followers_count,omitempty"`
+	Totals          ThreadsDailySummaryTotalsOut `json:"totals"`
+	Posts           []ThreadsPostSummaryOut      `json:"posts"`
+}
+
+// insightMetric pulls a numeric metric value out of the loosely-typed
+// ThreadsInsight list returned by the gateway. Media-level insights store the
+// number under values[0].value; user-level under total_value.value. It returns
+// 0 when the metric is absent.
+func insightMetric(items []domain.ThreadsInsight, name string) int64 {
+	for _, it := range items {
+		if it.Name != name {
+			continue
+		}
+		m, ok := it.RawValue.(map[string]any)
+		if !ok {
+			return 0
+		}
+		if tv, ok := m["total_value"].(map[string]any); ok {
+			return toInt64(tv["value"])
+		}
+		if vals, ok := m["values"].([]any); ok && len(vals) > 0 {
+			if v0, ok := vals[0].(map[string]any); ok {
+				return toInt64(v0["value"])
+			}
+		}
+	}
+	return 0
+}
+
+func toInt64(v any) int64 {
+	switch n := v.(type) {
+	case float64:
+		return int64(n)
+	case int64:
+		return n
+	case int:
+		return int64(n)
+	case json.Number:
+		i, _ := n.Int64()
+		return i
+	}
+	return 0
+}
+
+func pct(num, den int64) string {
+	if den <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("%.2f%%", float64(num)*100/float64(den))
+}
+
+// ThreadsDailySummary lists the day's posts, enriches each with media-level
+// insights and a reply breakdown (total / mine / others / needs-reply), and
+// aggregates account-wide totals. Live API is the source of truth; per-post
+// failures are reported inline rather than failing the whole summary.
+func (d *Deps) ThreadsDailySummary(ctx context.Context, req *mcp.CallToolRequest, in ThreadsDailySummaryIn) (*mcp.CallToolResult, ThreadsDailySummaryOut, error) {
+	if d.Svc.Threads == nil {
+		return mcpserver.Err("disabled", "threads channel not configured"), ThreadsDailySummaryOut{}, nil
+	}
+
+	loc := time.Local
+	if tz := strings.TrimSpace(in.Timezone); tz != "" {
+		l, err := time.LoadLocation(tz)
+		if err != nil {
+			return mcpserver.Err("validation", "invalid timezone: "+tz), ThreadsDailySummaryOut{}, nil
+		}
+		loc = l
+	}
+
+	now := time.Now().In(loc)
+	day := now
+	if ds := strings.TrimSpace(in.Date); ds != "" {
+		parsed, err := time.ParseInLocation("2006-01-02", ds, loc)
+		if err != nil {
+			return mcpserver.Err("validation", "invalid date, want YYYY-MM-DD: "+ds), ThreadsDailySummaryOut{}, nil
+		}
+		day = parsed
+	}
+	dayStart := time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, loc)
+	dayEnd := dayStart.AddDate(0, 0, 1)
+
+	maxPosts := in.MaxPosts
+	if maxPosts <= 0 {
+		maxPosts = 25
+	}
+	if maxPosts > 100 {
+		maxPosts = 100
+	}
+
+	out := ThreadsDailySummaryOut{
+		Date:     dayStart.Format("2006-01-02"),
+		Timezone: loc.String(),
+	}
+
+	// Profile: identity (to mark my replies) + follower count.
+	if profile, err := d.Svc.Threads.Profile(ctx); err == nil {
+		out.AuthenticatedAs = profile.Username
+		out.FollowersCount = profile.FollowersCount
+	}
+	me := out.AuthenticatedAs
+
+	posts, _, err := d.Svc.Threads.List(ctx, maxPosts, "")
+	if err != nil {
+		return nil, ThreadsDailySummaryOut{}, fmt.Errorf("threads_daily_summary list: %w", err)
+	}
+
+	for _, p := range posts {
+		if p.Timestamp == nil {
+			continue
+		}
+		ts := p.Timestamp.In(loc)
+		if ts.Before(dayStart) || !ts.Before(dayEnd) {
+			continue
+		}
+
+		ps := ThreadsPostSummaryOut{
+			ThreadsID: p.ThreadsID,
+			Permalink: p.Permalink,
+			Text:      p.Text,
+			MediaType: p.MediaType,
+			Timestamp: ts.Format(time.RFC3339),
+		}
+
+		// Media-level insights.
+		if items, err := d.Svc.Threads.Insights(ctx, p.ThreadsID); err != nil {
+			ps.InsightsError = err.Error()
+		} else {
+			ps.Views = insightMetric(items, "views")
+			ps.Likes = insightMetric(items, "likes")
+			ps.Reposts = insightMetric(items, "reposts")
+			ps.Quotes = insightMetric(items, "quotes")
+			ps.RepliesMetric = insightMetric(items, "replies")
+		}
+
+		// Reply breakdown via the conversation tree.
+		if replies, _, err := d.Svc.Threads.Conversation(ctx, p.ThreadsID, 100, ""); err != nil {
+			ps.RepliesError = err.Error()
+		} else {
+			for _, r := range replies {
+				ps.TotalReplies++
+				if me != "" && r.Username == me {
+					ps.MyReplies++
+				} else {
+					ps.OtherReplies++
+				}
+			}
+			// needs_reply: a non-mine comment with no direct child authored by me.
+			hasMyChild := make(map[string]bool, len(replies))
+			for _, r := range replies {
+				if me != "" && r.Username == me && r.ParentID != "" {
+					hasMyChild[r.ParentID] = true
+				}
+			}
+			for _, r := range replies {
+				isMine := me != "" && r.Username == me
+				if !isMine && !hasMyChild[r.ReplyID] {
+					ps.NeedsReply++
+				}
+			}
+		}
+
+		ps.Engagement = ps.Likes + ps.Reposts + ps.Quotes + ps.OtherReplies
+		ps.EngagementRate = pct(ps.Engagement, ps.Views)
+
+		out.Posts = append(out.Posts, ps)
+
+		out.Totals.Views += ps.Views
+		out.Totals.Likes += ps.Likes
+		out.Totals.Reposts += ps.Reposts
+		out.Totals.Quotes += ps.Quotes
+		out.Totals.TotalReplies += ps.TotalReplies
+		out.Totals.MyReplies += ps.MyReplies
+		out.Totals.OtherReplies += ps.OtherReplies
+		out.Totals.NeedsReply += ps.NeedsReply
+		out.Totals.Engagement += ps.Engagement
+	}
+
+	out.Totals.Posts = len(out.Posts)
+	out.Totals.EngagementRate = pct(out.Totals.Engagement, out.Totals.Views)
+
 	return nil, out, nil
 }
 

@@ -295,3 +295,98 @@ func TestThreadsReplyFallsBackToThreadsID(t *testing.T) {
 		t.Fatalf("expected reply target post_root_id, got %q", gw.replyTarget)
 	}
 }
+
+// summaryGateway returns canned posts/insights/conversation for the daily
+// summary test. Insights are keyed by media id so different posts can carry
+// different metric values.
+type summaryGateway struct {
+	fakeThreadsGateway
+	posts        []domain.ThreadsPost
+	insights     map[string][]domain.ThreadsInsight
+	conversation map[string][]domain.ThreadsReply
+}
+
+func (g summaryGateway) List(context.Context, int, string) ([]domain.ThreadsPost, string, error) {
+	return g.posts, "", nil
+}
+func (g summaryGateway) Insights(_ context.Context, mediaID string) ([]domain.ThreadsInsight, []byte, error) {
+	return g.insights[mediaID], nil, nil
+}
+func (g summaryGateway) Conversation(_ context.Context, mediaID string, _ int, _ string) ([]domain.ThreadsReply, string, error) {
+	return g.conversation[mediaID], "", nil
+}
+
+func mediaInsight(name string, value float64) domain.ThreadsInsight {
+	return domain.ThreadsInsight{Name: name, RawValue: map[string]any{
+		"name":   name,
+		"values": []any{map[string]any{"value": value}},
+	}}
+}
+
+func TestThreadsDailySummaryAggregatesInsightsAndReplies(t *testing.T) {
+	loc, _ := time.LoadLocation("Asia/Jakarta")
+	today := time.Date(2026, 6, 27, 10, 0, 0, 0, loc)
+	yesterday := today.AddDate(0, 0, -1)
+
+	gw := summaryGateway{
+		fakeThreadsGateway: fakeThreadsGateway{profile: domain.ThreadsProfile{
+			Username:       "callmelords",
+			FollowersCount: ptrInt64(105),
+		}},
+		posts: []domain.ThreadsPost{
+			{ThreadsID: "p1", Text: "today post", MediaType: "TEXT_POST", Timestamp: &today},
+			{ThreadsID: "old", Text: "yesterday post", Timestamp: &yesterday}, // out of window
+		},
+		insights: map[string][]domain.ThreadsInsight{
+			"p1": {
+				mediaInsight("views", 962),
+				mediaInsight("likes", 3),
+				mediaInsight("reposts", 1),
+				mediaInsight("quotes", 0),
+				mediaInsight("replies", 9),
+			},
+		},
+		conversation: map[string][]domain.ThreadsReply{
+			// 2 others' comments; 1 answered by me, 1 not. Plus my own reply.
+			"p1": {
+				{ReplyID: "c1", Username: "alice", ParentID: "p1"},
+				{ReplyID: "c2", Username: "bob", ParentID: "p1"},
+				{ReplyID: "m1", Username: "callmelords", ParentID: "c1"},
+			},
+		},
+	}
+
+	d := &Deps{Svc: &service.Services{Threads: service.NewThreadsService(gw, fakeThreadsRepo{})}}
+	_, out, err := d.ThreadsDailySummary(context.Background(), &mcp.CallToolRequest{},
+		ThreadsDailySummaryIn{Date: "2026-06-27", Timezone: "Asia/Jakarta"})
+	if err != nil {
+		t.Fatalf("daily summary: %v", err)
+	}
+
+	if out.AuthenticatedAs != "callmelords" || out.FollowersCount == nil || *out.FollowersCount != 105 {
+		t.Fatalf("identity/followers wrong: %+v", out)
+	}
+	if len(out.Posts) != 1 {
+		t.Fatalf("expected 1 post in window, got %d", len(out.Posts))
+	}
+	p := out.Posts[0]
+	if p.Views != 962 || p.Likes != 3 || p.Reposts != 1 || p.RepliesMetric != 9 {
+		t.Fatalf("insights wrong: %+v", p)
+	}
+	if p.TotalReplies != 3 || p.MyReplies != 1 || p.OtherReplies != 2 {
+		t.Fatalf("reply breakdown wrong: total=%d mine=%d others=%d", p.TotalReplies, p.MyReplies, p.OtherReplies)
+	}
+	// c1 answered by me, c2 not -> needs_reply=1.
+	if p.NeedsReply != 1 {
+		t.Fatalf("needs_reply expected 1, got %d", p.NeedsReply)
+	}
+	// engagement = likes+reposts+quotes+other_replies = 3+1+0+2 = 6.
+	if p.Engagement != 6 {
+		t.Fatalf("engagement expected 6, got %d", p.Engagement)
+	}
+	if out.Totals.Posts != 1 || out.Totals.Engagement != 6 || out.Totals.Views != 962 {
+		t.Fatalf("totals wrong: %+v", out.Totals)
+	}
+}
+
+func ptrInt64(v int64) *int64 { return &v }

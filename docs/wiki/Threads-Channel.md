@@ -35,6 +35,7 @@ Never commit real tokens. Required scopes for the full tool set:
 | `threads_publish` | Publish text/image/video post with optional `topic_tag` |
 | `threads_delete` | Delete live post and soft-delete cache row |
 | `threads_insights` | Fetch user-level or media-level insights |
+| `threads_daily_summary` | Summarize a day's posts: per-post insights + reply breakdown + engagement and account totals |
 | `threads_follower_demographics` | Aggregate follower demographics (country/city/age/gender); needs ≥100 followers |
 | `threads_replies` | Read replies for a post |
 | `threads_reply_tree` | Nested reply conversation tree (is_mine/needs_reply) |
@@ -249,6 +250,46 @@ reply on your own post instead of answering the commenter.
   }
 }
 ```
+
+### Daily summary
+
+`threads_daily_summary` reports one local day's posts in a single call. It lists
+the day's posts, enriches each with media-level insights, derives a reply
+breakdown from the conversation tree, and aggregates account-wide totals.
+
+Arguments:
+
+- `date` — local day as `YYYY-MM-DD` (default: today)
+- `timezone` — IANA zone for the day window + date parsing, e.g. `Asia/Jakarta`
+  (default: server local timezone)
+- `max_posts` — recent posts to scan for the day (default 25, capped at 100)
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 12,
+  "method": "tools/call",
+  "params": {
+    "name": "threads_daily_summary",
+    "arguments": { "timezone": "Asia/Jakarta" }
+  }
+}
+```
+
+Per-post fields: `views`, `likes`, `reposts`, `quotes`, `replies_metric` (from
+the insights API), plus a conversation-tree breakdown `total_replies`,
+`my_replies`, `other_replies`, `needs_reply`. `engagement` =
+`likes + reposts + quotes + other_replies`; `engagement_rate` =
+`engagement / views` as a percentage. Account-wide `totals` and `followers_count`
+are included.
+
+Live API is the source of truth. A failure fetching one post's insights or
+replies is reported inline as `insights_error` / `replies_error` on that post
+instead of failing the whole summary.
+
+`replies_metric` (the insights `replies` counter) can differ from
+`total_replies` (distinct comments seen in the conversation tree); both are
+returned so you can compare them.
 
 ### Edit / delete / moderate limitations
 
