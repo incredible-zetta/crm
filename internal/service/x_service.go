@@ -41,6 +41,12 @@ func (s *XService) Me(ctx context.Context, cookies string) (string, error) {
 	return s.gateway.Me(ctx, cookies)
 }
 
+// SelfProfile resolves the acting account's own profile from the session
+// cookies (twid -> UserByRestId). No handle needed.
+func (s *XService) SelfProfile(ctx context.Context, cookies string) (domain.XUser, error) {
+	return s.gateway.SelfProfile(ctx, cookies)
+}
+
 func (s *XService) Post(ctx context.Context, cookies string, in port.XPostInput) (domain.XPostResult, error) {
 	return s.gateway.Post(ctx, cookies, in)
 }
@@ -151,31 +157,18 @@ func (s *XService) CheckLiveness(ctx context.Context, cutoff time.Time, limit in
 	return len(stale), nil
 }
 
-// probe verifies an account's cookies via UserByScreenName(self) and records
-// the resulting liveness. A stored screen_name is preferred; when absent it
-// falls back to the timeline of the twid-derived user. Errors are captured as
-// dead + last_error rather than propagated.
+// probe verifies an account's cookies via SelfProfile (twid -> UserByRestId)
+// and records the resulting liveness. This reflects real functional access and
+// needs no stored screen_name. Errors are captured as dead + last_error.
 func (s *XService) probe(ctx context.Context, acct domain.XAccount) {
-	handle := acct.ScreenName
 	var screenName, userID, lastErr string
 	liveness := domain.XLivenessDead
-	if handle != "" {
-		u, err := s.gateway.UserByScreenName(ctx, acct.Cookies, handle)
-		if err != nil {
-			lastErr = err.Error()
-		} else {
-			liveness = domain.XLivenessLive
-			screenName, userID = u.ScreenName, u.RestID
-		}
+	u, err := s.gateway.SelfProfile(ctx, acct.Cookies)
+	if err != nil {
+		lastErr = err.Error()
 	} else {
-		// No known handle yet: a search with an authed session confirms the
-		// cookies still resolve. Use a cheap self-scoped call.
-		_, err := s.gateway.Search(ctx, acct.Cookies, port.XSearchInput{Query: "from:me", Count: 1})
-		if err != nil {
-			lastErr = err.Error()
-		} else {
-			liveness = domain.XLivenessLive
-		}
+		liveness = domain.XLivenessLive
+		screenName, userID = u.ScreenName, u.RestID
 	}
 	_ = s.accounts.UpdateLiveness(ctx, acct.ID, liveness, screenName, userID, lastErr)
 }
