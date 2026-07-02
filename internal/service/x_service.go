@@ -36,6 +36,11 @@ func (s *XService) User(ctx context.Context, cookies, handle string) (domain.XUs
 	return s.gateway.UserByScreenName(ctx, cookies, handle)
 }
 
+// Me returns the acting account's own numeric user id from the session cookies.
+func (s *XService) Me(ctx context.Context, cookies string) (string, error) {
+	return s.gateway.Me(ctx, cookies)
+}
+
 func (s *XService) Post(ctx context.Context, cookies string, in port.XPostInput) (domain.XPostResult, error) {
 	return s.gateway.Post(ctx, cookies, in)
 }
@@ -104,6 +109,14 @@ func (s *XService) DeleteAccount(ctx context.Context, label string) error {
 		return ErrAccountsDisabled
 	}
 	return s.accounts.Delete(ctx, label)
+}
+
+// Account returns a stored account by label (including liveness metadata).
+func (s *XService) Account(ctx context.Context, label string) (domain.XAccount, error) {
+	if s.accounts == nil {
+		return domain.XAccount{}, ErrAccountsDisabled
+	}
+	return s.accounts.GetByLabel(ctx, label)
 }
 
 // CookiesForLabel resolves a stored account label to its cookie blob so the

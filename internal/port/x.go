@@ -13,6 +13,9 @@ import (
 // passes the cookies of the account to act as on every request.
 type XGateway interface {
 	UserByScreenName(ctx context.Context, cookies, handle string) (domain.XUser, error)
+	// Me returns the acting account's own numeric user id derived from the
+	// session cookies (twid), without a network call.
+	Me(ctx context.Context, cookies string) (string, error)
 	Post(ctx context.Context, cookies string, in XPostInput) (domain.XPostResult, error)
 	Delete(ctx context.Context, cookies, tweetID string) error
 	Search(ctx context.Context, cookies string, in XSearchInput) (domain.XTweetPage, error)

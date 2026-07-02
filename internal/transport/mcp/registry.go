@@ -318,6 +318,7 @@ func Register(srv *mcp.Server, d *Deps) {
 	// field (Netscape blob with auth_token + ct0) identifying the account to
 	// act as, so multi-account is per-call. Ported natively from x-utils.
 	mcp.AddTool(srv, &mcp.Tool{Name: "x_user", Description: "Fetch a public x.com profile by @handle using the acting account's cookies"}, d.XUser)
+	mcp.AddTool(srv, &mcp.Tool{Name: "x_identify", Description: "Identify the acting account itself: own user id (from session cookie), live profile (handle, name, followers/following/tweets, verification), and stored liveness when acting via a saved account label. Use to confirm which account a cookie blob / account label belongs to."}, d.XIdentify)
 	mcp.AddTool(srv, &mcp.Tool{Name: "x_post", Description: "Post a tweet (optionally reply, quote, or attach media by URL) as the acting account"}, d.XPost)
 	mcp.AddTool(srv, &mcp.Tool{Name: "x_delete", Description: "Delete a tweet owned by the acting account by tweet_id"}, d.XDelete)
 	mcp.AddTool(srv, &mcp.Tool{Name: "x_search", Description: "Search tweets (Top/Latest/People/Media); supports #hashtag $cashtag @mention and operators, paginated"}, d.XSearch)
