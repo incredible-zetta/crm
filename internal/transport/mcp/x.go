@@ -522,40 +522,43 @@ func (d *Deps) XAccountDelete(ctx context.Context, req *mcp.CallToolRequest, in 
 // --- x_watch_save -----------------------------------------------------------
 
 type XWatchSaveIn struct {
-	Label         string  `json:"label" jsonschema:"Unique label for this watch (upsert key)"`
-	Kind          *string `json:"kind,omitempty" jsonschema:"What to watch: 'mention' (tweets mentioning your handle; query = handle without @) or 'search' (raw x.com search query). Defaults to mention."`
-	Query         *string `json:"query,omitempty" jsonschema:"For mention: the @handle (without @) to watch mentions of. For search: the x.com search query."`
-	Account       *string `json:"account,omitempty" jsonschema:"Stored account label whose cookies poll this watch (see x_account_save)."`
-	WebhookURL    *string `json:"webhook_url,omitempty" jsonschema:"HTTPS URL to POST each new match to. Body is JSON; if webhook_secret is set an X-Zetta-Signature: sha256=<hmac> header is added."`
-	WebhookSecret *string `json:"webhook_secret,omitempty" jsonschema:"Shared secret used to HMAC-SHA256 sign webhook bodies. Write-only; never returned."`
-	Active        *bool   `json:"active,omitempty" jsonschema:"Whether the poller runs this watch. Defaults true on create."`
+	Label          string             `json:"label" jsonschema:"Unique label for this watch (upsert key)"`
+	Kind           *string            `json:"kind,omitempty" jsonschema:"What to watch: 'mention' (tweets mentioning your handle; query = handle without @) or 'search' (raw x.com search query). Defaults to mention."`
+	Query          *string            `json:"query,omitempty" jsonschema:"For mention: the @handle (without @) to watch mentions of. For search: the x.com search query."`
+	Account        *string            `json:"account,omitempty" jsonschema:"Stored account label whose cookies poll this watch (see x_account_save)."`
+	WebhookURL     *string            `json:"webhook_url,omitempty" jsonschema:"HTTPS URL to POST each new match to. Body is JSON; if webhook_secret is set an X-Zetta-Signature: sha256=<hmac> header is added."`
+	WebhookSecret  *string            `json:"webhook_secret,omitempty" jsonschema:"Shared secret used to HMAC-SHA256 sign webhook bodies. Write-only; never returned."`
+	WebhookHeaders *map[string]string `json:"webhook_headers,omitempty" jsonschema:"Extra HTTP headers to send with each delivery (e.g. an Authorization or bearer token for your receiver). Merged under the built-in content-type/signature headers. Pass {} to clear."`
+	Active         *bool              `json:"active,omitempty" jsonschema:"Whether the poller runs this watch. Defaults true on create."`
 }
 
 type XWatchOut struct {
-	ID           int64  `json:"id"`
-	Label        string `json:"label"`
-	Kind         string `json:"kind"`
-	Query        string `json:"query"`
-	Account      string `json:"account,omitempty"`
-	WebhookURL   string `json:"webhook_url,omitempty"`
-	HasSecret    bool   `json:"has_secret"`
-	Active       bool   `json:"active"`
-	LastSeenID   string `json:"last_seen_id,omitempty"`
-	LastError    string `json:"last_error,omitempty"`
+	ID             int64             `json:"id"`
+	Label          string            `json:"label"`
+	Kind           string            `json:"kind"`
+	Query          string            `json:"query"`
+	Account        string            `json:"account,omitempty"`
+	WebhookURL     string            `json:"webhook_url,omitempty"`
+	WebhookHeaders map[string]string `json:"webhook_headers,omitempty"`
+	HasSecret      bool              `json:"has_secret"`
+	Active         bool              `json:"active"`
+	LastSeenID     string            `json:"last_seen_id,omitempty"`
+	LastError      string            `json:"last_error,omitempty"`
 }
 
 func toXWatchOut(w domain.XWatch) XWatchOut {
 	return XWatchOut{
-		ID:         w.ID,
-		Label:      w.Label,
-		Kind:       string(w.Kind),
-		Query:      w.Query,
-		Account:    w.AccountLabel,
-		WebhookURL: w.WebhookURL,
-		HasSecret:  w.WebhookSecret != "",
-		Active:     w.Active,
-		LastSeenID: w.LastSeenID,
-		LastError:  w.LastError,
+		ID:             w.ID,
+		Label:          w.Label,
+		Kind:           string(w.Kind),
+		Query:          w.Query,
+		Account:        w.AccountLabel,
+		WebhookURL:     w.WebhookURL,
+		WebhookHeaders: w.WebhookHeaders,
+		HasSecret:      w.WebhookSecret != "",
+		Active:         w.Active,
+		LastSeenID:     w.LastSeenID,
+		LastError:      w.LastError,
 	}
 }
 
@@ -567,12 +570,13 @@ func (d *Deps) XWatchSave(ctx context.Context, req *mcp.CallToolRequest, in XWat
 		return mcpserver.Err("validation", "label required"), XWatchOut{}, nil
 	}
 	save := port.XWatchSaveInput{
-		Label:         in.Label,
-		Query:         in.Query,
-		AccountLabel:  in.Account,
-		WebhookURL:    in.WebhookURL,
-		WebhookSecret: in.WebhookSecret,
-		Active:        in.Active,
+		Label:          in.Label,
+		Query:          in.Query,
+		AccountLabel:   in.Account,
+		WebhookURL:     in.WebhookURL,
+		WebhookSecret:  in.WebhookSecret,
+		WebhookHeaders: in.WebhookHeaders,
+		Active:         in.Active,
 	}
 	if in.Kind != nil {
 		k := domain.XWatchKind(*in.Kind)

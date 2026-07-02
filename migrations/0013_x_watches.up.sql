@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS x_watches (
   account_label VARCHAR(255) NULL,
   webhook_url VARCHAR(1024) NULL,
   webhook_secret VARCHAR(255) NULL,
+  webhook_headers JSON NULL,
   active TINYINT(1) NOT NULL DEFAULT 1,
   last_seen_id VARCHAR(64) NULL,
   last_polled_at TIMESTAMP NULL,

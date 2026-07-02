@@ -10,17 +10,17 @@ const userTweetsQueryID = "hr4gzZONlq23okjU8fIe_A"
 
 // TweetSummary is a trimmed tweet for search/timeline/filter output.
 type TweetSummary struct {
-	RestID       string
-	Text         string
-	ScreenName   string
-	Name         string
-	CreatedAt    string
-	CreatedTime  time.Time
-	Likes        int
-	Retweets     int
-	Replies      int
-	HasMedia     bool
-	URL          string
+	RestID      string
+	Text        string
+	ScreenName  string
+	Name        string
+	CreatedAt   string
+	CreatedTime time.Time
+	Likes       int
+	Retweets    int
+	Replies     int
+	HasMedia    bool
+	URL         string
 }
 
 // UserTweetsOptions configures a UserTweets fetch.
@@ -52,7 +52,7 @@ func defaultTimelineFeatures() map[string]any {
 		"communities_web_enable_tweet_community_results_fetch":                    true,
 		"c9s_tweet_anatomy_moderator_badge_enabled":                               true,
 		"responsive_web_grok_analyze_button_fetch_trends_enabled":                 false,
-		"responsive_web_grok_analyze_post_followups_enabled":                       true,
+		"responsive_web_grok_analyze_post_followups_enabled":                      true,
 		"responsive_web_jetfuel_frame":                                            true,
 		"responsive_web_grok_share_attachment_enabled":                            true,
 		"articles_preview_enabled":                                                true,
@@ -283,7 +283,7 @@ func parseTweetResult(raw json.RawMessage) *TweetSummary {
 
 func cursorValue(raw json.RawMessage) string {
 	var flat struct {
-		Value string `json:"value"`
+		Value       string `json:"value"`
 		ItemContent *struct {
 			Value string `json:"value"`
 		} `json:"itemContent"`

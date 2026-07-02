@@ -74,14 +74,14 @@ func parseTweetDetail(entry timelineEntry) (*TweetDetail, error) {
 				} `json:"user_results"`
 			} `json:"core"`
 			Legacy struct {
-				FullText           string `json:"full_text"`
-				CreatedAt          string `json:"created_at"`
-				FavoriteCount      int    `json:"favorite_count"`
-				RetweetCount       int    `json:"retweet_count"`
-				ReplyCount         int    `json:"reply_count"`
-				QuoteCount         int    `json:"quote_count"`
-				BookmarkCount      int    `json:"bookmark_count"`
-				ConversationIDStr  string `json:"conversation_id_str"`
+				FullText          string `json:"full_text"`
+				CreatedAt         string `json:"created_at"`
+				FavoriteCount     int    `json:"favorite_count"`
+				RetweetCount      int    `json:"retweet_count"`
+				ReplyCount        int    `json:"reply_count"`
+				QuoteCount        int    `json:"quote_count"`
+				BookmarkCount     int    `json:"bookmark_count"`
+				ConversationIDStr string `json:"conversation_id_str"`
 			} `json:"legacy"`
 			Views struct {
 				Count string `json:"count"`
@@ -125,11 +125,11 @@ func parseTweetDetail(entry timelineEntry) (*TweetDetail, error) {
 	}
 
 	var (
-		id, text, created, conv string
+		id, text, created, conv             string
 		likes, rts, reps, quotes, bookmarks int
-		views int
-		viewState, name, screen string
-		hasMedia bool
+		views                               int
+		viewState, name, screen             string
+		hasMedia                            bool
 	)
 	parseViews := func(count, state string) (int, string) {
 		n, _ := strconv.Atoi(strings.ReplaceAll(count, ",", ""))

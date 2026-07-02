@@ -3,6 +3,7 @@ package mysql
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 
 	"github.com/incredible-zetta/crm/internal/domain"
@@ -15,7 +16,7 @@ type xWatchRepo struct{ db *sql.DB }
 var _ port.XWatchRepo = (*xWatchRepo)(nil)
 
 func xWatchSelectSQL() string {
-	return `SELECT id, label, kind, query, account_label, webhook_url, webhook_secret,
+	return `SELECT id, label, kind, query, account_label, webhook_url, webhook_secret, webhook_headers,
 		active, last_seen_id, last_polled_at, last_error, created_at, updated_at
 		FROM x_watches`
 }
@@ -34,11 +35,11 @@ func (r *xWatchRepo) Save(ctx context.Context, in port.XWatchSaveInput) (domain.
 		}
 		applyWatchPatch(&w, in)
 		if _, err := r.db.ExecContext(ctx, `INSERT INTO x_watches
-			(tenant_id, label, kind, query, account_label, webhook_url, webhook_secret, active)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			(tenant_id, label, kind, query, account_label, webhook_url, webhook_secret, webhook_headers, active)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			tenant.From(ctx), w.Label, string(w.Kind), w.Query,
 			toNullString(w.AccountLabel), toNullString(w.WebhookURL), toNullString(w.WebhookSecret),
-			boolToInt(w.Active)); err != nil {
+			webhookHeadersJSON(w.WebhookHeaders), boolToInt(w.Active)); err != nil {
 			return domain.XWatch{}, fmt.Errorf("insert x watch: %w", err)
 		}
 		return r.GetByLabel(ctx, in.Label)
@@ -48,10 +49,11 @@ func (r *xWatchRepo) Save(ctx context.Context, in port.XWatchSaveInput) (domain.
 
 	applyWatchPatch(&existing, in)
 	if _, err := r.db.ExecContext(ctx, `UPDATE x_watches
-		SET kind=?, query=?, account_label=?, webhook_url=?, webhook_secret=?, active=?, deleted_at=NULL
+		SET kind=?, query=?, account_label=?, webhook_url=?, webhook_secret=?, webhook_headers=?, active=?, deleted_at=NULL
 		WHERE id=? AND tenant_id=?`,
 		string(existing.Kind), existing.Query, toNullString(existing.AccountLabel),
 		toNullString(existing.WebhookURL), toNullString(existing.WebhookSecret),
+		webhookHeadersJSON(existing.WebhookHeaders),
 		boolToInt(existing.Active), existing.ID, tenant.From(ctx)); err != nil {
 		return domain.XWatch{}, fmt.Errorf("update x watch: %w", err)
 	}
@@ -73,6 +75,9 @@ func applyWatchPatch(w *domain.XWatch, in port.XWatchSaveInput) {
 	}
 	if in.WebhookSecret != nil {
 		w.WebhookSecret = *in.WebhookSecret
+	}
+	if in.WebhookHeaders != nil {
+		w.WebhookHeaders = *in.WebhookHeaders
 	}
 	if in.Active != nil {
 		w.Active = *in.Active
@@ -144,19 +149,21 @@ func (r *xWatchRepo) ListDue(ctx context.Context, limit int) ([]port.XWatchWithT
 			acct     sql.NullString
 			hook     sql.NullString
 			secret   sql.NullString
+			headers  sql.NullString
 			active   int
 			lastSeen sql.NullString
 			polled   sql.NullTime
 			lastErr  sql.NullString
 		)
 		if err := rows.Scan(&tenantID, &w.ID, &w.Label, &kind, &w.Query, &acct,
-			&hook, &secret, &active, &lastSeen, &polled, &lastErr, &w.CreatedAt, &w.UpdatedAt); err != nil {
+			&hook, &secret, &headers, &active, &lastSeen, &polled, &lastErr, &w.CreatedAt, &w.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan due x watch: %w", err)
 		}
 		w.Kind = domain.XWatchKind(kind)
 		w.AccountLabel = fromNullString(acct)
 		w.WebhookURL = fromNullString(hook)
 		w.WebhookSecret = fromNullString(secret)
+		w.WebhookHeaders = parseWebhookHeaders(headers)
 		w.Active = active != 0
 		w.LastSeenID = fromNullString(lastSeen)
 		w.LastPolledAt = fromNullTime(polled)
@@ -244,7 +251,7 @@ func boolToInt(b bool) int {
 	return 0
 }
 
-func scanXWatch(row *sql.Row) (domain.XWatch, error) { return scanXWatchGeneric(row) }
+func scanXWatch(row *sql.Row) (domain.XWatch, error)       { return scanXWatchGeneric(row) }
 func scanXWatchRows(rows *sql.Rows) (domain.XWatch, error) { return scanXWatchGeneric(rows) }
 
 func scanXWatchGeneric(s rowScanner) (domain.XWatch, error) {
@@ -254,19 +261,21 @@ func scanXWatchGeneric(s rowScanner) (domain.XWatch, error) {
 		acct     sql.NullString
 		hook     sql.NullString
 		secret   sql.NullString
+		headers  sql.NullString
 		active   int
 		lastSeen sql.NullString
 		polled   sql.NullTime
 		lastErr  sql.NullString
 	)
 	if err := s.Scan(&w.ID, &w.Label, &kind, &w.Query, &acct, &hook, &secret,
-		&active, &lastSeen, &polled, &lastErr, &w.CreatedAt, &w.UpdatedAt); err != nil {
+		&headers, &active, &lastSeen, &polled, &lastErr, &w.CreatedAt, &w.UpdatedAt); err != nil {
 		return domain.XWatch{}, err
 	}
 	w.Kind = domain.XWatchKind(kind)
 	w.AccountLabel = fromNullString(acct)
 	w.WebhookURL = fromNullString(hook)
 	w.WebhookSecret = fromNullString(secret)
+	w.WebhookHeaders = parseWebhookHeaders(headers)
 	w.Active = active != 0
 	w.LastSeenID = fromNullString(lastSeen)
 	w.LastPolledAt = fromNullTime(polled)
@@ -291,4 +300,29 @@ func scanXWatchEvent(rows *sql.Rows) (domain.XWatchEvent, error) {
 	ev.DeliveryError = fromNullString(delErr)
 	ev.DeliveredAt = fromNullTime(delivered)
 	return ev, nil
+}
+
+// webhookHeadersJSON encodes custom webhook headers for storage. Empty/nil maps
+// store as NULL so the column stays clean.
+func webhookHeadersJSON(h map[string]string) any {
+	if len(h) == 0 {
+		return nil
+	}
+	b, err := json.Marshal(h)
+	if err != nil {
+		return nil
+	}
+	return string(b)
+}
+
+// parseWebhookHeaders decodes the stored JSON header map (NULL/empty -> nil).
+func parseWebhookHeaders(v sql.NullString) map[string]string {
+	if !v.Valid || v.String == "" {
+		return nil
+	}
+	var h map[string]string
+	if err := json.Unmarshal([]byte(v.String), &h); err != nil {
+		return nil
+	}
+	return h
 }

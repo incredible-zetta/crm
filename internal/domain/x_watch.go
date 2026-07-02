@@ -36,12 +36,16 @@ type XWatch struct {
 	AccountLabel  string     `json:"account_label,omitempty"`
 	WebhookURL    string     `json:"webhook_url,omitempty"`
 	WebhookSecret string     `json:"-"`
-	Active        bool       `json:"active"`
-	LastSeenID    string     `json:"last_seen_id,omitempty"`
-	LastPolledAt  *time.Time `json:"last_polled_at,omitempty"`
-	LastError     string     `json:"last_error,omitempty"`
-	CreatedAt     time.Time  `json:"created_at"`
-	UpdatedAt     time.Time  `json:"updated_at"`
+	// WebhookHeaders are extra HTTP headers sent with each delivery (e.g.
+	// Authorization or a bearer token for the receiver). Set by the agent;
+	// merged over the built-in content-type/user-agent/signature headers.
+	WebhookHeaders map[string]string `json:"webhook_headers,omitempty"`
+	Active         bool              `json:"active"`
+	LastSeenID     string            `json:"last_seen_id,omitempty"`
+	LastPolledAt   *time.Time        `json:"last_polled_at,omitempty"`
+	LastError      string            `json:"last_error,omitempty"`
+	CreatedAt      time.Time         `json:"created_at"`
+	UpdatedAt      time.Time         `json:"updated_at"`
 }
 
 // HasWebhook reports whether a delivery target is configured.

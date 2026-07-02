@@ -19,15 +19,15 @@ type Config struct {
 	XLivenessStaleSec    int
 	// X watch poller. IntervalSec <= 0 disables polling of mention/search
 	// watches and webhook delivery.
-	XWatchIntervalSec    int
-	SMTPHost             string
-	SMTPPort             string
-	SMTPUser             string
-	SMTPPass             string
-	SMTPFrom             string
-	MailgunDomain        string
-	MailgunAPIKey        string
-	LogLevel             string
+	XWatchIntervalSec int
+	SMTPHost          string
+	SMTPPort          string
+	SMTPUser          string
+	SMTPPass          string
+	SMTPFrom          string
+	MailgunDomain     string
+	MailgunAPIKey     string
+	LogLevel          string
 	// Multi-tenancy (optional). When MultiTenancy is false the server runs as a
 	// single implicit tenant (tenant.DefaultID) and behaves exactly as before.
 	// When true, an MCP middleware resolves/auto-provisions a tenant from the

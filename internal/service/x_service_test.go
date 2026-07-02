@@ -71,7 +71,7 @@ type fakeXAccountRepo struct {
 func (r *fakeXAccountRepo) Save(context.Context, port.XAccountSaveInput) (domain.XAccount, error) {
 	return domain.XAccount{}, nil
 }
-func (r *fakeXAccountRepo) List(context.Context) ([]domain.XAccount, error)       { return nil, nil }
+func (r *fakeXAccountRepo) List(context.Context) ([]domain.XAccount, error) { return nil, nil }
 func (r *fakeXAccountRepo) GetByLabel(context.Context, string) (domain.XAccount, error) {
 	return domain.XAccount{}, nil
 }
@@ -246,5 +246,70 @@ func TestWatchesDisabledWithoutRepo(t *testing.T) {
 	}
 	if _, err := ws.ListWatches(context.Background()); err != ErrWatchesDisabled {
 		t.Fatalf("ListWatches err = %v, want ErrWatchesDisabled", err)
+	}
+}
+
+func TestRunWatchesSendsCustomHeadersAndVerify(t *testing.T) {
+	var gotAuth, gotSig string
+	var gotBody []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		gotAuth = req.Header.Get("Authorization")
+		gotSig = req.Header.Get("X-Zetta-Signature")
+		gotBody, _ = io.ReadAll(req.Body)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	repo := &fakeXWatchRepo{due: []port.XWatchWithTenant{{
+		TenantID: "default",
+		Watch: domain.XWatch{
+			ID: 9, Label: "w", Kind: domain.XWatchMention, Query: "me",
+			WebhookURL: srv.URL, WebhookSecret: "sk", Active: true,
+			WebhookHeaders: map[string]string{"Authorization": "Bearer tok123"},
+		},
+	}}}
+	ws := NewXWatchService(repo, NewXService(&mentionGateway{}, &fakeXAccountRepo{}))
+
+	ws.RunWatches(context.Background(), 10)
+	if gotAuth != "Bearer tok123" {
+		t.Fatalf("custom Authorization header = %q, want Bearer tok123", gotAuth)
+	}
+	if !VerifyWebhookSignature("sk", gotBody, gotSig) {
+		t.Fatalf("VerifyWebhookSignature failed for sig %q", gotSig)
+	}
+	if VerifyWebhookSignature("wrong", gotBody, gotSig) {
+		t.Fatal("VerifyWebhookSignature accepted wrong secret")
+	}
+}
+
+func TestWebhookBuiltinHeadersWinOverCustom(t *testing.T) {
+	// An agent must not be able to override the signature or content-type.
+	var gotCT, gotSig string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		gotCT = req.Header.Get("Content-Type")
+		gotSig = req.Header.Get("X-Zetta-Signature")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	repo := &fakeXWatchRepo{due: []port.XWatchWithTenant{{
+		TenantID: "default",
+		Watch: domain.XWatch{
+			ID: 11, Label: "w", Kind: domain.XWatchMention, Query: "me",
+			WebhookURL: srv.URL, WebhookSecret: "sk", Active: true,
+			WebhookHeaders: map[string]string{
+				"Content-Type":      "text/plain",
+				"X-Zetta-Signature": "sha256=forged",
+			},
+		},
+	}}}
+	ws := NewXWatchService(repo, NewXService(&mentionGateway{}, &fakeXAccountRepo{}))
+	ws.RunWatches(context.Background(), 10)
+
+	if gotCT != "application/json" {
+		t.Fatalf("Content-Type = %q, want application/json (builtin must win)", gotCT)
+	}
+	if gotSig == "sha256=forged" {
+		t.Fatal("forged signature was not overridden by builtin")
 	}
 }

@@ -195,12 +195,15 @@ func (s *XWatchService) deliver(ctx context.Context, w domain.XWatch, ev domain.
 		_ = s.watches.MarkDelivered(ctx, ev.ID, domain.XDeliveryFailed, err.Error())
 		return
 	}
+	// Custom headers first so built-ins (content-type, signature) always win
+	// and can't be clobbered by the agent's config.
+	for k, v := range w.WebhookHeaders {
+		req.Header.Set(k, v)
+	}
 	req.Header.Set("content-type", "application/json")
 	req.Header.Set("user-agent", "zetta-crm-xwatch/1")
 	if w.WebhookSecret != "" {
-		mac := hmac.New(sha256.New, []byte(w.WebhookSecret))
-		mac.Write(body)
-		req.Header.Set("x-zetta-signature", "sha256="+hex.EncodeToString(mac.Sum(nil)))
+		req.Header.Set("x-zetta-signature", SignWebhook(w.WebhookSecret, body))
 	}
 	resp, err := s.http.Do(req)
 	if err != nil {
@@ -235,4 +238,30 @@ func idNewer(a, b string) bool {
 		return len(a) > len(b)
 	}
 	return a > b
+}
+
+// WebhookSignatureHeader is the HTTP header carrying the HMAC signature on
+// watch webhook deliveries.
+const WebhookSignatureHeader = "X-Zetta-Signature"
+
+// SignWebhook returns the value for the X-Zetta-Signature header: an
+// HMAC-SHA256 of body keyed by secret, hex-encoded and prefixed "sha256=".
+// A zetta webhook receiver recomputes this over the raw request body and
+// compares it (constant-time) to authenticate the delivery.
+func SignWebhook(secret string, body []byte) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write(body)
+	return "sha256=" + hex.EncodeToString(mac.Sum(nil))
+}
+
+// VerifyWebhookSignature reports whether sig (the X-Zetta-Signature header
+// value) is a valid signature of body under secret, using a constant-time
+// comparison. Intended for the receiving side (a zetta service) to trust an
+// inbound watch delivery.
+func VerifyWebhookSignature(secret string, body []byte, sig string) bool {
+	if secret == "" || sig == "" {
+		return false
+	}
+	want := SignWebhook(secret, body)
+	return hmac.Equal([]byte(want), []byte(sig))
 }

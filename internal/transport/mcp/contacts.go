@@ -15,18 +15,18 @@ import (
 
 // In & Out structs for contact_create
 type ContactCreateIn struct {
-	Email     string         `json:"email" jsonschema:"Email address of the contact"`
-	FirstName string         `json:"first_name,omitempty" jsonschema:"First name of the contact"`
-	LastName  string         `json:"last_name,omitempty" jsonschema:"Last name of the contact"`
-	Company   string         `json:"company,omitempty" jsonschema:"Company of the contact"`
-	Phone     string         `json:"phone,omitempty" jsonschema:"Phone number of the contact"`
-	Stage     string         `json:"stage,omitempty" jsonschema:"Lifecycle stage (new, contacted, qualified, proposal, won, lost)"`
-	Tags      []string       `json:"tags,omitempty" jsonschema:"Tags associated with the contact"`
-	Notes     string         `json:"notes,omitempty" jsonschema:"Notes or descriptions"`
-	Custom    map[string]any `json:"custom,omitempty" jsonschema:"Custom metadata key-value pairs"`
-	Source    string         `json:"source,omitempty" jsonschema:"Source channel of the contact"`
-	XUsername       string `json:"x_username,omitempty" jsonschema:"x.com/Twitter @handle (without @) this contact came from"`
-	ThreadsUsername string `json:"threads_username,omitempty" jsonschema:"threads.com @handle (without @) this contact came from"`
+	Email           string         `json:"email" jsonschema:"Email address of the contact"`
+	FirstName       string         `json:"first_name,omitempty" jsonschema:"First name of the contact"`
+	LastName        string         `json:"last_name,omitempty" jsonschema:"Last name of the contact"`
+	Company         string         `json:"company,omitempty" jsonschema:"Company of the contact"`
+	Phone           string         `json:"phone,omitempty" jsonschema:"Phone number of the contact"`
+	Stage           string         `json:"stage,omitempty" jsonschema:"Lifecycle stage (new, contacted, qualified, proposal, won, lost)"`
+	Tags            []string       `json:"tags,omitempty" jsonschema:"Tags associated with the contact"`
+	Notes           string         `json:"notes,omitempty" jsonschema:"Notes or descriptions"`
+	Custom          map[string]any `json:"custom,omitempty" jsonschema:"Custom metadata key-value pairs"`
+	Source          string         `json:"source,omitempty" jsonschema:"Source channel of the contact"`
+	XUsername       string         `json:"x_username,omitempty" jsonschema:"x.com/Twitter @handle (without @) this contact came from"`
+	ThreadsUsername string         `json:"threads_username,omitempty" jsonschema:"threads.com @handle (without @) this contact came from"`
 }
 
 type ContactCreateOut struct {
@@ -37,19 +37,19 @@ type ContactCreateOut struct {
 
 // In & Out structs for contact_update
 type ContactUpdateIn struct {
-	ID        int64           `json:"id,omitempty" jsonschema:"ID of the contact to update. Either ID or Email must be provided."`
-	Email     string          `json:"email,omitempty" jsonschema:"Email of the contact to update (used if ID is 0/omitted)."`
-	FirstName *string         `json:"first_name,omitempty" jsonschema:"Updated first name"`
-	LastName  *string         `json:"last_name,omitempty" jsonschema:"Updated last name"`
-	Company   *string         `json:"company,omitempty" jsonschema:"Updated company"`
-	Phone     *string         `json:"phone,omitempty" jsonschema:"Updated phone"`
-	Stage     *string         `json:"stage,omitempty" jsonschema:"Updated stage"`
-	Tags      *[]string       `json:"tags,omitempty" jsonschema:"Updated tags"`
-	Notes     *string         `json:"notes,omitempty" jsonschema:"Updated notes"`
-	Custom    *map[string]any `json:"custom,omitempty" jsonschema:"Updated custom properties"`
-	Source    *string         `json:"source,omitempty" jsonschema:"Updated source"`
-	XUsername       *string `json:"x_username,omitempty" jsonschema:"Updated x.com/Twitter @handle (without @)"`
-	ThreadsUsername *string `json:"threads_username,omitempty" jsonschema:"Updated threads.com @handle (without @)"`
+	ID              int64           `json:"id,omitempty" jsonschema:"ID of the contact to update. Either ID or Email must be provided."`
+	Email           string          `json:"email,omitempty" jsonschema:"Email of the contact to update (used if ID is 0/omitted)."`
+	FirstName       *string         `json:"first_name,omitempty" jsonschema:"Updated first name"`
+	LastName        *string         `json:"last_name,omitempty" jsonschema:"Updated last name"`
+	Company         *string         `json:"company,omitempty" jsonschema:"Updated company"`
+	Phone           *string         `json:"phone,omitempty" jsonschema:"Updated phone"`
+	Stage           *string         `json:"stage,omitempty" jsonschema:"Updated stage"`
+	Tags            *[]string       `json:"tags,omitempty" jsonschema:"Updated tags"`
+	Notes           *string         `json:"notes,omitempty" jsonschema:"Updated notes"`
+	Custom          *map[string]any `json:"custom,omitempty" jsonschema:"Updated custom properties"`
+	Source          *string         `json:"source,omitempty" jsonschema:"Updated source"`
+	XUsername       *string         `json:"x_username,omitempty" jsonschema:"Updated x.com/Twitter @handle (without @)"`
+	ThreadsUsername *string         `json:"threads_username,omitempty" jsonschema:"Updated threads.com @handle (without @)"`
 }
 
 type ContactUpdateOut struct {
@@ -123,20 +123,20 @@ type ContactGetIn struct {
 }
 
 type ContactGetOut struct {
-	ID           int64     `json:"id"`
-	Email        string    `json:"email"`
-	FirstName    string    `json:"first_name"`
-	LastName     string    `json:"last_name"`
-	Company      string    `json:"company"`
-	Phone        string    `json:"phone"`
-	Stage        string    `json:"stage"`
-	Tags         []string  `json:"tags"`
-	Notes        string    `json:"notes"`
-	Source       string    `json:"source"`
-	XUsername       string `json:"x_username,omitempty"`
-	ThreadsUsername string `json:"threads_username,omitempty"`
-	Unsubscribed bool      `json:"unsubscribed"`
-	CreatedAt    time.Time `json:"created_at"`
+	ID              int64     `json:"id"`
+	Email           string    `json:"email"`
+	FirstName       string    `json:"first_name"`
+	LastName        string    `json:"last_name"`
+	Company         string    `json:"company"`
+	Phone           string    `json:"phone"`
+	Stage           string    `json:"stage"`
+	Tags            []string  `json:"tags"`
+	Notes           string    `json:"notes"`
+	Source          string    `json:"source"`
+	XUsername       string    `json:"x_username,omitempty"`
+	ThreadsUsername string    `json:"threads_username,omitempty"`
+	Unsubscribed    bool      `json:"unsubscribed"`
+	CreatedAt       time.Time `json:"created_at"`
 }
 
 // In & Out structs for contact_delete
@@ -205,16 +205,16 @@ func projectContact(c domain.Contact, fields []string) map[string]any {
 
 func (d *Deps) ContactCreate(ctx context.Context, req *mcp.CallToolRequest, in ContactCreateIn) (*mcp.CallToolResult, ContactCreateOut, error) {
 	c, err := d.Svc.Contact.Create(ctx, domain.Contact{
-		Email:     in.Email,
-		FirstName: in.FirstName,
-		LastName:  in.LastName,
-		Company:   in.Company,
-		Phone:     in.Phone,
-		Stage:     domain.Stage(in.Stage),
-		Tags:      in.Tags,
-		Notes:     in.Notes,
-		Custom:    in.Custom,
-		Source:    in.Source,
+		Email:           in.Email,
+		FirstName:       in.FirstName,
+		LastName:        in.LastName,
+		Company:         in.Company,
+		Phone:           in.Phone,
+		Stage:           domain.Stage(in.Stage),
+		Tags:            in.Tags,
+		Notes:           in.Notes,
+		Custom:          in.Custom,
+		Source:          in.Source,
 		XUsername:       in.XUsername,
 		ThreadsUsername: in.ThreadsUsername,
 	})
@@ -257,15 +257,15 @@ func (d *Deps) ContactUpdate(ctx context.Context, req *mcp.CallToolRequest, in C
 	}
 
 	patch := domain.ContactPatch{
-		FirstName: in.FirstName,
-		LastName:  in.LastName,
-		Company:   in.Company,
-		Phone:     in.Phone,
-		Stage:     in.Stage,
-		Tags:      in.Tags,
-		Notes:     in.Notes,
-		Custom:    in.Custom,
-		Source:    in.Source,
+		FirstName:       in.FirstName,
+		LastName:        in.LastName,
+		Company:         in.Company,
+		Phone:           in.Phone,
+		Stage:           in.Stage,
+		Tags:            in.Tags,
+		Notes:           in.Notes,
+		Custom:          in.Custom,
+		Source:          in.Source,
 		XUsername:       in.XUsername,
 		ThreadsUsername: in.ThreadsUsername,
 	}
@@ -418,20 +418,20 @@ func (d *Deps) ContactGet(ctx context.Context, req *mcp.CallToolRequest, in Cont
 	}
 
 	return nil, ContactGetOut{
-		ID:           c.ID,
-		Email:        c.Email,
-		FirstName:    c.FirstName,
-		LastName:     c.LastName,
-		Company:      c.Company,
-		Phone:        c.Phone,
-		Stage:        string(c.Stage),
-		Tags:         c.Tags,
-		Notes:        c.Notes,
-		Source:       c.Source,
+		ID:              c.ID,
+		Email:           c.Email,
+		FirstName:       c.FirstName,
+		LastName:        c.LastName,
+		Company:         c.Company,
+		Phone:           c.Phone,
+		Stage:           string(c.Stage),
+		Tags:            c.Tags,
+		Notes:           c.Notes,
+		Source:          c.Source,
 		XUsername:       c.XUsername,
 		ThreadsUsername: c.ThreadsUsername,
-		Unsubscribed: c.IsUnsubscribed(),
-		CreatedAt:    c.CreatedAt,
+		Unsubscribed:    c.IsUnsubscribed(),
+		CreatedAt:       c.CreatedAt,
 	}, nil
 }
 

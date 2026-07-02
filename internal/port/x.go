@@ -68,13 +68,14 @@ type XWatchWithTenant struct {
 // Pointer fields are only applied when non-nil so an AI agent can patch a
 // single attribute (e.g. rotate the webhook secret) without clobbering others.
 type XWatchSaveInput struct {
-	Label         string
-	Kind          *domain.XWatchKind
-	Query         *string
-	AccountLabel  *string
-	WebhookURL    *string
-	WebhookSecret *string
-	Active        *bool
+	Label          string
+	Kind           *domain.XWatchKind
+	Query          *string
+	AccountLabel   *string
+	WebhookURL     *string
+	WebhookSecret  *string
+	WebhookHeaders *map[string]string
+	Active         *bool
 }
 
 // XWatchRepo persists watches and their matched events. Save upserts by
