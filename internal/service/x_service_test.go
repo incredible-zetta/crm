@@ -23,6 +23,12 @@ type fakeXGateway struct {
 	userErr map[string]error
 }
 
+func (f *fakeXGateway) Me(ctx context.Context, cookies string) (string, error) {
+	if err := f.userErr[cookies]; err != nil {
+		return "", err
+	}
+	return "42", nil
+}
 func (f *fakeXGateway) UserByScreenName(ctx context.Context, cookies, handle string) (domain.XUser, error) {
 	if err := f.userErr[cookies]; err != nil {
 		return domain.XUser{}, err

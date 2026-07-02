@@ -54,6 +54,15 @@ func (g *Gateway) UserByScreenName(ctx context.Context, cookies, handle string) 
 	return toXUser(u), nil
 }
 
+// Me derives the acting account's own user id from the twid cookie (no network).
+func (g *Gateway) Me(ctx context.Context, cookies string) (string, error) {
+	c, err := client(cookies)
+	if err != nil {
+		return "", err
+	}
+	return c.MeUserID()
+}
+
 func (g *Gateway) Post(ctx context.Context, cookies string, in port.XPostInput) (domain.XPostResult, error) {
 	c, err := client(cookies)
 	if err != nil {
