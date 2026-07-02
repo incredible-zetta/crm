@@ -13,6 +13,10 @@ type Config struct {
 	BaseURL              string
 	Port                 string
 	SchedulerIntervalSec int
+	// X (Twitter) account liveness cron. IntervalSec <= 0 disables the sweep;
+	// StaleSec is how old a last check must be before an account is re-verified.
+	XLivenessIntervalSec int
+	XLivenessStaleSec    int
 	SMTPHost             string
 	SMTPPort             string
 	SMTPUser             string
@@ -147,6 +151,23 @@ func Load() (*Config, error) {
 		schedulerIntervalSec = val
 	}
 
+	xLivenessIntervalSec := 3600
+	if s := os.Getenv("X_LIVENESS_INTERVAL_SEC"); s != "" {
+		val, err := strconv.Atoi(s)
+		if err != nil {
+			return nil, fmt.Errorf("invalid X_LIVENESS_INTERVAL_SEC: %w", err)
+		}
+		xLivenessIntervalSec = val
+	}
+	xLivenessStaleSec := 21600
+	if s := os.Getenv("X_LIVENESS_STALE_SEC"); s != "" {
+		val, err := strconv.Atoi(s)
+		if err != nil {
+			return nil, fmt.Errorf("invalid X_LIVENESS_STALE_SEC: %w", err)
+		}
+		xLivenessStaleSec = val
+	}
+
 	imapPort := os.Getenv("IMAP_PORT")
 	if imapPort == "" {
 		imapPort = "993"
@@ -259,6 +280,8 @@ func Load() (*Config, error) {
 		BaseURL:              baseURL,
 		Port:                 port,
 		SchedulerIntervalSec: schedulerIntervalSec,
+		XLivenessIntervalSec: xLivenessIntervalSec,
+		XLivenessStaleSec:    xLivenessStaleSec,
 		SMTPHost:             os.Getenv("SMTP_HOST"),
 		SMTPPort:             os.Getenv("SMTP_PORT"),
 		SMTPUser:             os.Getenv("SMTP_USER"),

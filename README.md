@@ -251,6 +251,8 @@ All config comes from environment variables (EasyPanel injects them). See `.env.
 | `GH_TOKEN` / `GITHUB_TOKEN` | no | — | GitHub token (read access) used to auto-download the private `threads` discovery binary to `THREADS_DISCOVERY_BIN` when it is missing. Never logged |
 | `THREADS_DISCOVERY_REPO` | no | `incredible-zetta/x-threads-utils` | Override the release repo for the auto-download |
 | `THREADS_DISCOVERY_TAG` | no | `latest` | Override the release tag for the auto-download |
+| `X_LIVENESS_INTERVAL_SEC` | no | `3600` | X (Twitter) account liveness cron tick (seconds). `0` disables the sweep. Re-verifies stored `x_account_*` cookies so dead sessions get flagged |
+| `X_LIVENESS_STALE_SEC` | no | `21600` | How old an account's last liveness check must be before the cron re-verifies it (seconds) |
 | `WA_BASE_URL` | no | — | WhatsApp gateway base URL. Set (with `WA_DEVICE_ID`) to enable the WhatsApp channel |
 | `WA_BASIC_AUTH` | no | — | Raw base64 of `user:pass` for gateway Basic Auth (never logged) |
 | `WA_DEVICE_ID` | no | `cds` | `x-device-id` header sent to the gateway |

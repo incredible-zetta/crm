@@ -54,6 +54,8 @@ type Contact struct {
 	EmailCheckedAt    *time.Time     // nil = never verified
 	WhatsAppStatus    WhatsAppStatus // WhatsApp capability verdict; empty treated as unknown
 	WhatsAppCheckedAt *time.Time     // nil = never checked
+	XUsername         string         // x.com/Twitter @handle (no @), empty if unknown
+	ThreadsUsername   string         // threads.com @handle (no @), empty if unknown
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
 }
@@ -89,4 +91,6 @@ type ContactPatch struct {
 	Notes     *string
 	Custom    *map[string]any
 	Source    *string
+	XUsername       *string
+	ThreadsUsername *string
 }

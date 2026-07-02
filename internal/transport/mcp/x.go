@@ -17,9 +17,29 @@ import (
 // This makes multi-account trivial — the caller supplies whichever account's
 // cookies it wants on each request. No access token, no server-side account.
 
-// XCookiesIn is embedded by every x_* input: the per-call account cookies.
+// XCookiesIn is embedded by every x_* input: the per-call account cookies OR a
+// stored account label. Exactly one is needed. Account resolves to a persisted
+// cookie blob; cookies is a raw Netscape blob for ad-hoc / unsaved accounts.
 type XCookiesIn struct {
-	Cookies string `json:"cookies" jsonschema:"Netscape cookie-file blob for the x.com account to act as (must include auth_token and ct0). Sensitive; identifies the acting account."`
+	Cookies string `json:"cookies,omitempty" jsonschema:"Netscape cookie-file blob for the x.com account to act as (must include auth_token and ct0). Sensitive. Omit when using account."`
+	Account string `json:"account,omitempty" jsonschema:"Label of a stored account (see x_account_save/x_account_list) to act as, instead of passing cookies inline."`
+}
+
+// resolveCookies returns the cookie blob to use: a stored account label takes
+// precedence, else the inline blob. Returns an error envelope when neither is
+// usable or the label is unknown.
+func (d *Deps) resolveCookies(ctx context.Context, in XCookiesIn) (string, *mcp.CallToolResult) {
+	if in.Account != "" {
+		ck, err := d.Svc.X.CookiesForLabel(ctx, in.Account)
+		if err != nil {
+			return "", mcpserver.Err("not_found", fmt.Sprintf("account %q: %v", in.Account, err))
+		}
+		return ck, nil
+	}
+	if in.Cookies == "" {
+		return "", mcpserver.Err("validation", "cookies or account required")
+	}
+	return in.Cookies, nil
 }
 
 func (d *Deps) xReady() (*mcp.CallToolResult, bool) {
@@ -94,7 +114,11 @@ func (d *Deps) XUser(ctx context.Context, req *mcp.CallToolRequest, in XUserIn) 
 	if in.Handle == "" {
 		return mcpserver.Err("validation", "handle required"), XUserOut{}, nil
 	}
-	u, err := d.Svc.X.User(ctx, in.Cookies, in.Handle)
+	cookies, errRes := d.resolveCookies(ctx, in.XCookiesIn)
+	if errRes != nil {
+		return errRes, XUserOut{}, nil
+	}
+	u, err := d.Svc.X.User(ctx, cookies, in.Handle)
 	if err != nil {
 		return nil, XUserOut{}, fmt.Errorf("x_user: %w", err)
 	}
@@ -127,7 +151,11 @@ func (d *Deps) XPost(ctx context.Context, req *mcp.CallToolRequest, in XPostIn) 
 	if in.ReplyTo != "" && in.Quote != "" {
 		return mcpserver.Err("validation", "reply_to and quote are mutually exclusive"), XPostOut{}, nil
 	}
-	res, err := d.Svc.X.Post(ctx, in.Cookies, port.XPostInput{
+	cookies, errRes := d.resolveCookies(ctx, in.XCookiesIn)
+	if errRes != nil {
+		return errRes, XPostOut{}, nil
+	}
+	res, err := d.Svc.X.Post(ctx, cookies, port.XPostInput{
 		Text: in.Text, ReplyTo: in.ReplyTo, QuoteOf: in.Quote, MediaURL: in.MediaURL,
 	})
 	if err != nil {
@@ -154,7 +182,11 @@ func (d *Deps) XDelete(ctx context.Context, req *mcp.CallToolRequest, in XDelete
 	if in.TweetID == "" {
 		return mcpserver.Err("validation", "tweet_id required"), XOKOut{}, nil
 	}
-	if err := d.Svc.X.Delete(ctx, in.Cookies, in.TweetID); err != nil {
+	cookies, errRes := d.resolveCookies(ctx, in.XCookiesIn)
+	if errRes != nil {
+		return errRes, XOKOut{}, nil
+	}
+	if err := d.Svc.X.Delete(ctx, cookies, in.TweetID); err != nil {
 		return nil, XOKOut{}, fmt.Errorf("x_delete: %w", err)
 	}
 	return nil, XOKOut{OK: true}, nil
@@ -182,7 +214,11 @@ func (d *Deps) XSearch(ctx context.Context, req *mcp.CallToolRequest, in XSearch
 	if in.Query == "" {
 		return mcpserver.Err("validation", "query required"), XTweetPageOut{}, nil
 	}
-	page, err := d.Svc.X.Search(ctx, in.Cookies, port.XSearchInput{
+	cookies, errRes := d.resolveCookies(ctx, in.XCookiesIn)
+	if errRes != nil {
+		return errRes, XTweetPageOut{}, nil
+	}
+	page, err := d.Svc.X.Search(ctx, cookies, port.XSearchInput{
 		Query: in.Query, Product: in.Product, Count: in.Count, Cursor: in.Cursor,
 	})
 	if err != nil {
@@ -205,11 +241,15 @@ func (d *Deps) XUserTweets(ctx context.Context, req *mcp.CallToolRequest, in XUs
 	if errRes, ok := d.xReady(); !ok {
 		return errRes, XTweetPageOut{}, nil
 	}
-	userID, errRes := d.resolveXUserID(ctx, in.Cookies, in.UserID, in.Handle)
+	cookies, errRes := d.resolveCookies(ctx, in.XCookiesIn)
 	if errRes != nil {
 		return errRes, XTweetPageOut{}, nil
 	}
-	page, err := d.Svc.X.UserTweets(ctx, in.Cookies, userID, in.Count, in.Cursor)
+	userID, errRes := d.resolveXUserID(ctx, cookies, in.UserID, in.Handle)
+	if errRes != nil {
+		return errRes, XTweetPageOut{}, nil
+	}
+	page, err := d.Svc.X.UserTweets(ctx, cookies, userID, in.Count, in.Cursor)
 	if err != nil {
 		return nil, XTweetPageOut{}, fmt.Errorf("x_user_tweets: %w", err)
 	}
@@ -280,11 +320,15 @@ func (d *Deps) XFollowers(ctx context.Context, req *mcp.CallToolRequest, in XSoc
 	if errRes, ok := d.xReady(); !ok {
 		return errRes, XUserPageOut{}, nil
 	}
-	userID, errRes := d.resolveXUserID(ctx, in.Cookies, in.UserID, in.Handle)
+	cookies, errRes := d.resolveCookies(ctx, in.XCookiesIn)
 	if errRes != nil {
 		return errRes, XUserPageOut{}, nil
 	}
-	page, err := d.Svc.X.Followers(ctx, in.Cookies, userID, in.Count, in.Cursor)
+	userID, errRes := d.resolveXUserID(ctx, cookies, in.UserID, in.Handle)
+	if errRes != nil {
+		return errRes, XUserPageOut{}, nil
+	}
+	page, err := d.Svc.X.Followers(ctx, cookies, userID, in.Count, in.Cursor)
 	if err != nil {
 		return nil, XUserPageOut{}, fmt.Errorf("x_followers: %w", err)
 	}
@@ -295,11 +339,15 @@ func (d *Deps) XFollowing(ctx context.Context, req *mcp.CallToolRequest, in XSoc
 	if errRes, ok := d.xReady(); !ok {
 		return errRes, XUserPageOut{}, nil
 	}
-	userID, errRes := d.resolveXUserID(ctx, in.Cookies, in.UserID, in.Handle)
+	cookies, errRes := d.resolveCookies(ctx, in.XCookiesIn)
 	if errRes != nil {
 		return errRes, XUserPageOut{}, nil
 	}
-	page, err := d.Svc.X.Following(ctx, in.Cookies, userID, in.Count, in.Cursor)
+	userID, errRes := d.resolveXUserID(ctx, cookies, in.UserID, in.Handle)
+	if errRes != nil {
+		return errRes, XUserPageOut{}, nil
+	}
+	page, err := d.Svc.X.Following(ctx, cookies, userID, in.Count, in.Cursor)
 	if err != nil {
 		return nil, XUserPageOut{}, fmt.Errorf("x_following: %w", err)
 	}
@@ -331,7 +379,11 @@ func (d *Deps) XDM(ctx context.Context, req *mcp.CallToolRequest, in XDMIn) (*mc
 	if in.Text == "" && in.MediaURL == "" {
 		return mcpserver.Err("validation", "text or media_url required"), XDMOut{}, nil
 	}
-	res, err := d.Svc.X.SendDM(ctx, in.Cookies, port.XDMInput{
+	cookies, errRes := d.resolveCookies(ctx, in.XCookiesIn)
+	if errRes != nil {
+		return errRes, XDMOut{}, nil
+	}
+	res, err := d.Svc.X.SendDM(ctx, cookies, port.XDMInput{
 		RecipientID: in.RecipientID, Handle: in.Handle, Text: in.Text, MediaURL: in.MediaURL,
 	})
 	if err != nil {
@@ -357,6 +409,88 @@ func (d *Deps) resolveXUserID(ctx context.Context, cookies, userID, handle strin
 		return "", mcpserver.Err("not_found", "handle not found")
 	}
 	return u.RestID, nil
+}
+
+// --- x_account_save ---------------------------------------------------------
+
+type XAccountSaveIn struct {
+	Label   string `json:"label" jsonschema:"Unique label to reference this account by in later x_* calls (via the account field)"`
+	Cookies string `json:"cookies" jsonschema:"Netscape cookie-file blob (auth_token + ct0) for the account. Sensitive; stored server-side."`
+}
+
+type XAccountOut struct {
+	ID            int64  `json:"id"`
+	Label         string `json:"label"`
+	ScreenName    string `json:"screen_name,omitempty"`
+	UserID        string `json:"user_id,omitempty"`
+	Liveness      string `json:"liveness"`
+	LastCheckedAt string `json:"last_checked_at,omitempty"`
+	LastError     string `json:"last_error,omitempty"`
+}
+
+func toXAccountOut(a domain.XAccount) XAccountOut {
+	out := XAccountOut{
+		ID: a.ID, Label: a.Label, ScreenName: a.ScreenName, UserID: a.UserID,
+		Liveness: string(a.Liveness), LastError: a.LastError,
+	}
+	if a.LastCheckedAt != nil {
+		out.LastCheckedAt = a.LastCheckedAt.UTC().Format(time.RFC3339)
+	}
+	return out
+}
+
+func (d *Deps) XAccountSave(ctx context.Context, req *mcp.CallToolRequest, in XAccountSaveIn) (*mcp.CallToolResult, XAccountOut, error) {
+	if errRes, ok := d.xReady(); !ok {
+		return errRes, XAccountOut{}, nil
+	}
+	if in.Label == "" || in.Cookies == "" {
+		return mcpserver.Err("validation", "label and cookies required"), XAccountOut{}, nil
+	}
+	acct, err := d.Svc.X.SaveAccount(ctx, in.Label, in.Cookies)
+	if err != nil {
+		return nil, XAccountOut{}, fmt.Errorf("x_account_save: %w", err)
+	}
+	return nil, toXAccountOut(acct), nil
+}
+
+// --- x_account_list ---------------------------------------------------------
+
+type XAccountListOut struct {
+	Accounts []XAccountOut `json:"accounts"`
+}
+
+func (d *Deps) XAccountList(ctx context.Context, req *mcp.CallToolRequest, in struct{}) (*mcp.CallToolResult, XAccountListOut, error) {
+	if errRes, ok := d.xReady(); !ok {
+		return errRes, XAccountListOut{}, nil
+	}
+	accts, err := d.Svc.X.ListAccounts(ctx)
+	if err != nil {
+		return nil, XAccountListOut{}, fmt.Errorf("x_account_list: %w", err)
+	}
+	out := XAccountListOut{Accounts: make([]XAccountOut, 0, len(accts))}
+	for _, a := range accts {
+		out.Accounts = append(out.Accounts, toXAccountOut(a))
+	}
+	return nil, out, nil
+}
+
+// --- x_account_delete -------------------------------------------------------
+
+type XAccountDeleteIn struct {
+	Label string `json:"label" jsonschema:"Label of the stored account to delete"`
+}
+
+func (d *Deps) XAccountDelete(ctx context.Context, req *mcp.CallToolRequest, in XAccountDeleteIn) (*mcp.CallToolResult, XOKOut, error) {
+	if errRes, ok := d.xReady(); !ok {
+		return errRes, XOKOut{}, nil
+	}
+	if in.Label == "" {
+		return mcpserver.Err("validation", "label required"), XOKOut{}, nil
+	}
+	if err := d.Svc.X.DeleteAccount(ctx, in.Label); err != nil {
+		return nil, XOKOut{}, fmt.Errorf("x_account_delete: %w", err)
+	}
+	return nil, XOKOut{OK: true}, nil
 }
 
 var _ = time.Now // reserved for future timestamped outputs

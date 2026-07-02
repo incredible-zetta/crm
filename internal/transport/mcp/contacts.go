@@ -25,6 +25,8 @@ type ContactCreateIn struct {
 	Notes     string         `json:"notes,omitempty" jsonschema:"Notes or descriptions"`
 	Custom    map[string]any `json:"custom,omitempty" jsonschema:"Custom metadata key-value pairs"`
 	Source    string         `json:"source,omitempty" jsonschema:"Source channel of the contact"`
+	XUsername       string `json:"x_username,omitempty" jsonschema:"x.com/Twitter @handle (without @) this contact came from"`
+	ThreadsUsername string `json:"threads_username,omitempty" jsonschema:"threads.com @handle (without @) this contact came from"`
 }
 
 type ContactCreateOut struct {
@@ -46,6 +48,8 @@ type ContactUpdateIn struct {
 	Notes     *string         `json:"notes,omitempty" jsonschema:"Updated notes"`
 	Custom    *map[string]any `json:"custom,omitempty" jsonschema:"Updated custom properties"`
 	Source    *string         `json:"source,omitempty" jsonschema:"Updated source"`
+	XUsername       *string `json:"x_username,omitempty" jsonschema:"Updated x.com/Twitter @handle (without @)"`
+	ThreadsUsername *string `json:"threads_username,omitempty" jsonschema:"Updated threads.com @handle (without @)"`
 }
 
 type ContactUpdateOut struct {
@@ -129,6 +133,8 @@ type ContactGetOut struct {
 	Tags         []string  `json:"tags"`
 	Notes        string    `json:"notes"`
 	Source       string    `json:"source"`
+	XUsername       string `json:"x_username,omitempty"`
+	ThreadsUsername string `json:"threads_username,omitempty"`
 	Unsubscribed bool      `json:"unsubscribed"`
 	CreatedAt    time.Time `json:"created_at"`
 }
@@ -188,6 +194,10 @@ func projectContact(c domain.Contact, fields []string) map[string]any {
 			m["notes"] = c.Notes
 		case "source":
 			m["source"] = c.Source
+		case "x_username":
+			m["x_username"] = c.XUsername
+		case "threads_username":
+			m["threads_username"] = c.ThreadsUsername
 		}
 	}
 	return m
@@ -205,6 +215,8 @@ func (d *Deps) ContactCreate(ctx context.Context, req *mcp.CallToolRequest, in C
 		Notes:     in.Notes,
 		Custom:    in.Custom,
 		Source:    in.Source,
+		XUsername:       in.XUsername,
+		ThreadsUsername: in.ThreadsUsername,
 	})
 	if err != nil {
 		if errors.Is(err, domain.ErrValidation) {
@@ -254,6 +266,8 @@ func (d *Deps) ContactUpdate(ctx context.Context, req *mcp.CallToolRequest, in C
 		Notes:     in.Notes,
 		Custom:    in.Custom,
 		Source:    in.Source,
+		XUsername:       in.XUsername,
+		ThreadsUsername: in.ThreadsUsername,
 	}
 
 	if in.ID > 0 && in.Email != "" {
@@ -414,6 +428,8 @@ func (d *Deps) ContactGet(ctx context.Context, req *mcp.CallToolRequest, in Cont
 		Tags:         c.Tags,
 		Notes:        c.Notes,
 		Source:       c.Source,
+		XUsername:       c.XUsername,
+		ThreadsUsername: c.ThreadsUsername,
 		Unsubscribed: c.IsUnsubscribed(),
 		CreatedAt:    c.CreatedAt,
 	}, nil

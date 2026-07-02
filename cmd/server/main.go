@@ -186,7 +186,7 @@ func main() {
 	// X (Twitter) cookie-only channel. Native port of x-utils; no server-side
 	// account or token — auth is a per-call Netscape cookie blob, so the channel
 	// is always available and every tool supplies its own account cookies.
-	svc.X = service.NewXService(xadapter.New())
+	svc.X = service.NewXService(xadapter.New(), store.XAccounts())
 	debugLog(debug, "x channel enabled: cookie-only, per-call multi-account")
 
 	// Threads cookie-only discovery (x-threads-utils binary). Independent of the
@@ -284,6 +284,32 @@ func main() {
 	if cfg.InboxEnabled() && svc.Inbox != nil {
 		inboxpoller.New(svc.Inbox, time.Duration(cfg.IMAPPollIntervalSec)*time.Second, 100).Start(ctx)
 		debugLog(debug, "inbox poller started: mailbox=%s interval_sec=%d", cfg.IMAPMailbox, cfg.IMAPPollIntervalSec)
+	}
+
+	// X account liveness cron: periodically re-verify stored account cookies
+	// (cross-tenant) so dead sessions are flagged before use. Interval and
+	// staleness reuse XLivenessIntervalSec / XLivenessStaleSec config.
+	if svc.X != nil && cfg.XLivenessIntervalSec > 0 {
+		go func() {
+			interval := time.Duration(cfg.XLivenessIntervalSec) * time.Second
+			stale := time.Duration(cfg.XLivenessStaleSec) * time.Second
+			t := time.NewTicker(interval)
+			defer t.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-t.C:
+					n, err := svc.X.CheckLiveness(ctx, time.Now().Add(-stale), 50)
+					if err != nil {
+						debugLog(debug, "x liveness sweep error: %v", err)
+					} else if n > 0 {
+						debugLog(debug, "x liveness sweep: checked %d account(s)", n)
+					}
+				}
+			}
+		}()
+		debugLog(debug, "x liveness cron started: interval_sec=%d stale_sec=%d", cfg.XLivenessIntervalSec, cfg.XLivenessStaleSec)
 	}
 
 	handler := http.Handler(mux)
