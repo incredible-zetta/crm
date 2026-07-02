@@ -360,7 +360,11 @@ func (d *Deps) XTweet(ctx context.Context, req *mcp.CallToolRequest, in XTweetDe
 	if in.TweetID == "" {
 		return mcpserver.Err("validation", "tweet_id required"), XTweetDetailOut{}, nil
 	}
-	t, err := d.Svc.X.TweetDetail(ctx, in.Cookies, in.TweetID)
+	cookies, errRes := d.resolveCookies(ctx, in.XCookiesIn)
+	if errRes != nil {
+		return errRes, XTweetDetailOut{}, nil
+	}
+	t, err := d.Svc.X.TweetDetail(ctx, cookies, in.TweetID)
 	if err != nil {
 		return nil, XTweetDetailOut{}, fmt.Errorf("x_tweet: %w", err)
 	}
