@@ -126,6 +126,74 @@ func (d *Deps) XUser(ctx context.Context, req *mcp.CallToolRequest, in XUserIn) 
 	return nil, toXUserOut(u), nil
 }
 
+// --- x_identify -------------------------------------------------------------
+
+type XIdentifyIn struct {
+	XCookiesIn
+}
+
+// XIdentifyOut is the acting account's own summary. Profile is the live
+// x.com profile; account-level fields are populated only when acting via a
+// stored account label.
+type XIdentifyOut struct {
+	UserID      string   `json:"user_id"`
+	Profile     XUserOut `json:"profile"`
+	Account     string   `json:"account,omitempty"`
+	Liveness    string   `json:"liveness,omitempty"`
+	LastChecked string   `json:"last_checked_at,omitempty"`
+	LastError   string   `json:"last_error,omitempty"`
+}
+
+// XIdentify reports who the acting account is: its numeric user id (from the
+// session cookie), live profile (handle, name, follower/following/tweet
+// counts, verification), and, when acting via a stored account label, the
+// persisted liveness metadata. Confirms the cookies resolve to a real session.
+func (d *Deps) XIdentify(ctx context.Context, req *mcp.CallToolRequest, in XIdentifyIn) (*mcp.CallToolResult, XIdentifyOut, error) {
+	if errRes, ok := d.xReady(); !ok {
+		return errRes, XIdentifyOut{}, nil
+	}
+	cookies, errRes := d.resolveCookies(ctx, in.XCookiesIn)
+	if errRes != nil {
+		return errRes, XIdentifyOut{}, nil
+	}
+
+	out := XIdentifyOut{}
+	// Derive own user id from the session cookie (no network).
+	if uid, err := d.Svc.X.Me(ctx, cookies); err == nil {
+		out.UserID = uid
+	}
+
+	// Determine the handle to look up. A stored account carries its known
+	// screen_name + liveness metadata; enrich with it when available.
+	handle := ""
+	if in.Account != "" {
+		if acct, err := d.Svc.X.Account(ctx, in.Account); err == nil {
+			out.Account = acct.Label
+			handle = acct.ScreenName
+			out.Liveness = string(acct.Liveness)
+			out.LastError = acct.LastError
+			if acct.LastCheckedAt != nil {
+				out.LastChecked = acct.LastCheckedAt.Format(time.RFC3339)
+			}
+			if out.UserID == "" {
+				out.UserID = acct.UserID
+			}
+		}
+	}
+	if handle == "" {
+		return mcpserver.Err("validation", "cannot resolve own handle from raw cookies; save the account with x_account_save (which records its screen_name) then identify by account"), XIdentifyOut{}, nil
+	}
+	u, err := d.Svc.X.User(ctx, cookies, handle)
+	if err != nil {
+		return nil, XIdentifyOut{}, fmt.Errorf("x_identify: %w", err)
+	}
+	out.Profile = toXUserOut(u)
+	if out.UserID == "" {
+		out.UserID = u.RestID
+	}
+	return nil, out, nil
+}
+
 // --- x_post -----------------------------------------------------------------
 
 type XPostIn struct {
