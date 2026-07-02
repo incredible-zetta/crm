@@ -227,7 +227,32 @@ func (d *Deps) XSearch(ctx context.Context, req *mcp.CallToolRequest, in XSearch
 	return nil, XTweetPageOut{Tweets: toXTweetOuts(page.Tweets), NextCursor: page.NextCursor}, nil
 }
 
-// --- x_user_tweets ----------------------------------------------------------
+// --- x_replies --------------------------------------------------------------
+
+type XRepliesIn struct {
+	XCookiesIn
+	TweetID string `json:"tweet_id" jsonschema:"Numeric id of the tweet whose replies to fetch"`
+	Count   int    `json:"count,omitempty" jsonschema:"Replies per page (default 20)"`
+	Cursor  string `json:"cursor,omitempty" jsonschema:"Pagination cursor from a previous next_cursor"`
+}
+
+func (d *Deps) XReplies(ctx context.Context, req *mcp.CallToolRequest, in XRepliesIn) (*mcp.CallToolResult, XTweetPageOut, error) {
+	if errRes, ok := d.xReady(); !ok {
+		return errRes, XTweetPageOut{}, nil
+	}
+	if in.TweetID == "" {
+		return mcpserver.Err("validation", "tweet_id required"), XTweetPageOut{}, nil
+	}
+	cookies, errRes := d.resolveCookies(ctx, in.XCookiesIn)
+	if errRes != nil {
+		return errRes, XTweetPageOut{}, nil
+	}
+	page, err := d.Svc.X.TweetReplies(ctx, cookies, in.TweetID, in.Count, in.Cursor)
+	if err != nil {
+		return nil, XTweetPageOut{}, fmt.Errorf("x_replies: %w", err)
+	}
+	return nil, XTweetPageOut{Tweets: toXTweetOuts(page.Tweets), NextCursor: page.NextCursor}, nil
+}
 
 type XUserTweetsIn struct {
 	XCookiesIn

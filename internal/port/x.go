@@ -18,6 +18,7 @@ type XGateway interface {
 	Search(ctx context.Context, cookies string, in XSearchInput) (domain.XTweetPage, error)
 	UserTweets(ctx context.Context, cookies, userID string, count int, cursor string) (domain.XTweetPage, error)
 	TweetDetail(ctx context.Context, cookies, tweetID string) (domain.XTweetDetail, error)
+	TweetReplies(ctx context.Context, cookies, tweetID string, count int, cursor string) (domain.XTweetPage, error)
 	Followers(ctx context.Context, cookies, userID string, count int, cursor string) (domain.XUserPage, error)
 	Following(ctx context.Context, cookies, userID string, count int, cursor string) (domain.XUserPage, error)
 	SendDM(ctx context.Context, cookies string, in XDMInput) (domain.XDMResult, error)

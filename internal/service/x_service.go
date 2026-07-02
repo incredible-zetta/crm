@@ -56,6 +56,10 @@ func (s *XService) TweetDetail(ctx context.Context, cookies, tweetID string) (do
 	return s.gateway.TweetDetail(ctx, cookies, tweetID)
 }
 
+func (s *XService) TweetReplies(ctx context.Context, cookies, tweetID string, count int, cursor string) (domain.XTweetPage, error) {
+	return s.gateway.TweetReplies(ctx, cookies, tweetID, count, cursor)
+}
+
 func (s *XService) Followers(ctx context.Context, cookies, userID string, count int, cursor string) (domain.XUserPage, error) {
 	return s.gateway.Followers(ctx, cookies, userID, count, cursor)
 }

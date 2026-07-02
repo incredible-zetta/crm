@@ -134,6 +134,18 @@ func (g *Gateway) TweetDetail(ctx context.Context, cookies, tweetID string) (dom
 	}, nil
 }
 
+func (g *Gateway) TweetReplies(ctx context.Context, cookies, tweetID string, count int, cursor string) (domain.XTweetPage, error) {
+	c, err := client(cookies)
+	if err != nil {
+		return domain.XTweetPage{}, err
+	}
+	res, err := c.TweetReplies(xclient.TweetRepliesOptions{TweetID: tweetID, Count: count, Cursor: cursor})
+	if err != nil {
+		return domain.XTweetPage{}, err
+	}
+	return toXTweetPage(res.Replies, res.NextCursor), nil
+}
+
 func (g *Gateway) Followers(ctx context.Context, cookies, userID string, count int, cursor string) (domain.XUserPage, error) {
 	return g.socialList(cookies, userID, count, cursor, true)
 }

@@ -38,6 +38,9 @@ func (f *fakeXGateway) UserTweets(context.Context, string, string, int, string) 
 func (f *fakeXGateway) TweetDetail(context.Context, string, string) (domain.XTweetDetail, error) {
 	return domain.XTweetDetail{}, nil
 }
+func (f *fakeXGateway) TweetReplies(context.Context, string, string, int, string) (domain.XTweetPage, error) {
+	return domain.XTweetPage{}, nil
+}
 func (f *fakeXGateway) Followers(context.Context, string, string, int, string) (domain.XUserPage, error) {
 	return domain.XUserPage{}, nil
 }

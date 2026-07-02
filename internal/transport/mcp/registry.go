@@ -323,6 +323,7 @@ func Register(srv *mcp.Server, d *Deps) {
 	mcp.AddTool(srv, &mcp.Tool{Name: "x_search", Description: "Search tweets (Top/Latest/People/Media); supports #hashtag $cashtag @mention and operators, paginated"}, d.XSearch)
 	mcp.AddTool(srv, &mcp.Tool{Name: "x_user_tweets", Description: "List a user's profile-timeline tweets by user_id or @handle, paginated"}, d.XUserTweets)
 	mcp.AddTool(srv, &mcp.Tool{Name: "x_tweet", Description: "Fetch a tweet's detail and engagement analytics (views, likes, retweets, replies, quotes, bookmarks) by tweet_id"}, d.XTweet)
+	mcp.AddTool(srv, &mcp.Tool{Name: "x_replies", Description: "List reply tweets in a tweet's conversation thread (author, text, engagement), paginated via next_cursor. Use x_tweet for the reply count only."}, d.XReplies)
 	mcp.AddTool(srv, &mcp.Tool{Name: "x_followers", Description: "List followers for a user by user_id or @handle, paginated"}, d.XFollowers)
 	mcp.AddTool(srv, &mcp.Tool{Name: "x_following", Description: "List accounts a user follows by user_id or @handle, paginated"}, d.XFollowing)
 	mcp.AddTool(srv, &mcp.Tool{Name: "x_dm", Description: "Send a direct message (optional image by URL) to a recipient_id or @handle as the acting account"}, d.XDM)
