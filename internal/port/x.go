@@ -16,6 +16,10 @@ type XGateway interface {
 	// Me returns the acting account's own numeric user id derived from the
 	// session cookies (twid), without a network call.
 	Me(ctx context.Context, cookies string) (string, error)
+	// SelfProfile resolves the acting account's own profile via twid -> user id
+	// -> UserByRestId. Works without knowing the handle and reflects real
+	// functional access, so it is the correct liveness signal.
+	SelfProfile(ctx context.Context, cookies string) (domain.XUser, error)
 	Post(ctx context.Context, cookies string, in XPostInput) (domain.XPostResult, error)
 	Delete(ctx context.Context, cookies, tweetID string) error
 	Search(ctx context.Context, cookies string, in XSearchInput) (domain.XTweetPage, error)

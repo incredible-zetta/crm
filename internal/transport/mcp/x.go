@@ -158,38 +158,25 @@ func (d *Deps) XIdentify(ctx context.Context, req *mcp.CallToolRequest, in XIden
 	}
 
 	out := XIdentifyOut{}
-	// Derive own user id from the session cookie (no network).
-	if uid, err := d.Svc.X.Me(ctx, cookies); err == nil {
-		out.UserID = uid
+	// Resolve own profile via twid -> UserByRestId (no handle needed, reflects
+	// real functional access).
+	u, err := d.Svc.X.SelfProfile(ctx, cookies)
+	if err != nil {
+		return nil, XIdentifyOut{}, fmt.Errorf("x_identify: %w", err)
 	}
+	out.Profile = toXUserOut(u)
+	out.UserID = u.RestID
 
-	// Determine the handle to look up. A stored account carries its known
-	// screen_name + liveness metadata; enrich with it when available.
-	handle := ""
+	// When acting via a stored account label, enrich with persisted liveness.
 	if in.Account != "" {
 		if acct, err := d.Svc.X.Account(ctx, in.Account); err == nil {
 			out.Account = acct.Label
-			handle = acct.ScreenName
 			out.Liveness = string(acct.Liveness)
 			out.LastError = acct.LastError
 			if acct.LastCheckedAt != nil {
 				out.LastChecked = acct.LastCheckedAt.Format(time.RFC3339)
 			}
-			if out.UserID == "" {
-				out.UserID = acct.UserID
-			}
 		}
-	}
-	if handle == "" {
-		return mcpserver.Err("validation", "cannot resolve own handle from raw cookies; save the account with x_account_save (which records its screen_name) then identify by account"), XIdentifyOut{}, nil
-	}
-	u, err := d.Svc.X.User(ctx, cookies, handle)
-	if err != nil {
-		return nil, XIdentifyOut{}, fmt.Errorf("x_identify: %w", err)
-	}
-	out.Profile = toXUserOut(u)
-	if out.UserID == "" {
-		out.UserID = u.RestID
 	}
 	return nil, out, nil
 }

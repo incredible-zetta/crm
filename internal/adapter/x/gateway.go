@@ -63,6 +63,23 @@ func (g *Gateway) Me(ctx context.Context, cookies string) (string, error) {
 	return c.MeUserID()
 }
 
+// SelfProfile resolves the acting account's own profile via twid -> UserByRestId.
+func (g *Gateway) SelfProfile(ctx context.Context, cookies string) (domain.XUser, error) {
+	c, err := client(cookies)
+	if err != nil {
+		return domain.XUser{}, err
+	}
+	uid, err := c.MeUserID()
+	if err != nil {
+		return domain.XUser{}, err
+	}
+	u, err := c.UserByRestId(uid)
+	if err != nil {
+		return domain.XUser{}, err
+	}
+	return toXUser(u), nil
+}
+
 func (g *Gateway) Post(ctx context.Context, cookies string, in port.XPostInput) (domain.XPostResult, error) {
 	c, err := client(cookies)
 	if err != nil {

@@ -29,6 +29,12 @@ func (f *fakeXGateway) Me(ctx context.Context, cookies string) (string, error) {
 	}
 	return "42", nil
 }
+func (f *fakeXGateway) SelfProfile(ctx context.Context, cookies string) (domain.XUser, error) {
+	if err := f.userErr[cookies]; err != nil {
+		return domain.XUser{}, err
+	}
+	return domain.XUser{RestID: "42", ScreenName: "self"}, nil
+}
 func (f *fakeXGateway) UserByScreenName(ctx context.Context, cookies, handle string) (domain.XUser, error) {
 	if err := f.userErr[cookies]; err != nil {
 		return domain.XUser{}, err
