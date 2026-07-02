@@ -19,6 +19,7 @@ import (
 	threadsadapter "github.com/incredible-zetta/crm/internal/adapter/threads"
 	"github.com/incredible-zetta/crm/internal/adapter/threadsdisc"
 	"github.com/incredible-zetta/crm/internal/adapter/verify"
+	xadapter "github.com/incredible-zetta/crm/internal/adapter/x"
 	whatsappadapter "github.com/incredible-zetta/crm/internal/adapter/whatsapp"
 	"github.com/incredible-zetta/crm/internal/config"
 	"github.com/incredible-zetta/crm/internal/inboxpoller"
@@ -181,6 +182,12 @@ func main() {
 		svc.Threads = nil
 		debugLog(debug, "threads disabled: set THREADS_ACCESS_TOKEN to enable")
 	}
+
+	// X (Twitter) cookie-only channel. Native port of x-utils; no server-side
+	// account or token — auth is a per-call Netscape cookie blob, so the channel
+	// is always available and every tool supplies its own account cookies.
+	svc.X = service.NewXService(xadapter.New())
+	debugLog(debug, "x channel enabled: cookie-only, per-call multi-account")
 
 	// Threads cookie-only discovery (x-threads-utils binary). Independent of the
 	// Graph API channel: needs THREADS_DISCOVERY_BIN + THREADS_COOKIES_FILE.
