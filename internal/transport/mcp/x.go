@@ -2,6 +2,7 @@ package mcptransport
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -516,6 +517,171 @@ func (d *Deps) XAccountDelete(ctx context.Context, req *mcp.CallToolRequest, in 
 		return nil, XOKOut{}, fmt.Errorf("x_account_delete: %w", err)
 	}
 	return nil, XOKOut{OK: true}, nil
+}
+
+// --- x_watch_save -----------------------------------------------------------
+
+type XWatchSaveIn struct {
+	Label         string  `json:"label" jsonschema:"Unique label for this watch (upsert key)"`
+	Kind          *string `json:"kind,omitempty" jsonschema:"What to watch: 'mention' (tweets mentioning your handle; query = handle without @) or 'search' (raw x.com search query). Defaults to mention."`
+	Query         *string `json:"query,omitempty" jsonschema:"For mention: the @handle (without @) to watch mentions of. For search: the x.com search query."`
+	Account       *string `json:"account,omitempty" jsonschema:"Stored account label whose cookies poll this watch (see x_account_save)."`
+	WebhookURL    *string `json:"webhook_url,omitempty" jsonschema:"HTTPS URL to POST each new match to. Body is JSON; if webhook_secret is set an X-Zetta-Signature: sha256=<hmac> header is added."`
+	WebhookSecret *string `json:"webhook_secret,omitempty" jsonschema:"Shared secret used to HMAC-SHA256 sign webhook bodies. Write-only; never returned."`
+	Active        *bool   `json:"active,omitempty" jsonschema:"Whether the poller runs this watch. Defaults true on create."`
+}
+
+type XWatchOut struct {
+	ID           int64  `json:"id"`
+	Label        string `json:"label"`
+	Kind         string `json:"kind"`
+	Query        string `json:"query"`
+	Account      string `json:"account,omitempty"`
+	WebhookURL   string `json:"webhook_url,omitempty"`
+	HasSecret    bool   `json:"has_secret"`
+	Active       bool   `json:"active"`
+	LastSeenID   string `json:"last_seen_id,omitempty"`
+	LastError    string `json:"last_error,omitempty"`
+}
+
+func toXWatchOut(w domain.XWatch) XWatchOut {
+	return XWatchOut{
+		ID:         w.ID,
+		Label:      w.Label,
+		Kind:       string(w.Kind),
+		Query:      w.Query,
+		Account:    w.AccountLabel,
+		WebhookURL: w.WebhookURL,
+		HasSecret:  w.WebhookSecret != "",
+		Active:     w.Active,
+		LastSeenID: w.LastSeenID,
+		LastError:  w.LastError,
+	}
+}
+
+func (d *Deps) XWatchSave(ctx context.Context, req *mcp.CallToolRequest, in XWatchSaveIn) (*mcp.CallToolResult, XWatchOut, error) {
+	if d.Svc.XWatch == nil || !d.Svc.XWatch.Enabled() {
+		return mcpserver.Err("disabled", "x watch persistence not configured"), XWatchOut{}, nil
+	}
+	if in.Label == "" {
+		return mcpserver.Err("validation", "label required"), XWatchOut{}, nil
+	}
+	save := port.XWatchSaveInput{
+		Label:         in.Label,
+		Query:         in.Query,
+		AccountLabel:  in.Account,
+		WebhookURL:    in.WebhookURL,
+		WebhookSecret: in.WebhookSecret,
+		Active:        in.Active,
+	}
+	if in.Kind != nil {
+		k := domain.XWatchKind(*in.Kind)
+		save.Kind = &k
+	}
+	w, err := d.Svc.XWatch.SaveWatch(ctx, save)
+	if err != nil {
+		if errors.Is(err, domain.ErrValidation) {
+			return mcpserver.Err("validation", err.Error()), XWatchOut{}, nil
+		}
+		return nil, XWatchOut{}, fmt.Errorf("x_watch_save: %w", err)
+	}
+	return nil, toXWatchOut(w), nil
+}
+
+// --- x_watch_list -----------------------------------------------------------
+
+type XWatchListOut struct {
+	Watches []XWatchOut `json:"watches"`
+}
+
+func (d *Deps) XWatchList(ctx context.Context, req *mcp.CallToolRequest, in struct{}) (*mcp.CallToolResult, XWatchListOut, error) {
+	if d.Svc.XWatch == nil || !d.Svc.XWatch.Enabled() {
+		return mcpserver.Err("disabled", "x watch persistence not configured"), XWatchListOut{}, nil
+	}
+	ws, err := d.Svc.XWatch.ListWatches(ctx)
+	if err != nil {
+		return nil, XWatchListOut{}, fmt.Errorf("x_watch_list: %w", err)
+	}
+	out := XWatchListOut{Watches: make([]XWatchOut, 0, len(ws))}
+	for _, w := range ws {
+		out.Watches = append(out.Watches, toXWatchOut(w))
+	}
+	return nil, out, nil
+}
+
+// --- x_watch_delete ---------------------------------------------------------
+
+type XWatchDeleteIn struct {
+	Label string `json:"label" jsonschema:"Label of the watch to delete"`
+}
+
+func (d *Deps) XWatchDelete(ctx context.Context, req *mcp.CallToolRequest, in XWatchDeleteIn) (*mcp.CallToolResult, XOKOut, error) {
+	if d.Svc.XWatch == nil || !d.Svc.XWatch.Enabled() {
+		return mcpserver.Err("disabled", "x watch persistence not configured"), XOKOut{}, nil
+	}
+	if in.Label == "" {
+		return mcpserver.Err("validation", "label required"), XOKOut{}, nil
+	}
+	if err := d.Svc.XWatch.DeleteWatch(ctx, in.Label); err != nil {
+		return nil, XOKOut{}, fmt.Errorf("x_watch_delete: %w", err)
+	}
+	return nil, XOKOut{OK: true}, nil
+}
+
+// --- x_watch_events ---------------------------------------------------------
+
+type XWatchEventsIn struct {
+	Label    string `json:"label" jsonschema:"Label of the watch to read events for"`
+	Delivery string `json:"delivery,omitempty" jsonschema:"Filter by delivery status: pending, delivered, failed, skipped. Empty = all."`
+	Limit    int    `json:"limit,omitempty" jsonschema:"Max events (default 50, newest first)"`
+}
+
+type XWatchEventOut struct {
+	ID             int64  `json:"id"`
+	TweetID        string `json:"tweet_id"`
+	Author         string `json:"author"`
+	Text           string `json:"text"`
+	URL            string `json:"url,omitempty"`
+	Likes          int    `json:"likes"`
+	Retweets       int    `json:"retweets"`
+	Replies        int    `json:"replies"`
+	TweetCreatedAt string `json:"tweet_created_at,omitempty"`
+	Delivery       string `json:"delivery"`
+	DeliveryError  string `json:"delivery_error,omitempty"`
+}
+
+type XWatchEventsOut struct {
+	Events []XWatchEventOut `json:"events"`
+}
+
+func (d *Deps) XWatchEvents(ctx context.Context, req *mcp.CallToolRequest, in XWatchEventsIn) (*mcp.CallToolResult, XWatchEventsOut, error) {
+	if d.Svc.XWatch == nil || !d.Svc.XWatch.Enabled() {
+		return mcpserver.Err("disabled", "x watch persistence not configured"), XWatchEventsOut{}, nil
+	}
+	if in.Label == "" {
+		return mcpserver.Err("validation", "label required"), XWatchEventsOut{}, nil
+	}
+	evs, err := d.Svc.XWatch.ListEvents(ctx, in.Label, in.Delivery, in.Limit)
+	if err != nil {
+		return nil, XWatchEventsOut{}, fmt.Errorf("x_watch_events: %w", err)
+	}
+	out := XWatchEventsOut{Events: make([]XWatchEventOut, 0, len(evs))}
+	for _, e := range evs {
+		out.Events = append(out.Events, XWatchEventOut{
+			ID:             e.ID,
+			TweetID:        e.TweetID,
+			Author:         e.Author,
+			Text:           e.Text,
+			URL:            e.URL,
+			Likes:          e.Likes,
+			Retweets:       e.Retweets,
+			Replies:        e.Replies,
+			TweetCreatedAt: e.TweetCreatedAt,
+			Delivery:       string(e.Delivery),
+			DeliveryError:  e.DeliveryError,
+		})
+	}
+	return nil, out, nil
 }
 
 var _ = time.Now // reserved for future timestamped outputs

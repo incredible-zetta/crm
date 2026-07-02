@@ -103,6 +103,25 @@ func (g *Gateway) Search(ctx context.Context, cookies string, in port.XSearchInp
 	return toXTweetPage(res.Tweets, res.NextCursor), nil
 }
 
+func (g *Gateway) Mentions(ctx context.Context, cookies, handle string, count int) (domain.XTweetPage, error) {
+	c, err := client(cookies)
+	if err != nil {
+		return domain.XTweetPage{}, err
+	}
+	if count <= 0 {
+		count = 20
+	}
+	res, err := c.Search(xclient.SearchOptions{
+		Query:   "@" + strings.TrimPrefix(handle, "@"),
+		Product: xclient.SearchLatest,
+		Count:   count,
+	})
+	if err != nil {
+		return domain.XTweetPage{}, err
+	}
+	return toXTweetPage(res.Tweets, res.NextCursor), nil
+}
+
 func (g *Gateway) UserTweets(ctx context.Context, cookies, userID string, count int, cursor string) (domain.XTweetPage, error) {
 	c, err := client(cookies)
 	if err != nil {

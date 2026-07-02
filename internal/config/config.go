@@ -17,6 +17,9 @@ type Config struct {
 	// StaleSec is how old a last check must be before an account is re-verified.
 	XLivenessIntervalSec int
 	XLivenessStaleSec    int
+	// X watch poller. IntervalSec <= 0 disables polling of mention/search
+	// watches and webhook delivery.
+	XWatchIntervalSec    int
 	SMTPHost             string
 	SMTPPort             string
 	SMTPUser             string
@@ -167,6 +170,14 @@ func Load() (*Config, error) {
 		}
 		xLivenessStaleSec = val
 	}
+	xWatchIntervalSec := 120
+	if s := os.Getenv("X_WATCH_INTERVAL_SEC"); s != "" {
+		val, err := strconv.Atoi(s)
+		if err != nil {
+			return nil, fmt.Errorf("invalid X_WATCH_INTERVAL_SEC: %w", err)
+		}
+		xWatchIntervalSec = val
+	}
 
 	imapPort := os.Getenv("IMAP_PORT")
 	if imapPort == "" {
@@ -282,6 +293,7 @@ func Load() (*Config, error) {
 		SchedulerIntervalSec: schedulerIntervalSec,
 		XLivenessIntervalSec: xLivenessIntervalSec,
 		XLivenessStaleSec:    xLivenessStaleSec,
+		XWatchIntervalSec:    xWatchIntervalSec,
 		SMTPHost:             os.Getenv("SMTP_HOST"),
 		SMTPPort:             os.Getenv("SMTP_PORT"),
 		SMTPUser:             os.Getenv("SMTP_USER"),

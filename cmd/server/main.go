@@ -188,6 +188,8 @@ func main() {
 	// is always available and every tool supplies its own account cookies.
 	svc.X = service.NewXService(xadapter.New(), store.XAccounts())
 	debugLog(debug, "x channel enabled: cookie-only, per-call multi-account")
+	svc.XWatch = service.NewXWatchService(store.XWatches(), svc.X)
+	debugLog(debug, "x watch service enabled: mention/search polling + webhook delivery")
 
 	// Threads cookie-only discovery (x-threads-utils binary). Independent of the
 	// Graph API channel: needs THREADS_DISCOVERY_BIN + THREADS_COOKIES_FILE.
@@ -310,6 +312,28 @@ func main() {
 			}
 		}()
 		debugLog(debug, "x liveness cron started: interval_sec=%d stale_sec=%d", cfg.XLivenessIntervalSec, cfg.XLivenessStaleSec)
+	}
+
+	// X watch poller: periodically poll active watches (mentions/search) across
+	// tenants, persist new matched tweets, and deliver them to per-watch
+	// webhooks. Interval from XWatchIntervalSec (0 disables).
+	if svc.XWatch != nil && svc.XWatch.Enabled() && cfg.XWatchIntervalSec > 0 {
+		go func() {
+			t := time.NewTicker(time.Duration(cfg.XWatchIntervalSec) * time.Second)
+			defer t.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-t.C:
+					polled, events := svc.XWatch.RunWatches(ctx, 50)
+					if polled > 0 {
+						debugLog(debug, "x watch sweep: polled %d watch(es), %d new event(s)", polled, events)
+					}
+				}
+			}
+		}()
+		debugLog(debug, "x watch cron started: interval_sec=%d", cfg.XWatchIntervalSec)
 	}
 
 	handler := http.Handler(mux)
