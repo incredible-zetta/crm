@@ -122,6 +122,16 @@ func (s *Store) Threads() port.ThreadsRepo {
 	return &threadsRepo{db: s.db}
 }
 
+// XAccounts returns an XAccountRepo implementation (stored x.com cookie
+// accounts + liveness bookkeeping).
+func (s *Store) XAccounts() port.XAccountRepo {
+	return &xAccountRepo{db: s.db}
+}
+
+func (s *Store) XWatches() port.XWatchRepo {
+	return &xWatchRepo{db: s.db}
+}
+
 // Tenants returns a TenantRepo implementation (multi-tenant resolver).
 func (s *Store) Tenants() port.TenantRepo {
 	return &tenantRepo{db: s.db}

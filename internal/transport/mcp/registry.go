@@ -313,6 +313,27 @@ func Register(srv *mcp.Server, d *Deps) {
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_mentions", Description: "List live Threads mentions and cache them locally"}, d.ThreadsMentions)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_search", Description: "Search Threads via keyword search endpoint; supports TOP/RECENT, KEYWORD/TAG, media type, author username, time range, and fields"}, d.ThreadsSearch)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_discover", Description: "Cookie-only discovery of PUBLIC Threads posts by topic (separate from the Graph API). mode=posts returns structured JSON (pk, code, username, caption, like_count); mode=viral/latest return engagement-ranked or newest-first text. IDs returned are web IDs, NOT valid on the Graph API; only username bridges the two paths. Needs THREADS_DISCOVERY_BIN + THREADS_COOKIES_FILE."}, d.ThreadsDiscover)
+
+	// Group: X (Twitter) cookie-only channel. Every tool takes a `cookies`
+	// field (Netscape blob with auth_token + ct0) identifying the account to
+	// act as, so multi-account is per-call. Ported natively from x-utils.
+	mcp.AddTool(srv, &mcp.Tool{Name: "x_user", Description: "Fetch a public x.com profile by @handle using the acting account's cookies"}, d.XUser)
+	mcp.AddTool(srv, &mcp.Tool{Name: "x_post", Description: "Post a tweet (optionally reply, quote, or attach media by URL) as the acting account"}, d.XPost)
+	mcp.AddTool(srv, &mcp.Tool{Name: "x_delete", Description: "Delete a tweet owned by the acting account by tweet_id"}, d.XDelete)
+	mcp.AddTool(srv, &mcp.Tool{Name: "x_search", Description: "Search tweets (Top/Latest/People/Media); supports #hashtag $cashtag @mention and operators, paginated"}, d.XSearch)
+	mcp.AddTool(srv, &mcp.Tool{Name: "x_user_tweets", Description: "List a user's profile-timeline tweets by user_id or @handle, paginated"}, d.XUserTweets)
+	mcp.AddTool(srv, &mcp.Tool{Name: "x_tweet", Description: "Fetch a tweet's detail and engagement analytics (views, likes, retweets, replies, quotes, bookmarks) by tweet_id"}, d.XTweet)
+	mcp.AddTool(srv, &mcp.Tool{Name: "x_replies", Description: "List reply tweets in a tweet's conversation thread (author, text, engagement), paginated via next_cursor. Use x_tweet for the reply count only."}, d.XReplies)
+	mcp.AddTool(srv, &mcp.Tool{Name: "x_followers", Description: "List followers for a user by user_id or @handle, paginated"}, d.XFollowers)
+	mcp.AddTool(srv, &mcp.Tool{Name: "x_following", Description: "List accounts a user follows by user_id or @handle, paginated"}, d.XFollowing)
+	mcp.AddTool(srv, &mcp.Tool{Name: "x_dm", Description: "Send a direct message (optional image by URL) to a recipient_id or @handle as the acting account"}, d.XDM)
+	mcp.AddTool(srv, &mcp.Tool{Name: "x_account_save", Description: "Persist an x.com account (label + cookie blob) server-side and probe its liveness. Later x_* tools can pass account=<label> instead of raw cookies."}, d.XAccountSave)
+	mcp.AddTool(srv, &mcp.Tool{Name: "x_account_list", Description: "List stored x.com accounts for the tenant with their liveness (live/dead/unknown) and last check time. Cookies are never returned."}, d.XAccountList)
+	mcp.AddTool(srv, &mcp.Tool{Name: "x_account_delete", Description: "Delete a stored x.com account by label"}, d.XAccountDelete)
+	mcp.AddTool(srv, &mcp.Tool{Name: "x_watch_save", Description: "Create or update a watch on x.com signals (kind=mention: tweets mentioning a handle; kind=search: a raw search query). Optionally set a per-watch HMAC-signed webhook (webhook_url + webhook_secret) that receives each new match for AI auto-reply or external hooks. Upserts by label."}, d.XWatchSave)
+	mcp.AddTool(srv, &mcp.Tool{Name: "x_watch_list", Description: "List watches for the tenant with kind, query, account, webhook url, active flag and last poll error. Webhook secret is never returned (has_secret only)."}, d.XWatchList)
+	mcp.AddTool(srv, &mcp.Tool{Name: "x_watch_delete", Description: "Delete a watch by label"}, d.XWatchDelete)
+	mcp.AddTool(srv, &mcp.Tool{Name: "x_watch_events", Description: "List matched tweets captured by a watch (author, text, engagement, delivery status). Filter by delivery=pending to fetch the backlog an AI agent should auto-reply to."}, d.XWatchEvents)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_token_exchange", Description: "Exchange a short-lived Threads token for a long-lived token. Returns sensitive access_token."}, d.ThreadsTokenExchange)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_token_refresh", Description: "Refresh a long-lived Threads token before expiry. Returns sensitive access_token."}, d.ThreadsTokenRefresh)
 	mcp.AddTool(srv, &mcp.Tool{Name: "threads_list_cached", Description: "List cached Threads posts from MySQL"}, d.ThreadsListCached)

@@ -39,6 +39,8 @@ type Services struct {
 	Inbox         *InboxService
 	WhatsApp      *WhatsAppService
 	Threads       *ThreadsService
+	X             *XService
+	XWatch        *XWatchService
 }
 
 // New wires every service from the provided ports and config. The wiring order

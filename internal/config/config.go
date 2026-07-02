@@ -13,14 +13,21 @@ type Config struct {
 	BaseURL              string
 	Port                 string
 	SchedulerIntervalSec int
-	SMTPHost             string
-	SMTPPort             string
-	SMTPUser             string
-	SMTPPass             string
-	SMTPFrom             string
-	MailgunDomain        string
-	MailgunAPIKey        string
-	LogLevel             string
+	// X (Twitter) account liveness cron. IntervalSec <= 0 disables the sweep;
+	// StaleSec is how old a last check must be before an account is re-verified.
+	XLivenessIntervalSec int
+	XLivenessStaleSec    int
+	// X watch poller. IntervalSec <= 0 disables polling of mention/search
+	// watches and webhook delivery.
+	XWatchIntervalSec int
+	SMTPHost          string
+	SMTPPort          string
+	SMTPUser          string
+	SMTPPass          string
+	SMTPFrom          string
+	MailgunDomain     string
+	MailgunAPIKey     string
+	LogLevel          string
 	// Multi-tenancy (optional). When MultiTenancy is false the server runs as a
 	// single implicit tenant (tenant.DefaultID) and behaves exactly as before.
 	// When true, an MCP middleware resolves/auto-provisions a tenant from the
@@ -147,6 +154,31 @@ func Load() (*Config, error) {
 		schedulerIntervalSec = val
 	}
 
+	xLivenessIntervalSec := 3600
+	if s := os.Getenv("X_LIVENESS_INTERVAL_SEC"); s != "" {
+		val, err := strconv.Atoi(s)
+		if err != nil {
+			return nil, fmt.Errorf("invalid X_LIVENESS_INTERVAL_SEC: %w", err)
+		}
+		xLivenessIntervalSec = val
+	}
+	xLivenessStaleSec := 21600
+	if s := os.Getenv("X_LIVENESS_STALE_SEC"); s != "" {
+		val, err := strconv.Atoi(s)
+		if err != nil {
+			return nil, fmt.Errorf("invalid X_LIVENESS_STALE_SEC: %w", err)
+		}
+		xLivenessStaleSec = val
+	}
+	xWatchIntervalSec := 120
+	if s := os.Getenv("X_WATCH_INTERVAL_SEC"); s != "" {
+		val, err := strconv.Atoi(s)
+		if err != nil {
+			return nil, fmt.Errorf("invalid X_WATCH_INTERVAL_SEC: %w", err)
+		}
+		xWatchIntervalSec = val
+	}
+
 	imapPort := os.Getenv("IMAP_PORT")
 	if imapPort == "" {
 		imapPort = "993"
@@ -259,6 +291,9 @@ func Load() (*Config, error) {
 		BaseURL:              baseURL,
 		Port:                 port,
 		SchedulerIntervalSec: schedulerIntervalSec,
+		XLivenessIntervalSec: xLivenessIntervalSec,
+		XLivenessStaleSec:    xLivenessStaleSec,
+		XWatchIntervalSec:    xWatchIntervalSec,
 		SMTPHost:             os.Getenv("SMTP_HOST"),
 		SMTPPort:             os.Getenv("SMTP_PORT"),
 		SMTPUser:             os.Getenv("SMTP_USER"),

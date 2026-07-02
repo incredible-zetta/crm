@@ -88,7 +88,7 @@ ON DUPLICATE KEY UPDATE
 }
 
 func (r *contactRepo) Get(ctx context.Context, id int64) (domain.Contact, error) {
-	query := `SELECT id, email, first_name, last_name, company, phone, stage, tags, notes, custom, source, unsub_code, unsubscribed_at, deleted_at, created_at, updated_at, email_status, email_reason, email_checked_at, whatsapp_status, whatsapp_checked_at 
+	query := `SELECT id, email, first_name, last_name, company, phone, stage, tags, notes, custom, source, unsub_code, unsubscribed_at, deleted_at, created_at, updated_at, email_status, email_reason, email_checked_at, whatsapp_status, whatsapp_checked_at, x_username, threads_username 
 FROM contacts WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL`
 	row := r.db.QueryRowContext(ctx, query, id, tenant.From(ctx))
 	c, err := scanContact(row)
@@ -102,7 +102,7 @@ FROM contacts WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL`
 }
 
 func (r *contactRepo) GetByEmail(ctx context.Context, email string) (domain.Contact, error) {
-	query := `SELECT id, email, first_name, last_name, company, phone, stage, tags, notes, custom, source, unsub_code, unsubscribed_at, deleted_at, created_at, updated_at, email_status, email_reason, email_checked_at, whatsapp_status, whatsapp_checked_at 
+	query := `SELECT id, email, first_name, last_name, company, phone, stage, tags, notes, custom, source, unsub_code, unsubscribed_at, deleted_at, created_at, updated_at, email_status, email_reason, email_checked_at, whatsapp_status, whatsapp_checked_at, x_username, threads_username 
 FROM contacts WHERE email = ? AND tenant_id = ? AND deleted_at IS NULL`
 	row := r.db.QueryRowContext(ctx, query, email, tenant.From(ctx))
 	c, err := scanContact(row)
@@ -127,7 +127,7 @@ func (r *contactRepo) GetByPhone(ctx context.Context, phone string) (domain.Cont
 	if len(suffix) > 9 {
 		suffix = suffix[len(suffix)-9:]
 	}
-	query := `SELECT id, email, first_name, last_name, company, phone, stage, tags, notes, custom, source, unsub_code, unsubscribed_at, deleted_at, created_at, updated_at, email_status, email_reason, email_checked_at, whatsapp_status, whatsapp_checked_at
+	query := `SELECT id, email, first_name, last_name, company, phone, stage, tags, notes, custom, source, unsub_code, unsubscribed_at, deleted_at, created_at, updated_at, email_status, email_reason, email_checked_at, whatsapp_status, whatsapp_checked_at, x_username, threads_username
 FROM contacts
 WHERE deleted_at IS NULL
   AND tenant_id = ?
@@ -156,7 +156,7 @@ func digitsOnly(s string) string {
 }
 
 func (r *contactRepo) GetByUnsubCode(ctx context.Context, code string) (domain.Contact, error) {
-	query := `SELECT id, email, first_name, last_name, company, phone, stage, tags, notes, custom, source, unsub_code, unsubscribed_at, deleted_at, created_at, updated_at, email_status, email_reason, email_checked_at, whatsapp_status, whatsapp_checked_at 
+	query := `SELECT id, email, first_name, last_name, company, phone, stage, tags, notes, custom, source, unsub_code, unsubscribed_at, deleted_at, created_at, updated_at, email_status, email_reason, email_checked_at, whatsapp_status, whatsapp_checked_at, x_username, threads_username 
 FROM contacts WHERE unsub_code = ?`
 	row := r.db.QueryRowContext(ctx, query, code)
 	c, err := scanContact(row)
@@ -239,6 +239,14 @@ func (r *contactRepo) Update(ctx context.Context, id int64, patch domain.Contact
 		updateParts = append(updateParts, "source = ?")
 		args = append(args, toNullString(*patch.Source))
 	}
+	if patch.XUsername != nil {
+		updateParts = append(updateParts, "x_username = ?")
+		args = append(args, toNullString(*patch.XUsername))
+	}
+	if patch.ThreadsUsername != nil {
+		updateParts = append(updateParts, "threads_username = ?")
+		args = append(args, toNullString(*patch.ThreadsUsername))
+	}
 
 	if len(updateParts) == 0 {
 		return r.Get(ctx, id)
@@ -306,7 +314,7 @@ func (r *contactRepo) List(ctx context.Context, f domain.ContactFilter, p port.P
 		queryArgs = append(queryArgs, p.Cursor)
 	}
 
-	listQuery := `SELECT id, email, first_name, last_name, company, phone, stage, tags, notes, custom, source, unsub_code, unsubscribed_at, deleted_at, created_at, updated_at, email_status, email_reason, email_checked_at, whatsapp_status, whatsapp_checked_at 
+	listQuery := `SELECT id, email, first_name, last_name, company, phone, stage, tags, notes, custom, source, unsub_code, unsubscribed_at, deleted_at, created_at, updated_at, email_status, email_reason, email_checked_at, whatsapp_status, whatsapp_checked_at, x_username, threads_username 
 FROM contacts WHERE ` + strings.Join(queryParts, " AND ") + " ORDER BY id ASC LIMIT ?"
 	queryArgs = append(queryArgs, limit+1)
 
@@ -491,6 +499,8 @@ func scanContact(row interface{ Scan(dest ...any) error }) (domain.Contact, erro
 		emailCheckedAt    sql.NullTime
 		whatsappStatus    sql.NullString
 		whatsappCheckedAt sql.NullTime
+		xUsername         sql.NullString
+		threadsUsername   sql.NullString
 		tagsBuf           []byte
 		customBuf         []byte
 	)
@@ -517,6 +527,8 @@ func scanContact(row interface{ Scan(dest ...any) error }) (domain.Contact, erro
 		&emailCheckedAt,
 		&whatsappStatus,
 		&whatsappCheckedAt,
+		&xUsername,
+		&threadsUsername,
 	)
 	if err != nil {
 		return domain.Contact{}, err
@@ -529,6 +541,8 @@ func scanContact(row interface{ Scan(dest ...any) error }) (domain.Contact, erro
 	c.Notes = notes.String
 	c.Source = source.String
 	c.UnsubCode = unsubCode.String
+	c.XUsername = xUsername.String
+	c.ThreadsUsername = threadsUsername.String
 	c.UnsubscribedAt = fromNullTime(unsubscribedAt)
 	c.DeletedAt = fromNullTime(deletedAt)
 	if emailStatus.Valid && emailStatus.String != "" {

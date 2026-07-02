@@ -54,6 +54,8 @@ type Contact struct {
 	EmailCheckedAt    *time.Time     // nil = never verified
 	WhatsAppStatus    WhatsAppStatus // WhatsApp capability verdict; empty treated as unknown
 	WhatsAppCheckedAt *time.Time     // nil = never checked
+	XUsername         string         // x.com/Twitter @handle (no @), empty if unknown
+	ThreadsUsername   string         // threads.com @handle (no @), empty if unknown
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
 }
@@ -79,14 +81,16 @@ type ContactFilter struct {
 // ContactPatch represents fields that can be updated on a contact.
 // Nil pointers indicate fields that should remain unchanged.
 type ContactPatch struct {
-	Email     *string
-	FirstName *string
-	LastName  *string
-	Company   *string
-	Phone     *string
-	Stage     *string
-	Tags      *[]string
-	Notes     *string
-	Custom    *map[string]any
-	Source    *string
+	Email           *string
+	FirstName       *string
+	LastName        *string
+	Company         *string
+	Phone           *string
+	Stage           *string
+	Tags            *[]string
+	Notes           *string
+	Custom          *map[string]any
+	Source          *string
+	XUsername       *string
+	ThreadsUsername *string
 }
