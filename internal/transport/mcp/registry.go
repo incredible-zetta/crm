@@ -173,6 +173,52 @@ func Register(srv *mcp.Server, d *Deps) {
 		Description: "Perform self-test health check of database and email connections",
 	}, d.HealthCheck)
 
+	// Group 7b: LinkedIn (linkedin.go, linkedin_write.go) — lingin binary proxy
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "linkedin_me",
+		Description: "Get the authenticated LinkedIn identity for a stored account",
+	}, d.LinkedInMe)
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "linkedin_profile",
+		Description: "Fetch a LinkedIn member profile by public id or urn fragment",
+	}, d.LinkedInProfile)
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "linkedin_company",
+		Description: "Fetch a LinkedIn company by universal name (URL slug)",
+	}, d.LinkedInCompany)
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "linkedin_search_people",
+		Description: "Search LinkedIn people by keywords",
+	}, d.LinkedInSearchPeople)
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "linkedin_create_post",
+		Description: "Publish a LinkedIn post to a stored account (writes live)",
+	}, d.LinkedInCreatePost)
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "linkedin_delete_post",
+		Description: "Delete a LinkedIn share by urn",
+	}, d.LinkedInDeletePost)
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "linkedin_list_comments",
+		Description: "List comments on a LinkedIn activity urn",
+	}, d.LinkedInListComments)
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "linkedin_list_replies",
+		Description: "List replies under a LinkedIn comment urn",
+	}, d.LinkedInListReplies)
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "linkedin_comment",
+		Description: "Post a top-level comment on a LinkedIn activity (writes live)",
+	}, d.LinkedInComment)
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "linkedin_reply",
+		Description: "Post a reply under a LinkedIn comment (writes live)",
+	}, d.LinkedInReply)
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "linkedin_delete_comment",
+		Description: "Delete a LinkedIn comment by urn",
+	}, d.LinkedInDeleteComment)
+
 	// Group 8: Analytics (analytics.go)
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "analytics_overview",

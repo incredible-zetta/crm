@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/incredible-zetta/crm/internal/adapter/email"
+	"github.com/incredible-zetta/crm/internal/adapter/lingin"
 	imapadapter "github.com/incredible-zetta/crm/internal/adapter/imap"
 	"github.com/incredible-zetta/crm/internal/adapter/mysql"
 	"github.com/incredible-zetta/crm/internal/adapter/system"
@@ -189,6 +190,25 @@ func main() {
 	svc.X = service.NewXService(xadapter.New(), store.XAccounts())
 	debugLog(debug, "x channel enabled: cookie-only, per-call multi-account")
 	svc.XWatch = service.NewXWatchService(store.XWatches(), svc.X)
+
+	// LinkedIn channel: lingin binary (MCP stdio subprocess). Shares the CRM
+	// MySQL via a lingin_ table prefix; accounts are managed with the binary's
+	// `account-add`/`account-list` commands against the same DB_DSN.
+	if cfg.LinkedInEnabled() {
+		liRunner, err := lingin.New(lingin.Config{
+			BinPath: cfg.LinginBin,
+			DSN:     cfg.DBDSN,
+			MCPKey:  cfg.LinginMCPKey,
+			Tenant:  cfg.LinginTenant,
+		})
+		if err != nil {
+			log.Fatalf("failed to create lingin runner: %v", err)
+		}
+		svc.LinkedIn = service.NewLinkedInService(liRunner)
+		debugLog(debug, "linkedin enabled: bin=%s tenant=%s", cfg.LinginBin, cfg.LinginTenant)
+	} else {
+		debugLog(debug, "linkedin disabled: set LINGIN_BIN to enable")
+	}
 	debugLog(debug, "x watch service enabled: mention/search polling + webhook delivery")
 
 	// Threads cookie-only discovery (x-threads-utils binary). Independent of the

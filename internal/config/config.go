@@ -67,6 +67,11 @@ type Config struct {
 	GHToken              string // GitHub token to auto-download the discovery binary when missing (never logged)
 	ThreadsDiscoveryRepo string // owner/name of the discovery binary release repo (optional override)
 	ThreadsDiscoveryTag  string // release tag to download (optional, default latest)
+
+	// LinkedIn channel (lingin binary, MCP stdio subprocess)
+	LinginBin    string // path to the lingin binary (empty = disabled)
+	LinginMCPKey string // build-key gate value, passed as LINGIN_MCP_KEY (never logged)
+	LinginTenant string // tenant scope for stored LinkedIn accounts (default "default")
 }
 
 func (c *Config) DebugEnabled() bool {
@@ -98,6 +103,13 @@ func (c *Config) ThreadsEnabled() bool {
 // a cookie file.
 func (c *Config) ThreadsDiscoveryEnabled() bool {
 	return c.ThreadsDiscoveryBin != "" && c.ThreadsCookiesFile != ""
+}
+
+// LinkedInEnabled reports whether the lingin LinkedIn adapter is configured.
+// The DSN is reused from DBDSN (lingin shares the CRM database via a lingin_
+// table prefix), so only the binary path is required to enable it.
+func (c *Config) LinkedInEnabled() bool {
+	return c.LinginBin != ""
 }
 
 func firstEnv(keys ...string) string {
@@ -335,5 +347,8 @@ func Load() (*Config, error) {
 		GHToken:              firstEnv("GH_TOKEN", "GITHUB_TOKEN"),
 		ThreadsDiscoveryRepo: os.Getenv("THREADS_DISCOVERY_REPO"),
 		ThreadsDiscoveryTag:  os.Getenv("THREADS_DISCOVERY_TAG"),
+		LinginBin:            os.Getenv("LINGIN_BIN"),
+		LinginMCPKey:         os.Getenv("LINGIN_MCP_KEY"),
+		LinginTenant:         os.Getenv("LINGIN_TENANT"),
 	}, nil
 }

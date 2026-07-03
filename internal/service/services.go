@@ -41,6 +41,7 @@ type Services struct {
 	Threads       *ThreadsService
 	X             *XService
 	XWatch        *XWatchService
+	LinkedIn      *LinkedInService
 }
 
 // New wires every service from the provided ports and config. The wiring order
