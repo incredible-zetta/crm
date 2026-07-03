@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/incredible-zetta/crm/internal/adapter/email"
-	"github.com/incredible-zetta/crm/internal/adapter/lingin"
 	imapadapter "github.com/incredible-zetta/crm/internal/adapter/imap"
+	"github.com/incredible-zetta/crm/internal/adapter/lingin"
 	"github.com/incredible-zetta/crm/internal/adapter/mysql"
 	"github.com/incredible-zetta/crm/internal/adapter/system"
 	threadsadapter "github.com/incredible-zetta/crm/internal/adapter/threads"
