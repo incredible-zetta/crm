@@ -22,6 +22,11 @@ ENV EXPORT_DIR=/data/exports
 
 COPY --from=build /crm-server /crm-server
 
+# LinkedIn channel binary (lingin). Prebuilt static ELF committed under
+# assets/lingin/; build-key baked in. Default LINGIN_BIN points here.
+COPY assets/lingin/lingin /usr/local/bin/lingin
+ENV LINGIN_BIN=/usr/local/bin/lingin
+
 EXPOSE 8080
 USER nonroot:nonroot
 ENTRYPOINT ["/crm-server"]
