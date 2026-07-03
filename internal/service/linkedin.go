@@ -28,6 +28,11 @@ func (s *LinkedInService) Me(ctx context.Context, account string) (string, error
 	return s.li.Me(ctx, account)
 }
 
+// SaveAccount upserts and verifies a LinkedIn account from a cookie blob.
+func (s *LinkedInService) SaveAccount(ctx context.Context, label, cookies string) (string, error) {
+	return s.li.SaveAccount(ctx, label, cookies)
+}
+
 // Profile fetches a member profile.
 func (s *LinkedInService) Profile(ctx context.Context, account, id string) (string, error) {
 	return s.li.Profile(ctx, account, id)

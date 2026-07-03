@@ -24,3 +24,4 @@ vendor/
 # Secrets: never commit live session cookie exports (e.g. Threads/IG sessions)
 *_cookies.txt
 www.threads.com_cookies.txt
+*.swp

@@ -47,9 +47,10 @@ The key check is constant-time and fail-closed. Tracking and export routes are i
 - **Inbox:** IMAP inbound reply sync, stored snippets/full bodies, read/unread, reply, and local delete.
 - **WhatsApp:** two-way gateway integration, registration audit, smart-send throttling, inbound webhooks, read receipts, media lookup.
 - **Threads:** hybrid Meta Threads channel with live publish/delete/search/replies/insights plus MySQL cache/audit and reply quota checks.
+- **LinkedIn:** multi-account LinkedIn channel via the bundled `lingin` binary (MCP stdio subprocess). Save cookie sessions, fetch profiles/companies, search people, publish posts, and comment/reply. Accounts live in the same MySQL under a `lingin_` table prefix.
 - **Ops:** health check, embedded migrations, CSV exports, Docker/EasyPanel-ready single-port deploy.
 
-## Tools (63)
+## Tools (75)
 
 ### Contacts
 | Tool | Description |
@@ -135,6 +136,24 @@ Hybrid Threads channel via Meta Threads Graph API. Enabled when `THREADS_ACCESS_
 | `threads_get_cached` | Get cached Threads post by local id or Threads id |
 | `threads_history` | List Threads audit events |
 | `threads_delete_cached` | Soft-delete cached row only |
+
+### LinkedIn
+Multi-account LinkedIn channel via the bundled `lingin` binary, spawned per call as an MCP stdio subprocess (build-key gated by `LINGIN_MCP_KEY`). Enabled when `LINGIN_BIN` is set (defaults to `/usr/local/bin/lingin` in the Docker image). Accounts are stored in the shared MySQL under a `lingin_` table prefix (its own migrations run on start) and selected per call by the optional `account` label; empty uses the tenant's default. Sessions rotate their cookies back to the row after each call. `account` is scoped to the resolved tenant.
+
+| Tool | Description |
+| --- | --- |
+| `linkedin_account_save` | Save (upsert) a LinkedIn account from a cookie blob (`li_at` + `JSESSIONID`), then verify with `/me` and capture `member_urn`/`public_id` |
+| `linkedin_me` | Fetch the authenticated identity for a stored account |
+| `linkedin_profile` | Fetch a full profile by public vanity id or profile urn id |
+| `linkedin_company` | Fetch a company by its universal (public) name |
+| `linkedin_search_people` | People search (name, vanity, URL, degree, headline, location) |
+| `linkedin_create_post` | Publish a post (writes live) |
+| `linkedin_delete_post` | Delete a share by urn |
+| `linkedin_list_comments` | List comments on an activity urn |
+| `linkedin_list_replies` | List replies under a comment urn |
+| `linkedin_comment` | Post a top-level comment on an activity (writes live) |
+| `linkedin_reply` | Post a reply under a comment (writes live) |
+| `linkedin_delete_comment` | Delete a comment by urn |
 
 ### WhatsApp
 Two-way WhatsApp channel via a [go-whatsapp-web-multidevice](https://github.com/aldinokemal/go-whatsapp-web-multidevice) gateway. Enabled only when `WA_BASE_URL` + `WA_DEVICE_ID` are set. Outbound uses WhatsApp markdown (`*bold*`, `_italic_`, `~strike~`, ` ```code``` `) — see the `whatsapp://formatting` MCP resource. Inbound replies and receipts arrive on `POST /wa/webhook`.

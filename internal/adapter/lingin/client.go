@@ -13,6 +13,16 @@ func (r *Runner) Me(ctx context.Context, account string) (string, error) {
 	return r.call(ctx, account, "linkedin_me", nil)
 }
 
+// SaveAccount upserts a LinkedIn account from a cookie blob and verifies it.
+// The label becomes the account identifier for later calls. account arg is
+// omitted here (the account is being created), so we call the tool directly.
+func (r *Runner) SaveAccount(ctx context.Context, label, cookies string) (string, error) {
+	return r.call(ctx, "", "linkedin_account_save", map[string]any{
+		"label":   label,
+		"cookies": cookies,
+	})
+}
+
 // Profile fetches a member profile by public id or urn fragment.
 func (r *Runner) Profile(ctx context.Context, account, id string) (string, error) {
 	return r.call(ctx, account, "linkedin_profile", map[string]any{"id": id})

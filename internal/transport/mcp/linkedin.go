@@ -32,6 +32,25 @@ func (d *Deps) liEnabled() bool {
 	return d.Svc.LinkedIn != nil && d.Svc.LinkedIn.Enabled()
 }
 
+type LinkedInAccountSaveIn struct {
+	Label   string `json:"label" jsonschema:"Unique label to reference this account by in later linkedin_* calls (via the account field)"`
+	Cookies string `json:"cookies" jsonschema:"Cookie blob (Netscape file body or name=value lines) with li_at + JSESSIONID. Sensitive; stored server-side."`
+}
+
+func (d *Deps) LinkedInAccountSave(ctx context.Context, req *mcp.CallToolRequest, in LinkedInAccountSaveIn) (*mcp.CallToolResult, liRawOut, error) {
+	if !d.liEnabled() {
+		return mcpserver.Err("disabled", "linkedin channel not configured"), liRawOut{}, nil
+	}
+	if in.Label == "" || in.Cookies == "" {
+		return mcpserver.Err("validation", "label and cookies required"), liRawOut{}, nil
+	}
+	s, err := d.Svc.LinkedIn.SaveAccount(ctx, in.Label, in.Cookies)
+	if err != nil {
+		return mcpserver.Err("linkedin_error", err.Error()), liRawOut{}, nil
+	}
+	return nil, rawOut(s), nil
+}
+
 type LinkedInMeIn struct {
 	Account string `json:"account,omitempty" jsonschema:"Stored LinkedIn account label; empty = tenant default"`
 }

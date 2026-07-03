@@ -175,6 +175,10 @@ func Register(srv *mcp.Server, d *Deps) {
 
 	// Group 7b: LinkedIn (linkedin.go, linkedin_write.go) — lingin binary proxy
 	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "linkedin_account_save",
+		Description: "Save (upsert) a LinkedIn account from a cookie blob (li_at + JSESSIONID) and verify it with /me. Referenced later by label via the account field.",
+	}, d.LinkedInAccountSave)
+	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "linkedin_me",
 		Description: "Get the authenticated LinkedIn identity for a stored account",
 	}, d.LinkedInMe)
